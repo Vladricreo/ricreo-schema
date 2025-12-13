@@ -1,0 +1,121 @@
+/// Registro degli interventi di manutenzione sulla stampante.
+model PrinterMaintenanceLog {
+  id          String          @id @default(uuid())
+  printerId   String
+  printer     Printer         @relation(fields: [printerId], references: [id])
+  
+  type        MaintenanceType @default(ROUTINE)
+  description String
+  
+  performedAt DateTime        @default(now())
+  performedBy String?         // User ID
+  
+  cost        Decimal?        @db.Decimal(12, 2) // Costo intervento/ricambi
+  durationMin Int?            // Durata intervento in minuti
+  
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@schema("print-farm")
+}
+
+/// Registro puntuale degli scarti/errori.
+/// Permette di analizzare le cause di fallimento e ricalcolare i job.
+model PrintFailureLog {
+  id              String        @id @default(uuid())
+  
+  productionJobId String
+  productionJob   ProductionJob @relation(fields: [productionJobId], references: [id])
+  
+  printerId       String
+  printer         Printer       @relation(fields: [printerId], references: [id])
+  
+  /// Opzionale: se il fallimento è avvenuto durante una run specifica
+  printRunId      String?
+  printRun        PrintRun?     @relation(fields: [printRunId], references: [id])
+
+  quantityScrapped Int           @default(1)
+  reason           FailureReason @default(OTHER)
+  notes            String?
+  
+  reportedAt       DateTime      @default(now())
+  reportedBy       String?       // User ID
+
+  @@schema("print-farm")
+}
+
+/// Feedback degli operatori su stampanti o file.
+/// Es: "Questa stampante fa rumore", "Questo file ha supporti impossibili".
+model FarmFeedback {
+  id          String         @id @default(uuid())
+  
+  type        FeedbackType   @default(GENERAL)
+  priority    FeedbackPriority @default(NORMAL)
+  status      FeedbackStatus   @default(OPEN)
+  
+  description String
+  
+  // Il feedback può essere collegato a una stampante E/O a un file
+  printerId   String?
+  printer     Printer?       @relation(fields: [printerId], references: [id])
+  
+  fileId      String?
+  file        ProjectThreeMFFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  
+  reportedBy  String?        // User ID
+  resolvedBy  String?        // User ID
+  
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@schema("print-farm")
+}
+
+enum MaintenanceType {
+  ROUTINE   // Pulizia, ingrassaggio
+  REPAIR    // Sostituzione pezzi rotti
+  UPGRADE   // Miglioria hardware
+  CALIBRATION
+  OTHER
+  @@schema("print-farm")
+}
+
+enum FailureReason {
+  BED_ADHESION      // Distacco dal piatto
+  NOZZLE_CLOG       // Ugello intasato
+  FILAMENT_ISSUE    // Filamento spezzato/finito/umido
+  LAYER_SHIFT       // Perdita passi
+  POWER_LOSS        // Blackout
+  SPAGHETTI         // Stampa nel vuoto
+  QUALITY_ISSUE     // Brutta finitura
+  USER_ERROR        // Errore operatore
+  SLICING_ERROR     // File corrotto/errato
+  OTHER
+  @@schema("print-farm")
+}
+
+enum FeedbackType {
+  PRINTER_ISSUE
+  FILE_ISSUE
+  SLICING_IMPROVEMENT
+  MODIFICATION_REQUEST  // Richiesta di modifica del file
+  GENERAL
+  @@schema("print-farm")
+}
+
+enum FeedbackStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  WONT_FIX
+  @@schema("print-farm")
+}
+
+enum FeedbackPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+  @@schema("print-farm")
+}
+

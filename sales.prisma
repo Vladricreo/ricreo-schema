@@ -1,0 +1,221 @@
+/// SKU vendibile per un ProductItem.
+/// Separa stock, movimenti e spedizioni per canale (FBM/FBA) e marketplace.
+model Sku {
+  id            String           @id @default(uuid())
+  productId String
+  code          String           @unique
+  channel       InventoryChannel /// FBM/FBA (UNALLOCATED sconsigliato per SKU vendibili)
+  marketplace   Marketplace      @default(AMAZON_FBA)
+  /// Nota: l'eleggibilità per FBA/FBM rispetto al packaging finale
+  /// viene gestita applicativamente (AssemblyStage non è stato toccato).
+  isDefault     Boolean          @default(false)
+
+  isActive      Boolean          @default(true)
+  minStock      Int              @default(0)
+  currentStock  Int              @default(0)
+  dimensionsId String?
+  dimensions Dimensions? @relation(fields: [dimensionsId], references: [id])
+  requiresSecondaryPackage Boolean @default(false)
+  finalStageType          AssemblyStageType @default(SECOND_STAGE) // stato del prodotto effettivamente finito se ha bisogno del packaging primario o secondario di default: prodotto finito con packaging primario e secondario
+  locationId    String?
+  location      WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  ean           String?
+  asin          String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  amazonProduct       AmazonProduct?
+  shipmentLines       ShipmentLine[]
+  movements           Movement[]
+  finishedAllocations FinishedAllocation[]
+  OdetteReservation   OdetteReservation[]
+  OdetteContent       OdetteContent[]
+  assemblyOrders      AssemblyOrder[]
+  productOrders       ProductOrder[]
+  projectFiles        ProjectThreeMFFile[] @relation("ProjectRelatedSku")
+
+  @@index([productId, channel, marketplace])
+  @@index([locationId])
+  @@schema("inventory")
+}
+
+/// Rappresenta un prodotto gestito tramite Amazon FBA (Fulfillment by Amazon).
+/// Traccia le quantità, lo stato dell'annuncio e le previsioni di vendita.
+model AmazonProduct {
+  id                String             @id @default(uuid())
+  productItemId     String?            @unique
+  fulfillmentType   FulfillmentType    @default(FBA)
+  listingStatus     ListingStatus      @default(ACTIVE)
+  quantityTotal     Int                @default(0)
+  quantityInbound   Int                @default(0)
+  quantityTransfer  Int                @default(0)
+  quantityAvailable Int                @default(0)
+  quantityReserved  Int                @default(0)
+  inboundShipment   Boolean            @default(false)
+  price             Decimal?           @db.Decimal(12, 4)
+  salesVelocity     Decimal?           @db.Decimal(12, 4)
+  stockDays         Int?
+  restockDate       DateTime?
+  restockAction     RestockAction?
+  optimalLotSize    Int?
+  dimensionsId String?
+  dimensions Dimensions? @relation(fields: [dimensionsId], references: [id])
+  weight Decimal @default(0) @db.Decimal(12, 3) /// prima: Float
+  orderStatus       AmazonOrderStatus? @default(TO_ORDER)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  /// MIGLIORIA: collegato a uno SKU FBA specifico (per marketplace)
+  skuId             String?            @unique
+  sku               Sku?               @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  product           Product?       @relation(fields: [productItemId], references: [id])
+  salesData         AmazonSalesData[]
+
+  @@index([productItemId])
+  @@index([skuId])
+  @@schema("inventory")
+}
+
+/// Registra i dati di vendita giornalieri per un prodotto su Amazon.
+model AmazonSalesData {
+  id               String        @id @default(uuid())
+  fbaProductId     String
+  date             DateTime      @db.Date
+  unitsSold        Int
+  asin             String
+  sku              String
+  amazonOrderId    String?
+  fbaProduct       AmazonProduct @relation(fields: [fbaProductId], references: [id])
+  uniqueIdentifier String?       @unique
+
+  @@index([fbaProductId])
+  @@index([amazonOrderId])
+  @@schema("inventory")
+}
+
+/// Elenco degli ASIN che vanno ignorati durante il controllo/import da Amazon.
+model AmazonIgnoredAsin {
+  asin      String   @id
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@schema("inventory")
+}
+
+/// Modello per una spedizione, che può contenere un 'ProductItem' o essere legata a un 'Movement'.
+/// Traccia informazioni come corriere, tracking e stato dell'etichetta.
+model Shipment {
+  id               String              @id @default(uuid())
+  movementId       String?
+  /// Relazione al movimento.
+  movement         Movement?           @relation(fields: [movementId], references: [id])
+  productId    String?
+  product      Product?        @relation(fields: [productId], references: [id])
+  lines            ShipmentLine[]
+  orderedAt        DateTime
+  shippedAt        DateTime?
+  courier          String?
+  labelUrl         String?
+  isShipped        Boolean             @default(false)
+  orderNumber      String?
+  recipientCountry String?
+  recipientName    String?
+  trackingNumber   String?
+  trackingUrl      String?
+  labelStatus      ShipmentLabelStatus @default(PENDING)
+  shipmentType     ShipmentType        @default(STANDARD)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  fullAddress      String?
+  notes            String?
+
+  @@index([productId])
+  @@index([movementId])
+  @@schema("inventory")
+}
+
+/// Riga di spedizione per uno specifico SKU.
+/// Può essere collegata a un InventoryLot per tracciare il lotto fisico spedito al cliente.
+model ShipmentLine {
+  id         String @id @default(uuid())
+  shipmentId String
+  skuId      String /// MIGLIORIA: FK verso Sku (niente più String[])
+  quantity   Int    @default(1)
+
+  /// MIGLIORIA: snapshot testuale dello SKU per documenti/archivio
+  skuCodeSnapshot String?
+
+  lotId String?
+  lot   InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  sku      Sku      @relation(fields: [skuId], references: [id], onDelete: Restrict)
+
+  @@index([shipmentId])
+  @@index([skuId])
+  @@index([lotId])
+  @@schema("inventory")
+}
+
+/// Tipo di fulfillment (logistica) per un prodotto.
+enum FulfillmentType {
+  FBA // Gestito da Amazon
+  FBM // Gestito dal venditore
+  OTHER // Altro
+  @@schema("inventory")
+}
+
+/// Stato di un annuncio di prodotto su Amazon.
+enum ListingStatus {
+  ACTIVE
+  INACTIVE
+  INCOMPLETE
+  @@schema("inventory")
+}
+
+/// Azione di restock suggerita per i prodotti Amazon.
+enum RestockAction {
+  NOW // Riordina ora
+  SOON // Riordina a breve
+  NO // Non riordinare
+  @@schema("inventory")
+}
+
+/// Stato di un ordine interno relativo ad Amazon.
+enum AmazonOrderStatus {
+  TO_ORDER
+  PROCESSING
+  PRODUCED
+  SHIPPED
+  @@schema("inventory")
+}
+
+/// Stato dell'etichetta di spedizione.
+enum ShipmentLabelStatus {
+  PENDING
+  GENERATED
+  PRINTED
+  CANCELLED
+  @@schema("inventory")
+}
+
+/// Tipo di spedizione (es. standard, Prime per clienti business).
+enum ShipmentType {
+  PRIME
+  BUSINESS
+  STANDARD
+  @@schema("inventory")
+}
+
+/// Perché: uno stesso ProductItem può avere più SKU per mercati diversi.
+enum Marketplace {
+  GENERIC
+  AMAZON_FBA
+  AMAZON_FBM
+  EBAY
+  ETSY
+  @@schema("inventory")
+}
+

@@ -1,0 +1,58 @@
+/// Perché: nella realtà un ordine ha più articoli; migliore reportistica.
+model PurchaseOrder {
+  id         String      @id @default(uuid())
+  supplierId String
+  status     OrderStatus 
+  createdAt  DateTime    @default(now())
+  orderedAt  DateTime?
+  receivedAt DateTime?
+  shippingCost Decimal? @db.Decimal(12, 4)
+  customsDuty  Decimal? @db.Decimal(12, 4)
+
+  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  lines    PurchaseOrderLine[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@schema("inventory")
+}
+
+/// Riga di un ordine di acquisto per un singolo Item (materia prima, componente, ecc.).
+/// Collega quantità, prezzo e lotti di acquisto (InventoryLot) all'ordine fornitore.
+model PurchaseOrderLine {
+  id        String   @id @default(uuid())
+  orderId   String
+  itemId    String
+  quantity  Int
+  /// MIGLIORIA: Decimal per prezzo riga
+  pricePaid Decimal? @db.Decimal(12, 4)
+
+  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item  Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  lots InventoryLot[]
+
+  @@index([orderId])
+  @@index([itemId])
+  @@schema("inventory")
+}
+
+/// Definisce un fornitore da cui vengono acquistati gli 'Item'.
+model Supplier {
+  id                  String          @id @default(uuid())
+  name                String          @unique
+  website             String?
+  email               String?
+  leadTime            Int?
+  apiToken            String?
+  apiKey              String?
+  apiSecret           String?
+  apiEndpoint         String?
+  autoReorder         Boolean         @default(false)
+  associatedItemTypes ItemType[]      @default([])
+  items               Item[]
+  purchaseOrders      PurchaseOrder[]
+  lots                InventoryLot[]
+  @@schema("inventory")
+}
+

@@ -1,0 +1,27 @@
+/// Modello per le impostazioni globali dell'applicazione, gestite come coppie chiave-valore.
+model InventorySettings {
+  id    String       @id @default(uuid())
+  name  SettingsName @unique
+  value Json
+  @@map("Settings")
+  @@schema("inventory")
+}
+
+/// Nomi univoci per le impostazioni dell'applicazione.
+enum SettingsName {
+  PROFIT_MARGIN
+  LABOR_COST
+  THEME
+  LANGUAGE
+  VAT_RATE
+  STOCK_THRESHOLD
+  AMAZON_RESTOCK_TIME
+  AMAZON_OPTIMAL_STOCK_DAYS
+  FBM_OPTIMAL_STOCK_DAYS
+  PRODUCTION_ORDER_AUTOMATION
+  AMAZON_ORDER_FIXED_COST
+  AMAZON_STORAGE_FEE_LOW
+  AMAZON_STORAGE_FEE_HIGH
+  @@schema("inventory")
+}
+

@@ -1,0 +1,84 @@
+/// Modello per il profilo di un utente, con informazioni aggiuntive come la biografia.
+model Profile {
+  id     Int     @id @default(autoincrement())
+  bio    String?
+  userId Int     @unique
+  user   User    @relation(fields: [userId], references: [id])
+  @@schema("public")
+}
+
+/// Modello per gli utenti del sistema. Gestisce l'autenticazione e le informazioni di base dell'utente.
+model User {
+  id                Int                 @id @default(autoincrement())
+  email             String              @unique
+  username          String              @unique
+  password          String
+  name              String?
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  posts             Post[]
+  profile           Profile?
+  roles             UserRole[]
+  OdetteMove        OdetteMove[]
+  OdetteCleaningLog OdetteCleaningLog[]
+  productOrders     ProductOrder[]
+  assemblyOrders    AssemblyOrder[]
+  performedOperations AssemblyOperation[]
+  lotInspections    LotInspection[]
+
+  @@index([isActive]) /// Indice pratico per filtri frequenti
+  @@schema("public")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       UserRole[]
+  permissions RolePermission[]
+  @@schema("public")
+}
+
+model UserRole {
+  userId     Int
+  roleId     String
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@schema("public")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  resource    String
+  action      String
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  roles       RolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+  @@schema("public")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@schema("public")
+}
+

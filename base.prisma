@@ -1,0 +1,11 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["public", "inventory", "print-farm"]
+}
+/// Stato di un ordine di acquisto da fornitore.
+

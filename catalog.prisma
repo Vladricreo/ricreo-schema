@@ -1,0 +1,458 @@
+/// Modello generico per qualsiasi articolo gestito in inventario.
+/// Può rappresentare materie prime, imballaggi, componenti, accessori, ricambi, attrezzi o prodotti finiti.
+/// Il campo 'type' (ItemType) distingue la natura specifica dell'articolo.
+model Item {
+  id       String  @id @default(uuid())
+  imageUrl String?
+  name     String
+  sku      String  @unique
+
+  price            Decimal  @db.Decimal(12, 4) /// prima: Float
+  weight           Decimal? @db.Decimal(12, 3) /// prima: Float?
+  /// Tipologia di articolo (es. MATERIALE, IMBALLAGGIO, COMPONENTE).
+  type             ItemType
+  categoryId       String?
+  colorId          String?
+  brandId          String?
+  supplierId       String?
+  locationId       String?
+  standardWeightId String?
+  dimensionsId String?
+
+  properties Json?
+
+  inStock  Int @default(0)
+  reserved Int @default(0)
+  onOrder  Int @default(0)
+  minStock Int @default(0)
+  maxStock Int @default(0)
+  minOrder Int @default(0)
+  maxOrder Int @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  packagingTypeId String?
+
+  brand          Brand?             @relation(fields: [brandId], references: [id])
+  category       Category?          @relation(fields: [categoryId], references: [id])
+  color          Color?             @relation(fields: [colorId], references: [id])
+  location       WarehouseLocation? @relation(fields: [locationId], references: [id])
+  packagingType  PackagingType?     @relation(fields: [packagingTypeId], references: [id])
+  standardWeight StandardWeight?    @relation(fields: [standardWeightId], references: [id])
+  supplier       Supplier?          @relation(fields: [supplierId], references: [id])
+  dimensions     Dimensions?        @relation(fields: [dimensionsId], references: [id])
+
+  movements Movement[]
+
+  productComponents ProductToComponent[]
+  productPackages   ProductToPackage[]
+  productTools      ProductToTool[]
+  productUtilities  ProductToUtility[]
+  parts             ProductPart[]             @relation("ItemToItemPart")
+  ordersofitemforproduction     ProductOrderItem[]
+  purchaseOrderLines    PurchaseOrderLine[]
+  product          Product[]
+  compatibleMachines    CompatibleMachine[]    @relation("SpareParts")
+  OdetteContent         OdetteContent[]
+  lots                  InventoryLot[]
+
+  // Relazioni Print Farm
+  projectFiles        ProjectThreeMFFile[]
+  fileMaterialUsage   ProjectFileMaterial[] @relation("FileMaterialUsage") // Uso materiale nei file con peso specifico
+  productionJobs      ProductionJob[]
+  printRuns           PrintRun[]
+  spools              FilamentSpool[]
+  filamentProfile   FilamentProfile?  // Profilo tecnico per materiali (solo per type=MATERIAL)
+
+  @@index([type])
+  @@index([categoryId])
+  @@index([colorId])
+  @@index([brandId])
+  @@index([supplierId])
+  @@index([locationId])
+  @@schema("inventory")
+}
+
+/// Modello per un prodotto finito, vendibile.
+/// Un prodotto è composto da vari 'Item' (componenti, materiali) e può avere più fasi di assemblaggio.
+/// Gestisce informazioni su costi, prezzi, e logistica (FBM/FBA).
+model Product {
+  id        String  @id @default(uuid()) @unique
+  imageUrl  String?
+  treemfUrl String?
+  name      String
+  asin      String?
+  ean       String?
+
+  cost           Decimal  @default(0) @db.Decimal(12, 4) /// prima: Float
+  estimatedPrice Decimal? @db.Decimal(12, 4) /// prima: Float?
+  sellingPrice   Decimal? @db.Decimal(12, 4) /// prima: Float?
+  profitMargin   Decimal? @db.Decimal(5, 4) /// prima: Float? (0.1234 = 12.34%)
+  laborCost      Decimal? @db.Decimal(12, 4) /// prima: Float?
+  laborMinutes   Decimal? @db.Decimal(8, 2) /// prima: Float?
+  dimensionsId String?
+
+  itemId              String?
+  properties          Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  skus Sku[]
+
+  
+  minStock          Int                    @default(5)
+  minOrder          Int                    @default(0) // Lotto minimo di produzione (batching)
+  
+  // Campi per ottimizzazione dinamica (Velocity)
+  averageDailySales    Decimal? @db.Decimal(12, 4)
+  suggestedMinStock    Int?
+  autoAdjustMinStock   Boolean  @default(false)
+  lastSalesCalculation DateTime?
+
+  amazonProduct     AmazonProduct?
+  stages            AssemblyStage[]
+  guides            Guide[]
+  warnings          Warning[]
+  parts             ProductPart[]
+  movements         Movement[]
+  /// Relazione opzionale verso l'Item collegato
+  item              Item?                  @relation(fields: [itemId], references: [id])
+  components        ProductToComponent[] @relation("ProductComponents")
+  productOrders ProductOrder[]
+  packages          ProductToPackage[]   @relation("ProductPackages")
+  tools             ProductToTool[]      @relation("ProductTools")
+  utilities         ProductToUtility[]   @relation("ProductUtilities")
+  shipments         Shipment[]
+  assemblyOrders    AssemblyOrder[]
+  dimensions Dimensions? @relation(fields: [dimensionsId], references: [id])
+
+  finishedAllocations FinishedAllocation[]
+  lots                InventoryLot[]
+
+  // Relazioni Print Farm
+  projectFiles      ProjectThreeMFFile[]
+  projectParts      ProjectPart[]
+  productionJobs    ProductionJob[]
+
+  @@index([itemId])
+  @@schema("inventory")
+}
+
+/// Rappresenta un sotto-assieme o una parte stampata in 3D di un 'ProductItem'.
+model ProductPart {
+  id                String             @id @default(uuid()) @unique
+  imageUrl          String?
+  name              String
+  price             Decimal?           @db.Decimal(12, 4) /// prima: Float?
+  weight            Decimal            @default(0) @db.Decimal(12, 3) /// prima: Float
+  properties        Json?
+  productId     String
+  quantityNeeded          Int                @default(0)
+  dimensionsId String?
+  dimensions        Dimensions? @relation(fields: [dimensionsId], references: [id])
+  inStock           Int                @default(0)
+  onOrder           Int                @default(0)
+  product              Product        @relation(fields: [productId], references: [id])
+  movements         Movement[]
+  productOrders ProductOrderProductPart[]
+  materials         Item[]             @relation("ItemToItemPart")
+
+  OdetteContent  OdetteContent[]
+
+  // Relazioni Print Farm
+  projectParts      ProjectPart[]
+  productionJobs    ProductionJob[]
+
+  @@index([productId])
+  @@schema("inventory")
+}
+
+model Dimensions {
+  id                String             @id @default(uuid()) @unique
+  width             Decimal            @default(0) @db.Decimal(12, 3)
+  height            Decimal            @default(0) @db.Decimal(12, 3)
+  depth             Decimal            @default(0) @db.Decimal(12, 3)
+  poductpart       ProductPart[]
+  item Item[]
+  product Product[]
+  amazonProduct AmazonProduct[]
+  odetteType OdetteType[]
+  sku Sku[]
+  @@schema("inventory")
+  
+}
+
+/// Rappresenta una singola fase nel processo di assemblaggio di un 'Product'.
+/// Include informazioni come il tempo di assemblaggio, l'ordine e il tipo di fase.
+model AssemblyStage {
+  id                  String               @id @default(uuid()) @unique
+  imageUrl            String?
+  name                String
+  productId         String
+  order               Int?                 @default(0)
+  instock            Int?                 @default(0)
+  description         String?
+  /// Tempo in minuti richiesto per completare questa fase.
+  assemblyTime        Int                  @default(0)
+  type                AssemblyStageType    @default(RAW)
+  product             Product          @relation(fields: [productId], references: [id])
+  movements           Movement[]
+  finishedAllocations FinishedAllocation[]
+  
+  assemblyOperations  AssemblyOperation[]
+
+  /// Relazioni many-to-many con Guide e Warning
+  guideLinks          GuideToAssemblyStage[]
+  warningLinks        WarningToAssemblyStage[]
+  
+  /// Relazione con le utility assegnate a questa fase
+  utilities           ProductToUtility[]
+
+  @@unique([productId, name])
+  @@index([productId])
+  @@schema("inventory")
+}
+
+/// Guida di assemblaggio associata a un Product.
+/// Puo essere associata a zero, uno o piu AssemblyStages tramite la tabella di join.
+/// Se non ha stages associati, la guida si applica a tutto il prodotto.
+model Guide {
+  id              String                 @id @default(uuid())
+  title           String
+  description     String?                @db.Text
+  url             String?                /// URL esterno (es. YouTube, documentazione)
+  imageUrl        String?                /// URL immagine illustrativa
+  fileUrl         String?                /// URL file caricato (PDF o altro documento)
+  order           Int                    @default(0) /// Ordine di visualizzazione
+  appliesToAll    Boolean                @default(true) /// Se true, si applica a tutte le fasi
+  isnew           Boolean                @default(false) /// Se true, la guida è nuova
+  productId       String
+  product         Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  /// Relazione many-to-many con AssemblyStage
+  stages          GuideToAssemblyStage[]
+  
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  
+  @@index([productId])
+  @@schema("inventory")
+}
+
+/// Tabella di join per Guide e AssemblyStage (many-to-many)
+model GuideToAssemblyStage {
+  guideId         String
+  assemblyStageId String
+  
+  guide           Guide         @relation(fields: [guideId], references: [id], onDelete: Cascade)
+  assemblyStage   AssemblyStage @relation(fields: [assemblyStageId], references: [id], onDelete: Cascade)
+  
+  @@id([guideId, assemblyStageId])
+  @@index([assemblyStageId])
+  @@schema("inventory")
+}
+
+/// Avviso di sicurezza/assemblaggio associato a un Product.
+/// Puo essere associato a zero, uno o piu AssemblyStages tramite la tabella di join.
+/// Se non ha stages associati, avviso si applica a tutto il prodotto.
+model Warning {
+  id              String                   @id @default(uuid())
+  type            WarningType              @default(OTHER)
+  severity        WarningSeverity          @default(MEDIUM)
+  description     String                   @db.Text
+  imageUrl        String?                  /// URL immagine illustrativa
+  order           Int                      @default(0) /// Ordine di visualizzazione
+  appliesToAll    Boolean                  @default(true) /// Se true, si applica a tutte le fasi
+  isnew           Boolean                  @default(false) /// Se true, l'avviso è nuovo
+  productId       String
+  product         Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  /// Relazione many-to-many con AssemblyStage
+  stages          WarningToAssemblyStage[]
+  
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  
+  @@index([productId])
+  @@index([severity])
+  @@schema("inventory")
+}
+
+/// Tabella di join per Warning e AssemblyStage (many-to-many)
+model WarningToAssemblyStage {
+  warningId       String
+  assemblyStageId String
+  
+  warning         Warning       @relation(fields: [warningId], references: [id], onDelete: Cascade)
+  assemblyStage   AssemblyStage @relation(fields: [assemblyStageId], references: [id], onDelete: Cascade)
+  
+  @@id([warningId, assemblyStageId])
+  @@index([assemblyStageId])
+  @@schema("inventory")
+}
+
+/// Definisce una categoria per raggruppare gli 'Item'.
+/// Utile per l'organizzazione e il filtraggio.
+model Category {
+  id                  String     @id @default(uuid())
+  name                String     @unique
+  associatedItemTypes ItemType[] @default([])
+  items               Item[]
+  odetteTypes         OdetteType[]
+  @@schema("inventory")
+}
+
+/// Definisce un tipo di imballaggio per gli articoli (es. scatola, contenitore).
+model PackagingType {
+  id                  String            @id @default(uuid())
+  name                String            @unique
+  class                PackagingClass @default(PRIMARY)
+  associatedItemTypes ItemType[]        @default([])
+  items               Item[]
+  @@schema("inventory")
+}
+
+/// Definisce un colore per gli 'Item', con codice esadecimale opzionale.
+model Color {
+  id                  String     @id @default(uuid())
+  name                String     @unique
+  hexCode             String?
+  associatedItemTypes ItemType[] @default([])
+  items               Item[]
+  @@schema("inventory")
+}
+
+/// Definisce un marchio o brand per gli 'Item'.
+model Brand {
+  id                  String     @id @default(uuid())
+  name                String     @unique
+  associatedItemTypes ItemType[] @default([])
+  items               Item[]
+  @@schema("inventory")
+}
+
+/// Definisce un peso standard per un articolo, utile per calcoli logistici.
+model StandardWeight {
+  id                  String     @id @default(uuid())
+  weight              Decimal    @db.Decimal(12, 3)
+  associatedItemTypes ItemType[] @default([])
+  items               Item[]
+  @@schema("inventory")
+}
+
+/// Modello per le macchine compatibili con i ricambi ('SPARE_PART').
+model CompatibleMachine {
+  id                  String     @id @default(uuid())
+  name                String     @unique
+  associatedItemTypes ItemType[] @default([SPARE_PART])
+  spareParts          Item[]     @relation("SpareParts")
+
+  @@index([name])
+  @@schema("inventory")
+}
+
+/// Tabella di join per associare un 'ProductItem' con i suoi imballaggi ('Item' di tipo 'PACKAGING').
+model ProductToPackage {
+  productId String
+  itemId        String
+  quantity      Int         @default(1)
+  item          Item        @relation(fields: [itemId], references: [id])
+  product   Product @relation("ProductPackages", fields: [productId], references: [id])
+
+  @@id([productId, itemId])
+  @@schema("inventory")
+}
+
+/// Tabella di join per associare un 'ProductItem' con gli attrezzi ('Item' di tipo 'TOOL') necessari.
+model ProductToTool {
+  productId String
+  itemId        String
+  item          Item        @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  product   Product @relation("ProductTools", fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([productId, itemId])
+  @@index([itemId])
+  @@schema("inventory")
+}
+
+/// Tabella di join per associare un 'ProductItem' con le utility ('Item' di tipo 'UTILITY') necessarie.
+/// Le utility sono consumabili assegnati a una specifica fase di assemblaggio.
+model ProductToUtility {
+  productId       String
+  itemId          String
+  quantity        Int            @default(1)
+  assemblyStageId String?        /// Fase di assemblaggio a cui è assegnata la utility
+  item            Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  product         Product        @relation("ProductUtilities", fields: [productId], references: [id], onDelete: Cascade)
+  assemblyStage   AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull)
+
+  @@id([productId, itemId])
+  @@index([itemId])
+  @@index([assemblyStageId])
+  @@schema("inventory")
+}
+
+/// Tabella di join per associare un 'ProductItem' con i suoi componenti ('Item' di tipo 'COMPONENT').
+model ProductToComponent {
+  productId String
+  itemId        String
+  quantity      Int         @default(1)
+  item          Item        @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  product   Product @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([productId, itemId])
+  @@index([itemId])
+  @@schema("inventory")
+}
+
+/// Tipi di articoli gestibili dall'inventario.
+enum ItemType {
+  MATERIAL
+  PACKAGING
+  COMPONENT
+  ACCESSORY
+  SPARE_PART
+  TOOL
+  UTILITY
+  PRODUCT
+  ODETTE
+  @@schema("inventory")
+}
+
+/// Tipo di fase di assemblaggio.
+enum AssemblyStageType {
+  RAW // materiale grezzo
+  ASSEMBLED // sotto-assieme assemblato
+  FIRST_STAGE // prima fase di assemblaggio prodotto con packaging primario
+  SECOND_STAGE // prodotto finito con packaging primario e secondario
+  OTHER // altro
+  @@schema("inventory")
+}
+
+/// Tipi di imballaggio: primario (a contatto col prodotto), secondario (scatola esterna), altro.
+enum PackagingClass {
+  PRIMARY
+  SECONDARY
+  OTHERS
+  @@schema("inventory")
+}
+
+/// Tipo di avviso per il modello Warning
+enum WarningType {
+  SAFETY      /// Sicurezza
+  HANDLING    /// Maneggiamento
+  ASSEMBLY    /// Assemblaggio
+  QUALITY     /// Qualità
+  OTHER       /// Altro
+  @@schema("inventory")
+}
+
+/// Gravità dell'avviso per il modello Warning
+enum WarningSeverity {
+  LOW         /// Bassa
+  MEDIUM      /// Media
+  HIGH        /// Alta
+  CRITICAL    /// Critica
+  @@schema("inventory")
+}
+

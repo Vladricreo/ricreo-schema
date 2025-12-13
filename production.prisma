@@ -1,0 +1,491 @@
+/// Rappresenta un ordine di produzione per un 'Product'.
+/// Specifica la quantità da produrre e traccia lo stato di avanzamento.
+/// Genera N ProductionJob (uno per ogni parte da stampare).
+/// Ora collegato a uno SKU specifico per determinare il canale (FBA/FBM).
+model ProductOrder {
+  id                String           @id @default(uuid())
+  productId         String
+  skuId             String?          /// SKU di destinazione - determina il canale (FBA/FBM)
+  quantityToProduce Int              /// Quantità totale di prodotti finiti da produrre
+  quantityProduced  Int              @default(0) /// Quantità di prodotti finiti completati
+  eta               DateTime?
+  finishedAt        DateTime?
+  cost              Decimal?         @db.Decimal(12, 4)
+  priority          Int              @default(1) /// 1=low, 2=medium, 3=high, 4=critical
+  productionStatus  ProductionStatus @default(READY_TO_PRODUCE)
+  status            OrderStatus      @default(TO_ORDER)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  product           Product          @relation(fields: [productId], references: [id])
+  sku               Sku?             @relation(fields: [skuId], references: [id], onDelete: SetNull)
+
+  producedByUserId  Int?
+  producedBy        User?            @relation(fields: [producedByUserId], references: [id])
+
+  /// M2M esplicite con quantità per tracciare consumo item e parti prodotte
+  items             ProductOrderItem[]
+  parts             ProductOrderProductPart[]
+
+  assemblyOrderId   String?
+  assemblyOrder     AssemblyOrder?   @relation("AssemblyOrderToProductItemOrder", fields: [assemblyOrderId], references: [id])
+
+  lots              InventoryLot[]
+  
+  /// Job di stampa 3D generati da questo ordine (uno per parte)
+  productionJobs    ProductionJob[]  @relation("ProductOrderJobs")
+
+  @@index([skuId])
+  @@index([assemblyOrderId])
+  @@index([producedByUserId])
+  @@index([productionStatus])
+  @@index([priority])
+  @@schema("inventory")
+}
+
+/// Riga di consumo di un Item (materia prima/componente) per un ordine di produzione (ProductItemOrder).
+/// MIGLIORIA: M2M esplicita ProductItemOrder ↔ Item con quantità
+/// Perché: evitare M2M implicite e aggiungere metadata/indici.
+model ProductOrderItem {
+  productOrderId String
+  itemId             String
+  quantity           Int @default(1)
+
+  productOrder ProductOrder @relation(fields: [productOrderId], references: [id], onDelete: Cascade)
+  item             Item             @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@id([productOrderId, itemId])
+  @@index([itemId])
+  @@schema("inventory")
+}
+
+/// Riga di consumo di un sotto-assieme/parte (ProductPart) per un ordine di produzione.
+/// Traccia quante parti sono necessarie e quante sono state prodotte.
+model ProductOrderProductPart {
+  productOrderId    String
+  productPartId     String
+  quantity          Int @default(1)           /// Quantità di parti necessarie per l'ordine
+  quantityProduced  Int @default(0)           /// Quantità di parti effettivamente prodotte
+
+  productOrder      ProductOrder @relation(fields: [productOrderId], references: [id], onDelete: Cascade)
+  productPart       ProductPart  @relation(fields: [productPartId], references: [id], onDelete: Restrict)
+
+  @@id([productOrderId, productPartId])
+  @@index([productPartId])
+  @@schema("inventory")
+}
+
+/// Rappresenta un ordine di assemblaggio per un prodotto in base allo SKU.
+/// Lo SKU determina il canale (FBA/FBM) e le parti necessarie per l'assemblaggio.
+model AssemblyOrder {
+  id                 String              @id @default(uuid())
+  productId          String
+  skuId              String              // SKU determina canale e parti necessarie
+  quantityToAssemble Int                 @default(0)
+  quantityAssembled  Int                 @default(0)
+  quantityScrapped   Int                 @default(0)
+  
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  priority           Int                 @default(0) // 0: Bassa, 1: Media, 2: Alta
+  status             AssemblyStatus      @default(READY_TO_ASSEMBLE)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  product            Product             @relation(fields: [productId], references: [id])
+  sku                Sku                 @relation(fields: [skuId], references: [id])
+  assembledByUserId  Int?
+  assembledBy        User?               @relation(fields: [assembledByUserId], references: [id])
+  productOrders      ProductOrder[]      @relation("AssemblyOrderToProductItemOrder")
+  OdetteReservation  OdetteReservation[]
+  lots               InventoryLot[]
+  operations         AssemblyOperation[]
+  
+  /// Assegnazioni odette per questo ordine (traccia quali odette sono in uso per ogni stage)
+  odetteAssignments  OdetteAssemblyAssignment[]
+
+  @@index([assembledByUserId])
+  @@index([skuId])
+  @@schema("inventory")
+}
+
+model AssemblyOperation {
+  id              String                @id @default(uuid())
+  
+  assemblyOrderId String
+  assemblyOrder   AssemblyOrder         @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade)
+
+  type            AssemblyOperationType
+
+  assemblyStageId String?
+  assemblyStage   AssemblyStage?        @relation(fields: [assemblyStageId], references: [id])
+
+  operatorId      Int
+  operator        User                  @relation(fields: [operatorId], references: [id])
+
+  // --- TEMPI ---
+  startedAt       DateTime              @default(now())
+  endedAt         DateTime?
+  durationSeconds Int?                  // Calcolato alla fine (utile per costo manodopera)
+
+  // --- QUANTITÀ DELLA SESSIONE ---
+  quantityInput    Int                  @default(0) // Quanti pezzi stavo lavorando in questa sessione?
+  quantityProduced Int                  @default(0) // Quanti pezzi BUONI ho finito in questa sessione?
+  quantityScrapped Int                  @default(0) // Quanti pezzi ho SCARTATO in questa sessione?
+
+  // --- TRACCIABILITÀ ---
+  lotId           String?
+  lot             InventoryLot?         @relation(fields: [lotId], references: [id])
+  
+  notes           String?
+  metadata        Json?                 // Per info extra (es. motivo scarto, boxId, shelfId)
+
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([assemblyOrderId])
+  @@index([operatorId])
+  @@index([lotId])
+  @@index([assemblyStageId])
+  @@schema("inventory")
+}
+
+/// Lotto/commessa di produzione (es. job di stampa 3D).
+model ProductionLot {
+  id         String    @id @default(uuid())
+  code       String    @unique /// es. JOB-2025-10-001
+  printerId  String? /// opzionale: id macchina/stampante
+  material   String? /// es. PLA, ABS...
+  color      String? /// es. HEX/RGB o descrizione
+  startedAt  DateTime?
+  finishedAt DateTime?
+  note       String?
+    /// Lotti di inventario (prodotti finiti o semilavorati) generati da questo lotto di produzione.
+  inventoryLots   InventoryLot[]
+
+
+  /// Righe che fanno riferimento a questo lotto
+  odetteContents OdetteContent[]
+  /// Odettes riservate a questo lotto
+  reservedOdettes Odette[]
+  
+  // Relazione Print Farm
+  productionJobs  ProductionJob[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@schema("inventory")
+}
+
+/// Contenitore fisico (cassetta) dove si accumulano pezzi/parti/prodotti.
+model Odette {
+  id String @id @default(uuid())
+
+  /// Codice leggibile e barcode per scansione rapida
+  code    String  @unique
+  barcode String? @unique
+
+  /// Stato operativo della odette
+  status OdetteStatus @default(EMPTY)
+
+  /// Blocco stage: appena entra la prima riga si "fissa" lo stage;
+  /// serve a impedire mix RAW/ASSEMBLED nella stessa odette.
+  lockedStage AssemblyStageType?
+
+  /// Tipo di odette (dimensioni/capacità)
+  typeId String?
+  type   OdetteType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
+
+  /// Posizione attuale in magazzino
+  locationId String?
+  location   WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  /// Contenuti correnti (righe)
+  contents OdetteContent[]
+
+  /// Prenotazioni (parziali) verso AssemblyOrder (per pezzi specifici)
+  reservations OdetteReservation[]
+  
+  /// Assegnazioni a ordini di assemblaggio (traccia uso per stage)
+  assemblyAssignments OdetteAssemblyAssignment[]
+
+  /// Storico spostamenti dell'odette tra location
+  moves OdetteMove[]
+
+  /// Log di pulizia/svuotamento
+  cleaningLogs OdetteCleaningLog[]
+
+  /// Metadati prenotazione contenitore (per job di produzione)
+  reservedLotId String?
+  reservedLot   ProductionLot? @relation(fields: [reservedLotId], references: [id], onDelete: SetNull)
+  reservedAt    DateTime?
+  
+  // Relazione Print Farm
+  productionJobs ProductionJob[]
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  Movement  Movement[]
+
+  @@index([status])
+  @@index([lockedStage])
+  @@index([locationId])
+  @@index([status, typeId, locationId])
+  @@index([reservedLotId])
+  @@schema("inventory")
+}
+
+/// Riga di contenuto in una odette (quantità per entità).
+model OdetteContent {
+  id       String @id @default(uuid())
+  odetteId String
+  odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade)
+
+  // Polimorfismo: esattamente UNA di queste tre FK deve essere valorizzata.
+  itemId String?
+  item   Item?   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  PartId String?
+  Part   ProductPart? @relation(fields: [PartId], references: [id], onDelete: Restrict)
+
+  
+  /// Stage “logico” del contenuto (coerente con Odette.lockedStage)
+  stage AssemblyStageType?
+
+  /// Quantità disponibile fisicamente nella odette (non prenotata)
+  quantity Int
+
+  /// Opzionale: associazione diretta a uno SKU (FBA/FBM) per distinguere i pezzi già allocati
+  skuId String?
+  sku   Sku?   @relation(fields: [skuId], references: [id], onDelete: SetNull)
+
+  /// Facoltativo: lotto/commessa di produzione (vedi ProductionLot)
+  lotId String?
+  lot   ProductionLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
+
+  inventoryLotId String?
+  inventoryLot   InventoryLot? @relation(fields: [inventoryLotId], references: [id], onDelete: SetNull)
+
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  OdetteReservation OdetteReservation[]
+
+  @@index([odetteId])
+  @@index([itemId])
+  @@index([PartId])
+  @@index([stage])
+  @@index([inventoryLotId])
+  @@index([skuId])
+  @@schema("inventory")
+}
+
+/// Prenotazione parziale di quantità da una riga contenuto verso un AssemblyOrder.
+model OdetteReservation {
+  id       String @id @default(uuid())
+  odetteId String
+  odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade)
+
+  /// Prenoto da UNA specifica riga (così traccio item vs itemPart vs productItem)
+  odetteContentId String
+  odetteContent   OdetteContent @relation(fields: [odetteContentId], references: [id], onDelete: Cascade)
+
+  assemblyOrderId String?
+  assemblyOrder   AssemblyOrder? @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull)
+
+  /// Se vuoi prenotare per canale/sku (FBA/FBM) anche in fase di WIP
+  channel InventoryChannel?
+  skuId   String?
+  sku     Sku?              @relation(fields: [skuId], references: [id], onDelete: SetNull)
+
+  /// Quantità prenotata (≤ OdetteContent.quantity al momento della prenotazione)
+  reservedQty Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([odetteId])
+  @@index([odetteContentId])
+  @@index([assemblyOrderId])
+  @@index([channel])
+  @@index([skuId])
+  @@schema("inventory")
+}
+
+/// Storico movimenti dell’odette tra location fisiche.
+model OdetteMove {
+  id       String @id @default(uuid())
+  odetteId String
+  odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade)
+
+  fromLocationId String?
+  toLocationId   String?
+  fromLocation   WarehouseLocation? @relation("OdetteMoveFrom", fields: [fromLocationId], references: [id], onDelete: SetNull)
+  toLocation     WarehouseLocation? @relation("OdetteMoveTo", fields: [toLocationId], references: [id], onDelete: SetNull)
+
+  movedAt     DateTime @default(now())
+  movedByUser Int? /// opzionale: chi ha spostato (User.id)
+  user        User?    @relation(fields: [movedByUser], references: [id], onDelete: SetNull)
+
+  note String?
+
+  @@index([odetteId])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@index([movedByUser])
+  @@schema("inventory")
+}
+
+/// Log di pulizia/svuotamento dell’odette (audit).
+model OdetteCleaningLog {
+  id       String @id @default(uuid())
+  odetteId String
+  odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade)
+
+
+  note   String?
+
+  at       DateTime @default(now())
+  byUserId Int?
+  byUser   User?    @relation(fields: [byUserId], references: [id], onDelete: SetNull)
+
+  @@index([odetteId])
+  @@index([byUserId])
+  @@schema("inventory")
+}
+
+/// Definisce un tipo di odette con dimensioni/capacità e vincoli d'uso.
+model OdetteType {
+  id                String              @id @default(uuid())
+  name              String              @unique
+  code              String?             @unique
+  imageUrl          String?
+  /// Categoria dimensionale (es. S, M, L) per visualizzazione/badge
+  categoryId        String?
+  category          Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  /// Dimensioni esterne (mm)
+  dimensionsId String?
+  dimensions Dimensions? @relation(fields: [dimensionsId], references: [id], onDelete: SetNull)
+  /// Volume interno utile (cm^3)
+  internalVolumeCm3 Int?
+  /// Capacità massima di peso (kg)
+  maxWeightKg       Decimal?            @db.Decimal(10, 2)
+  /// Numero massimo indicativo di pezzi contenibili
+  maxPieces         Int?
+  stackable         Boolean @default(true)
+  /// Stage di assemblaggio ammessi per i contenuti
+  allowedStages     AssemblyStageType[] @default([])
+  /// Tipi di item ammessi per i contenuti
+  allowedItemTypes  ItemType[]          @default([])
+  /// Odettes appartenenti a questo tipo
+  odettes           Odette[]
+  @@schema("inventory")
+}
+
+/// Preferenze di location per le odette in base allo stato (vuota/piena)
+model OdetteLocationPreference {
+  id         String              @id @default(uuid())
+  locationId String
+  kind       OdetteLocationKind
+
+  location WarehouseLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, kind])
+  @@index([kind])
+  @@schema("inventory")
+}
+
+/// Assegnazione di un'odette a un ordine di assemblaggio per un determinato stage.
+/// Permette di tracciare quali odette sono in uso durante l'assemblaggio e il loro ruolo.
+model OdetteAssemblyAssignment {
+  id              String                 @id @default(uuid())
+  
+  odetteId        String
+  odette          Odette                 @relation(fields: [odetteId], references: [id], onDelete: Cascade)
+  
+  assemblyOrderId String
+  assemblyOrder   AssemblyOrder          @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade)
+  
+  /// Stage per cui è assegnata (ASSEMBLED, FIRST_STAGE, SECOND_STAGE)
+  stage           AssemblyStageType
+  
+  /// Ruolo dell'odette: SOURCE (prelevo da qui), DESTINATION (metto qui)
+  role            OdetteAssignmentRole
+  
+  /// Quantità allocata in questa odette per questo ordine/stage
+  quantity        Int                    @default(0)
+  
+  /// Note opzionali (es. "odette principale", "overflow")
+  notes           String?
+  
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  
+  /// Un'odette può avere un solo ruolo per stage per ordine
+  @@unique([odetteId, assemblyOrderId, stage, role])
+  @@index([assemblyOrderId])
+  @@index([odetteId])
+  @@index([stage])
+  @@index([assemblyOrderId, stage])
+  @@schema("inventory")
+}
+
+enum AssemblyOperationType {
+  PICKING              // Collezione parti
+  ASSEMBLY             // Assemblaggio vero e proprio
+  PRIMARY_PACKAGING    // Impacchettamento primario
+  SECONDARY_PACKAGING  // Impacchettamento secondario
+  ALLOCATION           // Allocamento (Scaffale o Scatola FBA)
+  @@schema("inventory")
+}
+
+/// Stato di un ordine di produzione.
+enum ProductionStatus {
+  READY_TO_PRODUCE
+  PRODUCED
+  PRODUCING
+  CANCELLED
+  NEED_SUPPLIES
+  @@schema("inventory")
+}
+
+/// Stato di un ordine di assemblaggio.
+enum AssemblyStatus {
+  READY_TO_ASSEMBLE
+  NEEDS_PARTS          // Mancano parti per completare l'assemblaggio
+  ASSEMBLY_STARTED
+  PARTIALLY_COMPLETED
+  ASSEMBLY_COMPLETED
+  ON_HOLD
+  CANCELLED
+  @@schema("inventory")
+}
+
+/// Stato operativo dell’odette
+enum OdetteStatus {
+  IN_USE /// contiene pezzi e può essere movimentata
+  RESERVED /// prenotata per essere riempita a breve
+  EMPTY /// svuotata ma non ancora pulita e pronta per essere usata
+  OUT_OF_SERVICE /// opzionale: rotta/manutenzione
+  @@schema("inventory")
+}
+
+/// Stato preferenza per le location delle odette (vuote/piene)
+enum OdetteLocationKind {
+  EMPTY
+  FULL
+  @@schema("inventory")
+}
+
+/// Ruolo dell'odette in un'assegnazione di assemblaggio
+enum OdetteAssignmentRole {
+  SOURCE      /// Odette da cui prelevo i pezzi (svuoto)
+  DESTINATION /// Odette in cui metto i pezzi (riempio)
+  @@schema("inventory")
+}
+
+enum OrderStatus {
+  TO_ORDER
+  ORDERED
+  RECEIVED
+  @@schema("inventory")
+}
