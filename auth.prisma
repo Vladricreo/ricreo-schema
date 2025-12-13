@@ -28,7 +28,7 @@ model User {
   lotInspections    LotInspection[]
 
   @@index([isActive]) /// Indice pratico per filtri frequenti
-  @@schema("public")
+  @@schema("public") ///  la tabella degli utenti
 }
 
 model Role {
