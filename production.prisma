@@ -171,6 +171,8 @@ model ProductionLot {
   
   // Relazione Print Farm
   productionJobs  ProductionJob[]
+  /// Operazioni di raccolta pezzi associate a questo lotto
+  printerHarvests PrinterHarvest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -222,6 +224,9 @@ model Odette {
   
   // Relazione Print Farm
   productionJobs ProductionJob[]
+  
+  /// Operazioni di raccolta pezzi in questa odette
+  printerHarvests PrinterHarvest[]
 
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt

@@ -147,6 +147,9 @@ model ProductionJob {
   // Odette assegnate per lo scarico pezzi (pre-assegnate all'avvio del job)
   odettes            Odette[]
   
+  /// Assegnazioni stampanti per questo job
+  printerAssignments PrinterAssignment[]
+  
   failureLogs        PrintFailureLog[]
 
   @@index([productOrderId])
@@ -205,12 +208,16 @@ model Printer {
   ams            Boolean?
   maintenance    Boolean?     @default(false)
   pushAllTimeout Int?
+  
+  /// Stato runtime dalla stampante (WebSocket) - volatile
   status         PrinterStatus @default(OFFLINE)
+  
+  /// Stato operativo persistente - gestito da logica applicativa
+  operationalStatus PrinterOperationalStatus @default(AVAILABLE)
 
-    /// Posizione fisica della stampante nella print farm (fila/slot di magazzino).
+  /// Posizione fisica della stampante nella print farm (fila/slot di magazzino).
   locationId     String?
   location       WarehouseLocation? @relation(fields: [locationId], references: [id])
-
 
   // Gestione Preferenze e Assegnazione
   currentMaterialId String?   // ID dell'Item (filamento) attualmente caricato
@@ -225,7 +232,17 @@ model Printer {
   printerMacros  PrinterMacro[] @relation("PrinterCompatibility")
   failureLogs    PrintFailureLog[]
   spools         FilamentSpool[]   @relation("MountedSpool")
+  
+  /// Assegnazioni job a questa stampante (coda di lavoro)
+  assignments     PrinterAssignment[]
+  
+  /// Storico raccolte pezzi da questa stampante
+  harvests        PrinterHarvest[]
+  /// Storico carichi filamento su questa stampante
+  filamentLoads   PrinterFilamentLoad[]
 
+  @@index([operationalStatus])
+  @@index([locationId])
   @@schema("print-farm")
 }
 
@@ -328,10 +345,12 @@ enum SettingsType {
 }
 
 enum FarmProductionStatus {
-  READY_TO_PRODUCE
-  IN_PROGRESS
-  COMPLETED
-  FAILED
+  READY_TO_PRODUCE      // Pronto per essere assegnato
+  NEEDS_CONFIGURATION   // Manca configurazione (file, materiali, ecc.)
+  AWAITING_RESOURCES    // Configurato ma mancano risorse (odette, stampanti libere)
+  IN_PROGRESS           // In produzione
+  COMPLETED             // Completato
+  FAILED                // Fallito
   @@schema("print-farm")
 }
 
@@ -356,6 +375,91 @@ enum PrinterStatus {
   @@schema("print-farm")
 }
 
+/// Stato operativo della stampante (persistente, gestito da logica applicativa).
+/// Questo stato è "superiore" rispetto al PrinterStatus che arriva dal WebSocket.
+enum PrinterOperationalStatus {
+  AVAILABLE     // Pronta per nuovi job
+  QUEUED        // Ha job in coda, sta lavorando
+  TO_LOAD       // Richiede caricamento materiale/file
+  TO_UNLOAD     // Stampa completata, richiede scarico pezzi
+  MAINTENANCE   // In manutenzione programmata
+  ERROR         // Errore bloccante (richiede intervento)
+  DISABLED      // Disabilitata manualmente
+  @@schema("print-farm")
+}
+
+/// Stato di un'assegnazione stampante per un ProductionJob.
+enum AssignmentStatus {
+  QUEUED      // In coda, in attesa
+  READY       // Materiale ok, pronta a partire
+  TO_LOAD     // File da caricare/materiale da cambiare
+  PRINTING    // In stampa
+  COMPLETED   // Stampa finita, da scaricare
+  UNLOADED    // Scaricato nell'odette
+  FAILED      // Fallito
+  CANCELLED   // Annullato
+  @@schema("print-farm")
+}
+
+/// Assegnazione di una stampante a un ProductionJob.
+/// Traccia la coda, lo stato, i tempi e lo scarico dei pezzi.
+model PrinterAssignment {
+  id              String   @id @default(uuid())
+  
+  /// Job di produzione assegnato
+  productionJobId String
+  productionJob   ProductionJob @relation(fields: [productionJobId], references: [id], onDelete: Cascade)
+  
+  /// Stampante assegnata
+  printerId       String
+  printer         Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  
+  /// Posizione in coda (0 = attuale, 1+ = in attesa)
+  queuePosition   Int      @default(0)
+  status          AssignmentStatus @default(QUEUED)
+  
+  // === Timing ===
+  scheduledAt     DateTime?   // Quando è stato schedulato
+  startedAt       DateTime?   // Inizio stampa effettivo
+  completedAt     DateTime?   // Fine stampa
+  
+  /// Operazioni di raccolta pezzi associate a questa assegnazione
+  harvests        PrinterHarvest[]
+  
+  /// Operazioni di carico filamento associate
+  filamentLoads   PrinterFilamentLoad[]
+  
+  // === Conteggi parti ===
+  printsExpected  Int         // Numero stampe da fare (file × ripetizioni)
+  printsCompleted Int      @default(0)  // Stampe completate
+  partsExpected   Int         // Parti totali attese (printsExpected × partCount)
+  partsProduced   Int      @default(0)  // Parti prodotte ok
+  partsRejected   Int      @default(0)  // Parti scartate
+  
+  // === Materiale ===
+  /// Categoria materiale richiesto dal file (es. "PETG", "PLA")
+  materialRequired  String?
+  /// Colore richiesto (es. "RED", "BLACK")
+  colorRequired     String?
+  /// Se il materiale è stato cambiato per questo assignment
+  materialChanged   Boolean  @default(false)
+  /// Timestamp conferma cambio materiale
+  materialChangedAt DateTime?
+  
+  // === Note ===
+  notes           String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([productionJobId, printerId])
+  @@index([productionJobId])
+  @@index([printerId])
+  @@index([status])
+  @@index([queuePosition])
+  @@schema("print-farm")
+}
+
 enum SoftwareType {
   BAMBU_STUDIO
   MAINSAIL
@@ -375,5 +479,108 @@ enum FileStatus {
   APPROVED    // Validato per produzione massiva
   ARCHIVED    // Versione vecchia, non usare
   REJECTED    // Test falliti, da buttare
+  @@schema("print-farm")
+}
+
+/// Operazione di raccolta pezzi stampati dalla stampante all'odette (harvesting).
+/// Traccia chi ha effettuato la raccolta, quando, e la qualità dei pezzi.
+model PrinterHarvest {
+  id              String   @id @default(uuid())
+  
+  /// Assegnazione da cui provengono i pezzi
+  assignmentId    String
+  assignment      PrinterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  
+  /// Stampante da cui è stata effettuata la raccolta
+  printerId       String
+  printer         Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  
+  /// Odette di destinazione
+  odetteId        String
+  odette          Odette @relation(fields: [odetteId], references: [id], onDelete: Restrict)
+  
+  /// Operatore che ha effettuato la raccolta
+  harvestedByUserId Int
+  harvestedByUser   User @relation("PrinterHarvests", fields: [harvestedByUserId], references: [id], onDelete: Restrict)
+  
+  /// Timestamp raccolta
+  harvestedAt     DateTime @default(now())
+  
+  // === Conteggi pezzi ===
+  /// Pezzi raccolti correttamente
+  partsAccepted   Int      @default(0)
+  /// Pezzi scartati (difetti, errori)
+  partsRejected   Int      @default(0)
+  /// Pezzi totali (accepted + rejected)
+  partsTotal      Int      @default(0)
+  
+  // === Qualità ===
+  /// Motivo scarto (se ci sono pezzi rejected)
+  rejectReason    String?
+  /// Note dell'operatore
+  notes           String?
+  /// Foto/immagine dei pezzi (opzionale)
+  imageUrl        String?
+  
+  // === Lotto ===
+  /// Lotto di produzione associato
+  productionLotId String?
+  productionLot   ProductionLot? @relation(fields: [productionLotId], references: [id], onDelete: SetNull)
+  
+  createdAt       DateTime @default(now())
+
+  @@index([assignmentId])
+  @@index([printerId])
+  @@index([odetteId])
+  @@index([harvestedByUserId])
+  @@index([harvestedAt])
+  @@index([productionLotId])
+  @@schema("print-farm")
+}
+
+/// Operazione di carico filamento/materiale sulla stampante.
+/// Traccia il cambio bobina e la conferma di caricamento.
+model PrinterFilamentLoad {
+  id              String   @id @default(uuid())
+  
+  /// Assegnazione per cui viene effettuato il carico (opzionale)
+  assignmentId    String?
+  assignment      PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  
+  /// Stampante su cui viene caricato
+  printerId       String
+  printer         Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  
+  /// Operatore che ha effettuato il carico
+  loadedByUserId  Int
+  loadedByUser    User @relation("PrinterFilamentLoads", fields: [loadedByUserId], references: [id], onDelete: Restrict)
+  
+  /// Timestamp carico
+  loadedAt        DateTime @default(now())
+  
+  // === Dettagli materiale ===
+  /// Bobina caricata
+  spoolId         String?
+  spool           FilamentSpool? @relation(fields: [spoolId], references: [id], onDelete: SetNull)
+  /// Materiale precedente (per tracking cambio)
+  previousMaterial String?
+  /// Materiale nuovo
+  newMaterial     String?
+  /// Colore nuovo
+  newColor        String?
+  
+  /// Conferma che il carico è stato completato correttamente
+  confirmed       Boolean  @default(false)
+  confirmedAt     DateTime?
+  
+  /// Note dell'operatore
+  notes           String?
+  
+  createdAt       DateTime @default(now())
+
+  @@index([assignmentId])
+  @@index([printerId])
+  @@index([loadedByUserId])
+  @@index([loadedAt])
   @@schema("print-farm")
 }

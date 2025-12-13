@@ -26,6 +26,11 @@ model User {
   assemblyOrders    AssemblyOrder[]
   performedOperations AssemblyOperation[]
   lotInspections    LotInspection[]
+  
+  /// Operazioni di raccolta pezzi effettuate da questo utente
+  printerHarvests   PrinterHarvest[] @relation("PrinterHarvests")
+  /// Operazioni di carico filamento effettuate da questo utente
+  printerFilamentLoads PrinterFilamentLoad[] @relation("PrinterFilamentLoads")
 
   @@index([isActive]) /// Indice pratico per filtri frequenti
   @@schema("public") ///  la tabella degli utenti

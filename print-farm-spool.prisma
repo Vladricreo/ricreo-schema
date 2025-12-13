@@ -83,6 +83,9 @@ model FilamentSpool {
   activeOnPrinters Printer[] @relation("ActiveSpool")
 
   printRuns    PrintRun[] // Storico stampe fatte con questa bobina
+  
+  /// Operazioni di carico filamento in cui è stata usata questa bobina
+  filamentLoads PrinterFilamentLoad[]
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
