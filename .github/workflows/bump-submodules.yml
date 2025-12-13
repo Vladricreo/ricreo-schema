@@ -1,0 +1,65 @@
+name: Update apps submodule pointers
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set variables
+        run: |
+          echo "SCHEMA_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+
+      - name: Update Ricreo-print-farm
+        env:
+          TOKEN: ${{ secrets.SYNC_TOKEN }}
+          OWNER: Vladricreo
+          REPO: Ricreo-print-farm
+        run: |
+          git clone https://x-access-token:${TOKEN}@github.com/${OWNER}/${REPO}.git app
+          cd app
+          git submodule update --init --recursive || true
+
+          # assicura che il submodule punti al repo giusto
+          git config -f .gitmodules submodule.client/prisma/schema.url https://github.com/Vladricreo/ricreo-schema.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+          # forza il submodule al commit appena pushato su ricreo-schema
+          cd client/prisma/schema
+          git fetch origin
+          git checkout $SCHEMA_SHA
+          cd ../../..
+
+          git add .gitmodules client/prisma/schema
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(schema): bump ricreo-schema to ${SCHEMA_SHA}" || exit 0
+          git push origin main
+
+      - name: Update Ricreo-Inventory
+        env:
+          TOKEN: ${{ secrets.SYNC_TOKEN }}
+          OWNER: Vladricreo
+          REPO: Ricreo-Inventory
+        run: |
+          git clone https://x-access-token:${TOKEN}@github.com/${OWNER}/${REPO}.git app2
+          cd app2
+          git submodule update --init --recursive || true
+
+          git config -f .gitmodules submodule.client/prisma/schema.url https://github.com/Vladricreo/ricreo-schema.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+          cd client/prisma/schema
+          git fetch origin
+          git checkout $SCHEMA_SHA
+          cd ../../..
+
+          git add .gitmodules client/prisma/schema
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(schema): bump ricreo-schema to ${SCHEMA_SHA}" || exit 0
+          git push origin main
