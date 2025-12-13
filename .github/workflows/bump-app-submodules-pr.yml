@@ -2,10 +2,7 @@ name: Bump app submodule pointers (PR)
 
 on:
   push:
-    branches: ["main"]   # in futuro puoi aggiungere "develop"
-
-permissions:
-  contents: read
+    branches: ["main", "develop"]
 
 jobs:
   bump:
@@ -17,11 +14,6 @@ jobs:
     env:
       OWNER: Vladricreo
       SCHEMA_URL: https://github.com/Vladricreo/ricreo-schema.git
-
-      # ✅ scegli qui dove vuoi mandare l’update nelle app
-      TARGET_BRANCH: predeploy  # oppure: develop / main
-
-      # branch che crea il bot nelle app
       BOT_BRANCH_PREFIX: chore/bump-schema
 
     steps:
@@ -32,6 +24,13 @@ jobs:
         run: |
           type -p gh >/dev/null || (sudo apt-get update && sudo apt-get install -y gh)
 
+      - name: Decide target branch
+        id: target
+        run: |
+          # se pushi su main -> target main
+          # se pushi su develop -> target develop
+          echo "target_branch=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
       - name: Clone app repo
         env:
           TOKEN: ${{ secrets.SYNC_TOKEN }}
@@ -40,50 +39,3 @@ jobs:
 
       - name: Prepare bump branch and update submodule pointer
         env:
-          TOKEN: ${{ secrets.SYNC_TOKEN }}
-        run: |
-          set -e
-          cd app
-
-          # assicurati di avere il branch target
-          git fetch origin
-          git checkout ${TARGET_BRANCH} || git checkout -b ${TARGET_BRANCH} origin/${TARGET_BRANCH}
-
-          # crea branch bot unico per SHA (evita conflitti)
-          SCHEMA_SHA="${GITHUB_SHA}"
-          BOT_BRANCH="${BOT_BRANCH_PREFIX}-${SCHEMA_SHA:0:8}"
-          git checkout -b "${BOT_BRANCH}"
-
-          # inizializza submodule se serve
-          git submodule update --init --recursive || true
-
-          # forza url/path corretti del submodule
-          git config -f .gitmodules submodule.client/prisma/schema.url "${SCHEMA_URL}"
-          git submodule sync --recursive
-          git submodule update --init --recursive
-
-          # porta il submodule esattamente al commit dello schema appena pushato
-          cd client/prisma/schema
-          git fetch origin
-          git checkout "${SCHEMA_SHA}"
-          cd ../../..
-
-          # commit puntatore submodule
-          git add .gitmodules client/prisma/schema
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore(schema): bump ricreo-schema to ${SCHEMA_SHA}" || exit 0
-
-          # push branch bot
-          git push -u origin "${BOT_BRANCH}"
-
-          # crea PR (se già esiste, non fallire)
-          gh auth login --with-token <<< "${TOKEN}"
-
-          gh pr create \
-            --repo "${OWNER}/${{ matrix.app_repo }}" \
-            --base "${TARGET_BRANCH}" \
-            --head "${BOT_BRANCH}" \
-            --title "chore(schema): bump ricreo-schema (${SCHEMA_SHA:0:8})" \
-            --body "Aggiorna il submodule client/prisma/schema al commit ${SCHEMA_SHA} di Vladricreo/ricreo-schema." \
-            || true
