@@ -64,7 +64,7 @@ jobs:
           BOT_BRANCH="${BOT_BRANCH_PREFIX}-${TARGET}-${SCHEMA_SHA:0:8}"
           git checkout -b "${BOT_BRANCH}"
 
-          # 🔐 FAI USARE IL TOKEN ANCHE AI SUBMODULE
+          #  FAI USARE IL TOKEN ANCHE AI SUBMODULE
           git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
           git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "git@github.com:"
 
@@ -96,5 +96,5 @@ jobs:
             --title "chore(schema): bump ricreo-schema (${SCHEMA_SHA:0:8})" \
             --body "Aggiorna il submodule ${SUBMODULE_PATH} al commit ${SCHEMA_SHA} di Vladricreo/ricreo-schema." \
             || true
-ommit ${SCHEMA_SHA} di Vladricreo/ricreo-schema." \
-            || true
+          ommit ${SCHEMA_SHA} di Vladricreo/ricreo-schema." \
+                      || true
