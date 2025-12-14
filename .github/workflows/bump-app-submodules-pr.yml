@@ -48,10 +48,9 @@ jobs:
           set -euo pipefail
           cd app
           git fetch origin
-
+      
           TARGET="${{ steps.target.outputs.target_branch }}"
-
-          # Se il branch target non esiste, crealo da origin/main (e pushalo)
+      
           if ! git show-ref --verify --quiet "refs/remotes/origin/${TARGET}"; then
             echo "Branch ${TARGET} non esiste su ${OWNER}/${{ matrix.app_repo }} -> lo creo da origin/main"
             git checkout -b "${TARGET}" "origin/main"
@@ -59,33 +58,34 @@ jobs:
           else
             git checkout "${TARGET}"
           fi
-
+      
           SCHEMA_SHA="${GITHUB_SHA}"
           BOT_BRANCH="${BOT_BRANCH_PREFIX}-${TARGET}-${SCHEMA_SHA:0:8}"
           git checkout -b "${BOT_BRANCH}"
-
-          # forza url corretta del submodule (nome = client/prisma/schema)
+      
           git config -f .gitmodules submodule.client/prisma/schema.url "${SCHEMA_URL}"
           git submodule sync --recursive
-
-          # 🔐 USA IL TOKEN PER I SUBMODULE (forzato sul comando)
+      
+          # token for submodule clone/update
           git -c url."https://x-access-token:${TOKEN}@github.com/".insteadOf="https://github.com/" \
               -c url."https://x-access-token:${TOKEN}@github.com/".insteadOf="git@github.com:" \
               submodule update --init --recursive
-
-          # punta il submodule allo SHA dello schema
-          cd "${SUBMODULE_PATH}"
-          git fetch origin
-          git checkout "${SCHEMA_SHA}"
-          cd - >/dev/null
-
+      
+          # token anche per fetch dentro al submodule
+          git -C "${SUBMODULE_PATH}" \
+            -c url."https://x-access-token:${TOKEN}@github.com/".insteadOf="https://github.com/" \
+            -c url."https://x-access-token:${TOKEN}@github.com/".insteadOf="git@github.com:" \
+            fetch origin
+      
+          git -C "${SUBMODULE_PATH}" checkout "${SCHEMA_SHA}"
+      
           git add .gitmodules "${SUBMODULE_PATH}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "chore(schema): bump ricreo-schema to ${SCHEMA_SHA}" || exit 0
-
+      
           git push -u origin "${BOT_BRANCH}"
-
+      
           gh pr create \
             --repo "${OWNER}/${{ matrix.app_repo }}" \
             --base "${TARGET}" \
