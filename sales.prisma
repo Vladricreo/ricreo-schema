@@ -1,28 +1,28 @@
 /// SKU vendibile per un ProductItem.
 /// Separa stock, movimenti e spedizioni per canale (FBM/FBA) e marketplace.
 model Sku {
-  id            String           @id @default(uuid())
-  productId String
-  code          String           @unique
-  channel       InventoryChannel /// FBM/FBA (UNALLOCATED sconsigliato per SKU vendibili)
-  marketplace   Marketplace      @default(AMAZON_FBA)
+  id          String           @id @default(uuid())
+  productId   String
+  code        String           @unique
+  channel     InventoryChannel /// FBM/FBA (UNALLOCATED sconsigliato per SKU vendibili)
+  marketplace Marketplace      @default(AMAZON_FBA)
   /// Nota: l'eleggibilità per FBA/FBM rispetto al packaging finale
   /// viene gestita applicativamente (AssemblyStage non è stato toccato).
-  isDefault     Boolean          @default(false)
+  isDefault   Boolean          @default(false)
 
-  isActive      Boolean          @default(true)
-  minStock      Int              @default(0)
-  currentStock  Int              @default(0)
-  dimensionsId String?
-  dimensions Dimensions? @relation(fields: [dimensionsId], references: [id])
-  requiresSecondaryPackage Boolean @default(false)
-  finalStageType          AssemblyStageType @default(SECOND_STAGE) // stato del prodotto effettivamente finito se ha bisogno del packaging primario o secondario di default: prodotto finito con packaging primario e secondario
-  locationId    String?
-  location      WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  ean           String?
-  asin          String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  isActive                 Boolean            @default(true)
+  minStock                 Int                @default(0)
+  currentStock             Int                @default(0)
+  dimensionsId             String?
+  dimensions               Dimensions?        @relation(fields: [dimensionsId], references: [id])
+  requiresSecondaryPackage Boolean            @default(false)
+  finalStageType           AssemblyStageType  @default(SECOND_STAGE) // stato del prodotto effettivamente finito se ha bisogno del packaging primario o secondario di default: prodotto finito con packaging primario e secondario
+  locationId               String?
+  location                 WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  ean                      String?
+  asin                     String?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -60,16 +60,16 @@ model AmazonProduct {
   restockDate       DateTime?
   restockAction     RestockAction?
   optimalLotSize    Int?
-  dimensionsId String?
-  dimensions Dimensions? @relation(fields: [dimensionsId], references: [id])
-  weight Decimal @default(0) @db.Decimal(12, 3) /// prima: Float
+  dimensionsId      String?
+  dimensions        Dimensions?        @relation(fields: [dimensionsId], references: [id])
+  weight            Decimal            @default(0) @db.Decimal(12, 3) /// prima: Float
   orderStatus       AmazonOrderStatus? @default(TO_ORDER)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   /// MIGLIORIA: collegato a uno SKU FBA specifico (per marketplace)
   skuId             String?            @unique
   sku               Sku?               @relation(fields: [skuId], references: [id], onDelete: Restrict)
-  product           Product?       @relation(fields: [productItemId], references: [id])
+  product           Product?           @relation(fields: [productItemId], references: [id])
   salesData         AmazonSalesData[]
 
   @@index([productItemId])
@@ -111,8 +111,8 @@ model Shipment {
   movementId       String?
   /// Relazione al movimento.
   movement         Movement?           @relation(fields: [movementId], references: [id])
-  productId    String?
-  product      Product?        @relation(fields: [productId], references: [id])
+  productId        String?
+  product          Product?            @relation(fields: [productId], references: [id])
   lines            ShipmentLine[]
   orderedAt        DateTime
   shippedAt        DateTime?
@@ -164,6 +164,7 @@ enum FulfillmentType {
   FBA // Gestito da Amazon
   FBM // Gestito dal venditore
   OTHER // Altro
+
   @@schema("inventory")
 }
 
@@ -172,6 +173,7 @@ enum ListingStatus {
   ACTIVE
   INACTIVE
   INCOMPLETE
+
   @@schema("inventory")
 }
 
@@ -180,6 +182,7 @@ enum RestockAction {
   NOW // Riordina ora
   SOON // Riordina a breve
   NO // Non riordinare
+
   @@schema("inventory")
 }
 
@@ -189,6 +192,7 @@ enum AmazonOrderStatus {
   PROCESSING
   PRODUCED
   SHIPPED
+
   @@schema("inventory")
 }
 
@@ -198,6 +202,7 @@ enum ShipmentLabelStatus {
   GENERATED
   PRINTED
   CANCELLED
+
   @@schema("inventory")
 }
 
@@ -206,6 +211,7 @@ enum ShipmentType {
   PRIME
   BUSINESS
   STANDARD
+
   @@schema("inventory")
 }
 
@@ -216,6 +222,6 @@ enum Marketplace {
   AMAZON_FBM
   EBAY
   ETSY
+
   @@schema("inventory")
 }
-

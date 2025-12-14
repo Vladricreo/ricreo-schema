@@ -4,31 +4,32 @@ model Profile {
   bio    String?
   userId Int     @unique ///
   user   User    @relation(fields: [userId], references: [id])
+
   @@schema("public")
 }
 
 /// Modello per gli utenti del sistema. Gestisce l'autenticazione e le informazioni di base dell'utente.
 model User {
-  id                Int                 @id @default(autoincrement())
-  email             String              @unique
-  username          String              @unique
-  password          String
-  name              String?
-  isActive          Boolean             @default(true)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  posts             Post[]
-  profile           Profile?
-  roles             UserRole[]
-  OdetteMove        OdetteMove[]
-  OdetteCleaningLog OdetteCleaningLog[]
-  productOrders     ProductOrder[]
-  assemblyOrders    AssemblyOrder[]
+  id                  Int                 @id @default(autoincrement())
+  email               String              @unique
+  username            String              @unique
+  password            String
+  name                String?
+  isActive            Boolean             @default(true)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  posts               Post[]
+  profile             Profile?
+  roles               UserRole[]
+  OdetteMove          OdetteMove[]
+  OdetteCleaningLog   OdetteCleaningLog[]
+  productOrders       ProductOrder[]
+  assemblyOrders      AssemblyOrder[]
   performedOperations AssemblyOperation[]
-  lotInspections    LotInspection[]
-  
+  lotInspections      LotInspection[]
+
   /// Operazioni di raccolta pezzi effettuate da questo utente
-  printerHarvests   PrinterHarvest[] @relation("PrinterHarvests")
+  printerHarvests      PrinterHarvest[]      @relation("PrinterHarvests")
   /// Operazioni di carico filamento effettuate da questo utente
   printerFilamentLoads PrinterFilamentLoad[] @relation("PrinterFilamentLoads")
 
@@ -44,6 +45,7 @@ model Role {
   updatedAt   DateTime         @updatedAt
   users       UserRole[]
   permissions RolePermission[]
+
   @@schema("public")
 }
 
@@ -86,4 +88,3 @@ model RolePermission {
   @@index([permissionId])
   @@schema("public")
 }
-
