@@ -2,7 +2,7 @@
 model Profile {
   id     Int     @id @default(autoincrement())
   bio    String?
-  userId Int     @unique
+  userId Int     @unique ///
   user   User    @relation(fields: [userId], references: [id])
   @@schema("public")
 }
