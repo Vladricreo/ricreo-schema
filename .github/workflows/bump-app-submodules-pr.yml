@@ -42,6 +42,7 @@ jobs:
 
       - name: Prepare bump branch and update submodule pointer
         env:
+          TOKEN: ${{ secrets.SYNC_TOKEN }}
           GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
           set -euo pipefail
@@ -63,7 +64,12 @@ jobs:
           BOT_BRANCH="${BOT_BRANCH_PREFIX}-${TARGET}-${SCHEMA_SHA:0:8}"
           git checkout -b "${BOT_BRANCH}"
 
-          git submodule update --init --recursive || true
+          # 🔐 FAI USARE IL TOKEN ANCHE AI SUBMODULE
+          git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "git@github.com:"
+
+          # init submodules
+          git submodule update --init --recursive
 
           # forza url corretta del submodule (nome = client/prisma/schema)
           git config -f .gitmodules submodule.client/prisma/schema.url "${SCHEMA_URL}"
@@ -89,4 +95,6 @@ jobs:
             --head "${BOT_BRANCH}" \
             --title "chore(schema): bump ricreo-schema (${SCHEMA_SHA:0:8})" \
             --body "Aggiorna il submodule ${SUBMODULE_PATH} al commit ${SCHEMA_SHA} di Vladricreo/ricreo-schema." \
+            || true
+ommit ${SCHEMA_SHA} di Vladricreo/ricreo-schema." \
             || true
