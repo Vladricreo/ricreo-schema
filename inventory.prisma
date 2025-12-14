@@ -8,9 +8,9 @@ model Movement {
   quantity        Int //sempre positivo
   type            MovementType
   date            DateTime          @default(now())
-  productId   String?
+  productId       String?
   assemblyStageId String?
-  productPartId      String?
+  productPartId   String?
   /// Perché: tracciare quando l'uscita è FBM o FBA; WIP resta NULL (condiviso).
   channel         InventoryChannel?
   /// Perché: quando scarico/spedisco per uno SKU specifico (FBA/FBM).
@@ -24,8 +24,8 @@ model Movement {
   /// Perché: tracciare quando l'entrata è FBM o FBA; WIP resta NULL (condiviso).
   assemblyStage   AssemblyStage?    @relation(fields: [assemblyStageId], references: [id])
   item            Item?             @relation(fields: [itemId], references: [id])
-  productPart        ProductPart?         @relation(fields: [productPartId], references: [id])
-  product     Product?      @relation(fields: [productId], references: [id])
+  productPart     ProductPart?      @relation(fields: [productPartId], references: [id])
+  product         Product?          @relation(fields: [productId], references: [id])
   shipments       Shipment[]
 
   @@index([productPartId])
@@ -42,8 +42,8 @@ model Movement {
 /// Lotto fisico di inventario (acquisto o produzione) per la tracciabilità ISO 9001.
 /// Collega articoli/prodotti a ordini di acquisto, ordini di produzione, movimenti, odette e spedizioni.
 model InventoryLot {
-  id        String   @id @default(uuid())
-  code      String   @unique
+  id         String                 @id @default(uuid())
+  code       String                 @unique
   originType InventoryLotOriginType
 
   /// Quantità iniziale teorica del lotto (pezzi ricevuti/prodotti)
@@ -51,10 +51,10 @@ model InventoryLot {
   /// Stato logico del lotto (aperto/chiuso), indipendente dal conteggio movimenti
   status          InventoryLotStatus @default(OPEN)
 
-  itemId        String?
-  item          Item?             @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemId    String?
+  item      Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
   productId String?
-  product   Product?      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   purchaseOrderLineId String?
   purchaseOrderLine   PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
@@ -63,13 +63,12 @@ model InventoryLot {
   supplierLotCode     String?
 
   productItemOrderId String?
-  productItemOrder   ProductOrder? @relation(fields: [productItemOrderId], references: [id], onDelete: SetNull)
+  productItemOrder   ProductOrder?  @relation(fields: [productItemOrderId], references: [id], onDelete: SetNull)
   assemblyOrderId    String?
-  assemblyOrder      AssemblyOrder?    @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull)
+  assemblyOrder      AssemblyOrder? @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull)
   /// Lotto di produzione stampa 3D da cui deriva (se applicabile).
   productionLotId    String?
-  productionLot      ProductionLot?    @relation(fields: [productionLotId], references: [id], onDelete: SetNull)
-
+  productionLot      ProductionLot? @relation(fields: [productionLotId], references: [id], onDelete: SetNull)
 
   manufacturedAt DateTime?
   receivedAt     DateTime?
@@ -78,8 +77,8 @@ model InventoryLot {
 
   movements      Movement[]
   odetteContents OdetteContent[]
-  
-  shipmentLines  ShipmentLine[]
+
+  shipmentLines      ShipmentLine[]
   assemblyOperations AssemblyOperation[]
 
   /// Bobine di filamento associate a questo lotto di inventario.
@@ -103,51 +102,53 @@ model InventoryLot {
 
 /// Rappresenta una fila/riga fisica di scaffale o area di magazzino (es. "A", "B", "PF-1").
 model WarehouseRow {
-  id          String   @id @default(uuid())
+  id          String  @id @default(uuid())
   /// Codice leggibile che appare sui cartelli fisici (es. "A", "B", "PF-1").
-  code        String   @unique
+  code        String  @unique
   /// Descrizione opzionale (es. "Print Farm fila A", "Assemblaggio fila 1").
   description String?
 
   /// Tutte le posizioni (slot) appartenenti a questa fila.
-  locations   WarehouseLocation[]
+  locations WarehouseLocation[]
 
   @@schema("inventory")
 }
 
 /// Definisce una posizione fisica nel magazzino dove gli articoli possono essere stoccati.
 model WarehouseLocation {
-  id                  String     @id @default(uuid())
-  name                String     @unique
+  id   String @id @default(uuid())
+  name String @unique
 
   /// Fila di appartenenza (scaffale/linea fisica).
-  rowId               String?
-  row                 WarehouseRow? @relation(fields: [rowId], references: [id], onDelete: SetNull)
+  rowId String?
+  row   WarehouseRow? @relation(fields: [rowId], references: [id], onDelete: SetNull)
 
   /// Posizione progressiva all'interno della stessa fila (1, 2, 3...).
-  positionInRow       Int?
+  positionInRow Int?
 
   /// Tipo di posizione (slot generico, testa odette, scaffale materiali, area assemblaggio, ...).
-  kind                WarehouseLocationKind @default(SLOT)
+  kind WarehouseLocationKind @default(SLOT)
 
+  printers Printer[]
 
-  printers            Printer[]
+  /// Tipo di articolo associato a questa posizione.
+  /// Se `null`, la posizione è considerata "generica" (nessun vincolo sul tipo).
+  associatedItemType ItemType?
+  items              Item[]
+  skus               Sku[]
+  odetteMovesFrom    OdetteMove[] @relation("OdetteMoveFrom")
+  odetteMovesTo      OdetteMove[] @relation("OdetteMoveTo")
+  odettes            Odette[]
 
-  associatedItemTypes ItemType[] @default([])
-  items               Item[]
-  skus                Sku[]
-  odetteMovesFrom     OdetteMove[]        @relation("OdetteMoveFrom")
-  odetteMovesTo       OdetteMove[]        @relation("OdetteMoveTo")
-  odettes             Odette[]
-  
   odetteLocationPreferences OdetteLocationPreference[]
 
   @@index([name])
-   @@index([rowId, positionInRow])
+  @@index([rowId, positionInRow])
   @@index([kind])
-  @@index([associatedItemTypes])
+  @@index([associatedItemType])
   @@schema("inventory")
 }
+
 /// Tipologia logica di posizione di magazzino.
 enum WarehouseLocationKind {
   /// Slot generico, posizione standard su scaffale.
@@ -156,6 +157,14 @@ enum WarehouseLocationKind {
   PRINTER_SLOT
   /// Testa fila destinata a odette di scarico/accumulo.
   ODETTE_HEAD
+  /// Scaffale/area dove stazionano le odette vuote (storage).
+  ODETTE_EMPTY_STORAGE
+  /// Area coda Print Farm: odette riservate/accodate in attesa di essere riempite o scaricate.
+  ODETTE_PRINT_FARM_QUEUE
+  /// Area/buffer reparto assemblaggio: odette sorgenti/destinazione per picking/assembly.
+  ODETTE_ASSEMBLY_BUFFER
+  /// Scaffale/area odette piene (separate dalle altre zone).
+  ODETTE_FULL_STORAGE
   /// Scaffale per materiali/filamenti sotto la fila stampanti.
   MATERIAL_SHELF
   /// Area di buffer/intermedio.
@@ -165,20 +174,21 @@ enum WarehouseLocationKind {
 
   @@schema("inventory")
 }
+
 /// Ispezione qualità/accettazione per un lotto di inventario (ISO 9001).
 model LotInspection {
-  id        String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  lotId     String
-  lot       InventoryLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  lotId String
+  lot   InventoryLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
 
   inspectedAt DateTime @default(now())
 
   inspectedBy Int?
-  inspector   User?   @relation(fields: [inspectedBy], references: [id], onDelete: SetNull)
+  inspector   User? @relation(fields: [inspectedBy], references: [id], onDelete: SetNull)
 
-  result   LotInspectionResult
-  notes    String?
+  result LotInspectionResult
+  notes  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -190,10 +200,10 @@ model LotInspection {
 
 /// Esito ispezione lotto (qualità).
 enum LotInspectionResult {
-  PASSED      /// Lotto conforme
-  FAILED      /// Lotto non conforme
-  REWORK      /// Lotto da rilavorare/parzialmente accettato
-  BLOCKED     /// Lotto bloccato in attesa decisione
+  PASSED /// Lotto conforme
+  FAILED /// Lotto non conforme
+  REWORK /// Lotto da rilavorare/parzialmente accettato
+  BLOCKED /// Lotto bloccato in attesa decisione
 
   @@schema("inventory")
 }
@@ -214,12 +224,11 @@ model FinishedAllocation {
   skuId String?
   sku   Sku?    @relation(fields: [skuId], references: [id])
 
-  product   Product    @relation(fields: [productItemId], references: [id], onDelete: Cascade)
+  product       Product        @relation(fields: [productItemId], references: [id], onDelete: Cascade)
   assemblyStage AssemblyStage? @relation(fields: [assemblyStageId], references: [id])
 
   /// MIGLIORIA: unique composito per evitare allocazioni duplicate della stessa chiave logica
   @@unique([productItemId, assemblyStageId, channel, skuId])
-
   @@index([productItemId, channel])
   @@index([skuId])
   @@schema("inventory")
@@ -230,7 +239,7 @@ enum MovementType {
   USO // uscita per utilizzo in produzione
   ACQUISTO //entrata da ordine fornitore
   VENDITA // uscita per vendita cliente
-  
+
   STAGE_IN // entrata in una fase di assemblaggio
   STAGE_OUT // uscita da una fase di assemblaggio
   PRODUZIONE // entrata da produzione completata
@@ -239,6 +248,7 @@ enum MovementType {
   TRASH // uscita per scarto/rottura
   CORRECTION_UP // entrata per correzione quantità (aumento)
   CORRECTION_DOWN // uscita per correzione quantità (diminuzione)
+
   @@schema("inventory")
 }
 
@@ -248,6 +258,7 @@ enum InventoryChannel {
   FBM
   FBA
   CUSTOM
+
   @@schema("inventory")
 }
 
@@ -256,12 +267,13 @@ enum InventoryLotOriginType {
   PRODUCTION
   ADJUSTMENT
   OTHER
+
   @@schema("inventory")
 }
 
 enum InventoryLotStatus {
   OPEN
   CLOSED
+
   @@schema("inventory")
 }
-

@@ -3,6 +3,7 @@ model InventorySettings {
   id    String       @id @default(uuid())
   name  SettingsName @unique
   value Json
+
   @@map("Settings")
   @@schema("inventory")
 }
@@ -22,6 +23,6 @@ enum SettingsName {
   AMAZON_ORDER_FIXED_COST
   AMAZON_STORAGE_FEE_LOW
   AMAZON_STORAGE_FEE_HIGH
+
   @@schema("inventory")
 }
-

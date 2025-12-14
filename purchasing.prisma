@@ -1,13 +1,13 @@
 /// Perché: nella realtà un ordine ha più articoli; migliore reportistica.
 model PurchaseOrder {
-  id         String      @id @default(uuid())
-  supplierId String
-  status     OrderStatus 
-  createdAt  DateTime    @default(now())
-  orderedAt  DateTime?
-  receivedAt DateTime?
-  shippingCost Decimal? @db.Decimal(12, 4)
-  customsDuty  Decimal? @db.Decimal(12, 4)
+  id           String      @id @default(uuid())
+  supplierId   String
+  status       OrderStatus
+  createdAt    DateTime    @default(now())
+  orderedAt    DateTime?
+  receivedAt   DateTime?
+  shippingCost Decimal?    @db.Decimal(12, 4)
+  customsDuty  Decimal?    @db.Decimal(12, 4)
 
   supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   lines    PurchaseOrderLine[]
@@ -53,6 +53,6 @@ model Supplier {
   items               Item[]
   purchaseOrders      PurchaseOrder[]
   lots                InventoryLot[]
+
   @@schema("inventory")
 }
-

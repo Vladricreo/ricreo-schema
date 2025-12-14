@@ -5,8 +5,8 @@
 model ProductOrder {
   id                String           @id @default(uuid())
   productId         String
-  skuId             String?          /// SKU di destinazione - determina il canale (FBA/FBM)
-  quantityToProduce Int              /// Quantità totale di prodotti finiti da produrre
+  skuId             String? /// SKU di destinazione - determina il canale (FBA/FBM)
+  quantityToProduce Int /// Quantità totale di prodotti finiti da produrre
   quantityProduced  Int              @default(0) /// Quantità di prodotti finiti completati
   eta               DateTime?
   finishedAt        DateTime?
@@ -16,24 +16,24 @@ model ProductOrder {
   status            OrderStatus      @default(TO_ORDER)
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
-  
-  product           Product          @relation(fields: [productId], references: [id])
-  sku               Sku?             @relation(fields: [skuId], references: [id], onDelete: SetNull)
 
-  producedByUserId  Int?
-  producedBy        User?            @relation(fields: [producedByUserId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+  sku     Sku?    @relation(fields: [skuId], references: [id], onDelete: SetNull)
+
+  producedByUserId Int?
+  producedBy       User? @relation(fields: [producedByUserId], references: [id])
 
   /// M2M esplicite con quantità per tracciare consumo item e parti prodotte
-  items             ProductOrderItem[]
-  parts             ProductOrderProductPart[]
+  items ProductOrderItem[]
+  parts ProductOrderProductPart[]
 
-  assemblyOrderId   String?
-  assemblyOrder     AssemblyOrder?   @relation("AssemblyOrderToProductItemOrder", fields: [assemblyOrderId], references: [id])
+  assemblyOrderId String?
+  assemblyOrder   AssemblyOrder? @relation("AssemblyOrderToProductItemOrder", fields: [assemblyOrderId], references: [id])
 
-  lots              InventoryLot[]
-  
+  lots InventoryLot[]
+
   /// Job di stampa 3D generati da questo ordine (uno per parte)
-  productionJobs    ProductionJob[]  @relation("ProductOrderJobs")
+  productionJobs ProductionJob[] @relation("ProductOrderJobs")
 
   @@index([skuId])
   @@index([assemblyOrderId])
@@ -48,11 +48,11 @@ model ProductOrder {
 /// Perché: evitare M2M implicite e aggiungere metadata/indici.
 model ProductOrderItem {
   productOrderId String
-  itemId             String
-  quantity           Int @default(1)
+  itemId         String
+  quantity       Int    @default(1)
 
   productOrder ProductOrder @relation(fields: [productOrderId], references: [id], onDelete: Cascade)
-  item             Item             @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  item         Item         @relation(fields: [itemId], references: [id], onDelete: Restrict)
 
   @@id([productOrderId, itemId])
   @@index([itemId])
@@ -62,13 +62,13 @@ model ProductOrderItem {
 /// Riga di consumo di un sotto-assieme/parte (ProductPart) per un ordine di produzione.
 /// Traccia quante parti sono necessarie e quante sono state prodotte.
 model ProductOrderProductPart {
-  productOrderId    String
-  productPartId     String
-  quantity          Int @default(1)           /// Quantità di parti necessarie per l'ordine
-  quantityProduced  Int @default(0)           /// Quantità di parti effettivamente prodotte
+  productOrderId   String
+  productPartId    String
+  quantity         Int    @default(1) /// Quantità di parti necessarie per l'ordine
+  quantityProduced Int    @default(0) /// Quantità di parti effettivamente prodotte
 
-  productOrder      ProductOrder @relation(fields: [productOrderId], references: [id], onDelete: Cascade)
-  productPart       ProductPart  @relation(fields: [productPartId], references: [id], onDelete: Restrict)
+  productOrder ProductOrder @relation(fields: [productOrderId], references: [id], onDelete: Cascade)
+  productPart  ProductPart  @relation(fields: [productPartId], references: [id], onDelete: Restrict)
 
   @@id([productOrderId, productPartId])
   @@index([productPartId])
@@ -78,31 +78,31 @@ model ProductOrderProductPart {
 /// Rappresenta un ordine di assemblaggio per un prodotto in base allo SKU.
 /// Lo SKU determina il canale (FBA/FBM) e le parti necessarie per l'assemblaggio.
 model AssemblyOrder {
-  id                 String              @id @default(uuid())
+  id                 String @id @default(uuid())
   productId          String
-  skuId              String              // SKU determina canale e parti necessarie
-  quantityToAssemble Int                 @default(0)
-  quantityAssembled  Int                 @default(0)
-  quantityScrapped   Int                 @default(0)
-  
-  startedAt          DateTime?
-  finishedAt         DateTime?
-  priority           Int                 @default(0) // 0: Bassa, 1: Media, 2: Alta
-  status             AssemblyStatus      @default(READY_TO_ASSEMBLE)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  skuId              String // SKU determina canale e parti necessarie
+  quantityToAssemble Int    @default(0)
+  quantityAssembled  Int    @default(0)
+  quantityScrapped   Int    @default(0)
 
-  product            Product             @relation(fields: [productId], references: [id])
-  sku                Sku                 @relation(fields: [skuId], references: [id])
-  assembledByUserId  Int?
-  assembledBy        User?               @relation(fields: [assembledByUserId], references: [id])
-  productOrders      ProductOrder[]      @relation("AssemblyOrderToProductItemOrder")
-  OdetteReservation  OdetteReservation[]
-  lots               InventoryLot[]
-  operations         AssemblyOperation[]
-  
+  startedAt  DateTime?
+  finishedAt DateTime?
+  priority   Int            @default(0) // 0: Bassa, 1: Media, 2: Alta
+  status     AssemblyStatus @default(READY_TO_ASSEMBLE)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  product           Product             @relation(fields: [productId], references: [id])
+  sku               Sku                 @relation(fields: [skuId], references: [id])
+  assembledByUserId Int?
+  assembledBy       User?               @relation(fields: [assembledByUserId], references: [id])
+  productOrders     ProductOrder[]      @relation("AssemblyOrderToProductItemOrder")
+  OdetteReservation OdetteReservation[]
+  lots              InventoryLot[]
+  operations        AssemblyOperation[]
+
   /// Assegnazioni odette per questo ordine (traccia quali odette sono in uso per ogni stage)
-  odetteAssignments  OdetteAssemblyAssignment[]
+  odetteAssignments OdetteAssemblyAssignment[]
 
   @@index([assembledByUserId])
   @@index([skuId])
@@ -110,38 +110,38 @@ model AssemblyOrder {
 }
 
 model AssemblyOperation {
-  id              String                @id @default(uuid())
-  
-  assemblyOrderId String
-  assemblyOrder   AssemblyOrder         @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade)
+  id String @id @default(uuid())
 
-  type            AssemblyOperationType
+  assemblyOrderId String
+  assemblyOrder   AssemblyOrder @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade)
+
+  type AssemblyOperationType
 
   assemblyStageId String?
-  assemblyStage   AssemblyStage?        @relation(fields: [assemblyStageId], references: [id])
+  assemblyStage   AssemblyStage? @relation(fields: [assemblyStageId], references: [id])
 
-  operatorId      Int
-  operator        User                  @relation(fields: [operatorId], references: [id])
+  operatorId Int
+  operator   User @relation(fields: [operatorId], references: [id])
 
   // --- TEMPI ---
-  startedAt       DateTime              @default(now())
+  startedAt       DateTime  @default(now())
   endedAt         DateTime?
-  durationSeconds Int?                  // Calcolato alla fine (utile per costo manodopera)
+  durationSeconds Int? // Calcolato alla fine (utile per costo manodopera)
 
   // --- QUANTITÀ DELLA SESSIONE ---
-  quantityInput    Int                  @default(0) // Quanti pezzi stavo lavorando in questa sessione?
-  quantityProduced Int                  @default(0) // Quanti pezzi BUONI ho finito in questa sessione?
-  quantityScrapped Int                  @default(0) // Quanti pezzi ho SCARTATO in questa sessione?
+  quantityInput    Int @default(0) // Quanti pezzi stavo lavorando in questa sessione?
+  quantityProduced Int @default(0) // Quanti pezzi BUONI ho finito in questa sessione?
+  quantityScrapped Int @default(0) // Quanti pezzi ho SCARTATO in questa sessione?
 
   // --- TRACCIABILITÀ ---
-  lotId           String?
-  lot             InventoryLot?         @relation(fields: [lotId], references: [id])
-  
-  notes           String?
-  metadata        Json?                 // Per info extra (es. motivo scarto, boxId, shelfId)
+  lotId String?
+  lot   InventoryLot? @relation(fields: [lotId], references: [id])
 
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  notes    String?
+  metadata Json? // Per info extra (es. motivo scarto, boxId, shelfId)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([assemblyOrderId])
   @@index([operatorId])
@@ -152,23 +152,22 @@ model AssemblyOperation {
 
 /// Lotto/commessa di produzione (es. job di stampa 3D).
 model ProductionLot {
-  id         String    @id @default(uuid())
-  code       String    @unique /// es. JOB-2025-10-001
-  printerId  String? /// opzionale: id macchina/stampante
-  material   String? /// es. PLA, ABS...
-  color      String? /// es. HEX/RGB o descrizione
-  startedAt  DateTime?
-  finishedAt DateTime?
-  note       String?
-    /// Lotti di inventario (prodotti finiti o semilavorati) generati da questo lotto di produzione.
-  inventoryLots   InventoryLot[]
-
+  id            String         @id @default(uuid())
+  code          String         @unique /// es. JOB-2025-10-001
+  printerId     String? /// opzionale: id macchina/stampante
+  material      String? /// es. PLA, ABS...
+  color         String? /// es. HEX/RGB o descrizione
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  note          String?
+  /// Lotti di inventario (prodotti finiti o semilavorati) generati da questo lotto di produzione.
+  inventoryLots InventoryLot[]
 
   /// Righe che fanno riferimento a questo lotto
-  odetteContents OdetteContent[]
+  odetteContents  OdetteContent[]
   /// Odettes riservate a questo lotto
   reservedOdettes Odette[]
-  
+
   // Relazione Print Farm
   productionJobs  ProductionJob[]
   /// Operazioni di raccolta pezzi associate a questo lotto
@@ -176,6 +175,7 @@ model ProductionLot {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   @@schema("inventory")
 }
 
@@ -189,6 +189,11 @@ model Odette {
 
   /// Stato operativo della odette
   status OdetteStatus @default(EMPTY)
+
+  /// Uso logico dell'odette: serve a separare odette "per prodotti" da odette "per item"
+  /// ed evitare che la stessa odette venga usata per scopi diversi.
+  /// Nota: l'app dovrebbe garantire coerenza con OdetteType.purpose quando typeId è valorizzato.
+  purpose OdettePurpose @default(PRODUCTS)
 
   /// Blocco stage: appena entra la prima riga si "fissa" lo stage;
   /// serve a impedire mix RAW/ASSEMBLED nella stessa odette.
@@ -207,7 +212,7 @@ model Odette {
 
   /// Prenotazioni (parziali) verso AssemblyOrder (per pezzi specifici)
   reservations OdetteReservation[]
-  
+
   /// Assegnazioni a ordini di assemblaggio (traccia uso per stage)
   assemblyAssignments OdetteAssemblyAssignment[]
 
@@ -221,10 +226,10 @@ model Odette {
   reservedLotId String?
   reservedLot   ProductionLot? @relation(fields: [reservedLotId], references: [id], onDelete: SetNull)
   reservedAt    DateTime?
-  
+
   // Relazione Print Farm
   productionJobs ProductionJob[]
-  
+
   /// Operazioni di raccolta pezzi in questa odette
   printerHarvests PrinterHarvest[]
 
@@ -246,23 +251,26 @@ model OdetteContent {
   odetteId String
   odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade)
 
-  // Polimorfismo: esattamente UNA di queste tre FK deve essere valorizzata.
+  // Polimorfismo: esattamente UNA FK deve essere valorizzata.
+  // Regola di business consigliata:
+  // - Se odette.purpose = ITEMS -> usa itemId
+  // - Se odette.purpose = PRODUCTS -> usa PartId (e NON itemId)
   itemId String?
   item   Item?   @relation(fields: [itemId], references: [id], onDelete: Restrict)
 
   PartId String?
   Part   ProductPart? @relation(fields: [PartId], references: [id], onDelete: Restrict)
 
-  
   /// Stage “logico” del contenuto (coerente con Odette.lockedStage)
-  stage AssemblyStageType?
+  assemblyStageId String?
+  assemblyStage   AssemblyStage? @relation(fields: [assemblyStageId], references: [id])
 
   /// Quantità disponibile fisicamente nella odette (non prenotata)
   quantity Int
 
   /// Opzionale: associazione diretta a uno SKU (FBA/FBM) per distinguere i pezzi già allocati
   skuId String?
-  sku   Sku?   @relation(fields: [skuId], references: [id], onDelete: SetNull)
+  sku   Sku?    @relation(fields: [skuId], references: [id], onDelete: SetNull)
 
   /// Facoltativo: lotto/commessa di produzione (vedi ProductionLot)
   lotId String?
@@ -278,7 +286,7 @@ model OdetteContent {
   @@index([odetteId])
   @@index([itemId])
   @@index([PartId])
-  @@index([stage])
+  @@index([assemblyStageId])
   @@index([inventoryLotId])
   @@index([skuId])
   @@schema("inventory")
@@ -346,8 +354,7 @@ model OdetteCleaningLog {
   odetteId String
   odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade)
 
-
-  note   String?
+  note String?
 
   at       DateTime @default(now())
   byUserId Int?
@@ -360,35 +367,35 @@ model OdetteCleaningLog {
 
 /// Definisce un tipo di odette con dimensioni/capacità e vincoli d'uso.
 model OdetteType {
-  id                String              @id @default(uuid())
-  name              String              @unique
-  code              String?             @unique
+  id                String        @id @default(uuid())
+  name              String        @unique
+  code              String?       @unique
   imageUrl          String?
+  /// Scopo/uso del tipo di odette (es. "PRODOTTI" vs "ITEM").
+  /// Serve a impedire l'utilizzo improprio: un tipo "PRODOTTI" non dovrebbe accettare contenuti item e viceversa.
+  purpose           OdettePurpose @default(PRODUCTS)
   /// Categoria dimensionale (es. S, M, L) per visualizzazione/badge
   categoryId        String?
-  category          Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  category          Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   /// Dimensioni esterne (mm)
-  dimensionsId String?
-  dimensions Dimensions? @relation(fields: [dimensionsId], references: [id], onDelete: SetNull)
+  dimensionsId      String?
+  dimensions        Dimensions?   @relation(fields: [dimensionsId], references: [id], onDelete: SetNull)
   /// Volume interno utile (cm^3)
   internalVolumeCm3 Int?
   /// Capacità massima di peso (kg)
-  maxWeightKg       Decimal?            @db.Decimal(10, 2)
+  maxWeightKg       Decimal?      @db.Decimal(10, 2)
   /// Numero massimo indicativo di pezzi contenibili
   maxPieces         Int?
-  stackable         Boolean @default(true)
-  /// Stage di assemblaggio ammessi per i contenuti
-  allowedStages     AssemblyStageType[] @default([])
-  /// Tipi di item ammessi per i contenuti
-  allowedItemTypes  ItemType[]          @default([])
+  stackable         Boolean       @default(true)
   /// Odettes appartenenti a questo tipo
   odettes           Odette[]
+
   @@schema("inventory")
 }
 
 /// Preferenze di location per le odette in base allo stato (vuota/piena)
 model OdetteLocationPreference {
-  id         String              @id @default(uuid())
+  id         String             @id @default(uuid())
   locationId String
   kind       OdetteLocationKind
 
@@ -402,29 +409,29 @@ model OdetteLocationPreference {
 /// Assegnazione di un'odette a un ordine di assemblaggio per un determinato stage.
 /// Permette di tracciare quali odette sono in uso durante l'assemblaggio e il loro ruolo.
 model OdetteAssemblyAssignment {
-  id              String                 @id @default(uuid())
-  
-  odetteId        String
-  odette          Odette                 @relation(fields: [odetteId], references: [id], onDelete: Cascade)
-  
+  id String @id @default(uuid())
+
+  odetteId String
+  odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade)
+
   assemblyOrderId String
-  assemblyOrder   AssemblyOrder          @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade)
-  
+  assemblyOrder   AssemblyOrder @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade)
+
   /// Stage per cui è assegnata (ASSEMBLED, FIRST_STAGE, SECOND_STAGE)
-  stage           AssemblyStageType
-  
+  stage AssemblyStageType
+
   /// Ruolo dell'odette: SOURCE (prelevo da qui), DESTINATION (metto qui)
-  role            OdetteAssignmentRole
-  
+  role OdetteAssignmentRole
+
   /// Quantità allocata in questa odette per questo ordine/stage
-  quantity        Int                    @default(0)
-  
+  quantity Int @default(0)
+
   /// Note opzionali (es. "odette principale", "overflow")
-  notes           String?
-  
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   /// Un'odette può avere un solo ruolo per stage per ordine
   @@unique([odetteId, assemblyOrderId, stage, role])
   @@index([assemblyOrderId])
@@ -435,11 +442,12 @@ model OdetteAssemblyAssignment {
 }
 
 enum AssemblyOperationType {
-  PICKING              // Collezione parti
-  ASSEMBLY             // Assemblaggio vero e proprio
-  PRIMARY_PACKAGING    // Impacchettamento primario
-  SECONDARY_PACKAGING  // Impacchettamento secondario
-  ALLOCATION           // Allocamento (Scaffale o Scatola FBA)
+  PICKING // Collezione parti
+  ASSEMBLY // Assemblaggio vero e proprio
+  PRIMARY_PACKAGING // Impacchettamento primario
+  SECONDARY_PACKAGING // Impacchettamento secondario
+  ALLOCATION // Allocamento (Scaffale o Scatola FBA)
+
   @@schema("inventory")
 }
 
@@ -450,18 +458,20 @@ enum ProductionStatus {
   PRODUCING
   CANCELLED
   NEED_SUPPLIES
+
   @@schema("inventory")
 }
 
 /// Stato di un ordine di assemblaggio.
 enum AssemblyStatus {
   READY_TO_ASSEMBLE
-  NEEDS_PARTS          // Mancano parti per completare l'assemblaggio
+  NEEDS_PARTS // Mancano parti per completare l'assemblaggio
   ASSEMBLY_STARTED
   PARTIALLY_COMPLETED
   ASSEMBLY_COMPLETED
   ON_HOLD
   CANCELLED
+
   @@schema("inventory")
 }
 
@@ -471,20 +481,35 @@ enum OdetteStatus {
   RESERVED /// prenotata per essere riempita a breve
   EMPTY /// svuotata ma non ancora pulita e pronta per essere usata
   OUT_OF_SERVICE /// opzionale: rotta/manutenzione
+
   @@schema("inventory")
 }
 
-/// Stato preferenza per le location delle odette (vuote/piene)
+/// Scopo/uso logico dell'odette (separazione "prodotti" vs "item").
+enum OdettePurpose {
+  PRODUCTS
+  ITEMS
+
+  @@schema("inventory")
+}
+
+/// Ruolo/uso di una location per il flusso odette.
+/// Nota: la "pienezza" è uno stato dell'odette (e/o derivabile dai contenuti),
+/// mentre questa enum rappresenta la ZONA fisica/logistica.
 enum OdetteLocationKind {
-  EMPTY
-  FULL
+  EMPTY_STORAGE
+  PRINT_FARM_QUEUE
+  ASSEMBLY_BUFFER
+  FULL_STORAGE
+
   @@schema("inventory")
 }
 
 /// Ruolo dell'odette in un'assegnazione di assemblaggio
 enum OdetteAssignmentRole {
-  SOURCE      /// Odette da cui prelevo i pezzi (svuoto)
+  SOURCE /// Odette da cui prelevo i pezzi (svuoto)
   DESTINATION /// Odette in cui metto i pezzi (riempio)
+
   @@schema("inventory")
 }
 
@@ -492,5 +517,6 @@ enum OrderStatus {
   TO_ORDER
   ORDERED
   RECEIVED
+
   @@schema("inventory")
 }
