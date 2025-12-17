@@ -423,8 +423,8 @@ model OdetteAssemblyAssignment {
   /// Ruolo dell'odette: SOURCE (prelevo da qui), DESTINATION (metto qui)
   role OdetteAssignmentRole
 
-  /// Quantità allocata in questa odette per questo ordine/stage
-  quantity Int @default(0)
+  /// Quantità allocata/pianificata in questa odette per questo ordine/stage (NON è la quantità reale: quella è in OdetteContent)
+  allocatedQuantity Int @default(0)
 
   /// Note opzionali (es. "odette principale", "overflow")
   notes String?

@@ -137,6 +137,10 @@ model ProductionJob {
   productOrderId String?
   productOrder   ProductOrder? @relation("ProductOrderJobs", fields: [productOrderId], references: [id])
 
+  /// Collegamento logico all'AssemblyOrder che ha generato questo job (cron).
+  /// È un campo di tracking: non è una relazione Prisma perché `AssemblyOrder` vive nello schema "inventory".
+  assemblyOrderId String?
+
   // Collegamento al Lotto di Produzione (per tracciabilità ISO)
   productionLotId String?
   productionLot   ProductionLot? @relation(fields: [productionLotId], references: [id])
@@ -152,6 +156,7 @@ model ProductionJob {
   failureLogs PrintFailureLog[]
 
   @@index([productOrderId])
+  @@index([assemblyOrderId])
   @@index([productId])
   @@index([productPartId])
   @@index([status])
@@ -353,7 +358,6 @@ enum FarmProductionStatus {
   IN_PROGRESS // In produzione
   COMPLETED // Completato
   FAILED // Fallito
-
   @@schema("print-farm")
 }
 
