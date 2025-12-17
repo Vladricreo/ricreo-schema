@@ -206,7 +206,7 @@ model AssemblyStage {
 
   /// Relazione con le utility assegnate a questa fase
   utilities ProductToUtility[]
-  
+
   odetteContents OdetteContent[]
 
   @@unique([productId, name])

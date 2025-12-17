@@ -19,6 +19,56 @@ model PrinterMaintenanceLog {
   @@schema("print-farm")
 }
 
+/// Issue "attiva" o storicizzata legata a una stampante.
+/// A differenza di `PrinterLogs` (log puntuale di un ErrorCode), questa tabella serve a rappresentare
+/// condizioni operative che bloccano la produzione (es. FILAMENT out, BED da scaricare, rete offline),
+/// con lifecycle OPEN -> ACKED -> RESOLVED e aggiornamento `lastSeenAt`.
+model PrinterIssue {
+  id String @id @default(uuid())
+
+  printerId String
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+
+  /// Se l'issue è correlata a un assignment specifico (stampa/coda).
+  assignmentId String?
+  assignment   PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+
+  source   PrinterIssueSource   @default(MQTT)
+  category PrinterIssueCategory
+  status   PrinterIssueStatus   @default(OPEN)
+  severity ErrorSeverity        @default(WARNING)
+
+  /// Collegamento opzionale a una tabella di codici noti.
+  errorCodeId Int?
+  errorCode   ErrorCode? @relation(fields: [errorCodeId], references: [id], onDelete: SetNull)
+
+  /// Codice esterno (es. raw code MQTT) se non mappato a ErrorCode.
+  externalCode String?
+  message      String?
+
+  /// Quando l'issue è stata vista la prima volta / aggiornata.
+  openedAt   DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  /// Gestione operativa
+  acknowledgedAt DateTime?
+  acknowledgedBy String? // User ID
+  resolvedAt     DateTime?
+  resolvedBy     String? // User ID
+
+  /// Payload/contesto (raw MQTT/WSS, snapshot, ecc.)
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([printerId, status])
+  @@index([printerId, category, status])
+  @@index([assignmentId])
+  @@index([errorCodeId])
+  @@schema("print-farm")
+}
+
 /// Registro puntuale degli scarti/errori.
 /// Permette di analizzare le cause di fallimento e ricalcolare i job.
 model PrintFailureLog {
@@ -77,6 +127,38 @@ enum MaintenanceType {
   UPGRADE // Miglioria hardware
   CALIBRATION
   OTHER
+
+  @@schema("print-farm")
+}
+
+/// Origine dell'issue (telemetria o operatore/scheduler).
+enum PrinterIssueSource {
+  MQTT
+  WSS
+  OPERATOR
+  SCHEDULER
+
+  @@schema("print-farm")
+}
+
+/// Categoria operativa/tecnica dell'issue.
+enum PrinterIssueCategory {
+  FILAMENT // fine filamento, carico/estrusione, AMS ecc
+  BED // scarico piatto / adesione / pulizia
+  PRINT // errore durante stampa
+  NETWORK // offline / timeout
+  MAINTENANCE // guasti / manutenzione richiesta
+  SAFETY // sportello aperto, temperatura, ecc
+  OTHER
+
+  @@schema("print-farm")
+}
+
+/// Stato lifecycle dell'issue.
+enum PrinterIssueStatus {
+  OPEN
+  ACKED
+  RESOLVED
 
   @@schema("print-farm")
 }
