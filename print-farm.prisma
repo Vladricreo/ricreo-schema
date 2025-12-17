@@ -262,6 +262,8 @@ model PrinterModel {
 
   printers   Printer[]
   errorCodes ErrorCode[] @relation("PrinterModelErrorCode")
+  /// Macro G-code compatibili con questo modello di stampante
+  printerMacros PrinterMacro[] @relation("PrinterModelMacroCompatibility")
 
   @@schema("print-farm")
 }
@@ -273,6 +275,8 @@ model PrinterMacro {
   gcode                Json
   printerCompatibility String[]
   printers             Printer[] @relation("PrinterCompatibility")
+  /// Modelli di stampante con cui la macro è compatibile
+  printerModels PrinterModel[] @relation("PrinterModelMacroCompatibility")
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -390,7 +394,7 @@ enum PrinterOperationalStatus {
   AVAILABLE // Pronta per nuovi job
   QUEUED // Ha job in coda, sta lavorando
   TO_LOAD // Richiede caricamento materiale/file
-  TO_UNLOAD // Stampa completata, richiede scarico pezzi
+  TO_HARVEST // Stampa completata, richiede scarico pezzi
   MAINTENANCE // In manutenzione programmata
   ERROR // Errore bloccante (richiede intervento)
   DISABLED // Disabilitata manualmente
