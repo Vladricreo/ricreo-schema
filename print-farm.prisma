@@ -1,7 +1,7 @@
 /// File di progetto 3MF per la stampa 3D.
 /// Include informazioni sul file, parametri di stampa, materiali usati e versionamento.
 model ProjectThreeMFFile {
-  id                       String   @id @default(uuid())
+  id                       String   @id @default(uuid()) @db.Uuid
   filename                 String
   filepath                 String
   filesize                 Decimal  @db.Decimal(12, 3)
@@ -27,16 +27,16 @@ model ProjectThreeMFFile {
   changeLog String? // Es. "Aumentato riempimento al 20%"
 
   // Self-relation per tracciare la storia delle versioni (v2 -> v1)
-  previousVersionId String?             @unique
-  previousVersion   ProjectThreeMFFile? @relation("FileHistory", fields: [previousVersionId], references: [id])
+  previousVersionId String?             @unique @db.Uuid
+  previousVersion   ProjectThreeMFFile? @relation("FileHistory", fields: [previousVersionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   nextVersion       ProjectThreeMFFile? @relation("FileHistory")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   printRuns      PrintRun[]
-  productId      String?
-  product        Product?              @relation(fields: [productId], references: [id])
+  productId      String?               @db.Uuid
+  product        Product?              @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   materials      Item[] // Relazione legacy (per compatibilità)
   fileMaterials  ProjectFileMaterial[] // Nuova relazione con peso specifico del file
   productionJobs ProductionJob[]       @relation("JobsToFiles")
@@ -52,18 +52,19 @@ model ProjectThreeMFFile {
 /// Relazione tra file 3MF e materiali con peso specifico usato nel file.
 /// I grammi sono specifici del file, non dell'anagrafica materiali.
 model ProjectFileMaterial {
-  id String @id @default(uuid())
+  id String @id @default(uuid()) @db.Uuid
 
-  fileId String
-  file   ProjectThreeMFFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  fileId String            @db.Uuid
+  file   ProjectThreeMFFile @relation(fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  materialId String
-  material   Item   @relation("FileMaterialUsage", fields: [materialId], references: [id])
+  materialId String @db.Uuid
+  material   Item   @relation("FileMaterialUsage", fields: [materialId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   usedWeight Decimal @db.Decimal(12, 3) // Grammi usati nel file
   colorUsed  String? // Colore usato (può essere diverso dal colore in anagrafica)
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@unique([fileId, materialId]) // Un materiale può essere usato una sola volta per file
   @@index([fileId])
@@ -74,24 +75,24 @@ model ProjectFileMaterial {
 /// Rappresenta una parte nel file 3MF collegata a una ProductPart del prodotto.
 /// Traccia la quantità di parti nel file e il peso calcolato per singola parte.
 model ProjectPart {
-  id               String   @id @default(uuid())
+  id               String   @id @default(uuid()) @db.Uuid
   quantity         Int      @default(0) // Quantità di parti nel file 3MF
   weight           Decimal? @db.Decimal(12, 3) // Peso calcolato per singola parte (totalWeight / quantity)
   imageFromFileUrl String? // URL immagine estratta dal file 3MF
 
-  productPartId String?
-  productPart   ProductPart? @relation(fields: [productPartId], references: [id])
+  productPartId String?      @db.Uuid
+  productPart   ProductPart? @relation(fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id])
+  productId String?          @db.Uuid
+  product   Product?         @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  fileId String
-  file   ProjectThreeMFFile @relation("ProjectParts", fields: [fileId], references: [id], onDelete: Cascade)
+  fileId String              @db.Uuid
+  file   ProjectThreeMFFile   @relation("ProjectParts", fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   productionJobs ProductionJob[] @relation("ProductionJobParts")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([productPartId])
   @@index([productId])
@@ -103,13 +104,13 @@ model ProjectPart {
 /// Collegato a un ProductOrder (ordine di produzione dall'inventario).
 /// Ogni ProductionJob produce N pezzi di una singola parte usando un file 3MF.
 model ProductionJob {
-  id                 String               @id @default(uuid())
+  id                 String               @id @default(uuid()) @db.Uuid
   priority           Int                  @default(1) // 1=low, 2=medium, 3=high, 4=critical
   assignedPrinterIds String[]
   estimatedTime      Decimal?             @db.Decimal(12, 2) // Tempo stimato in minuti
-  eta                DateTime?
-  startedAt          DateTime?
-  finishedAt         DateTime?
+  eta                DateTime?            @db.Timestamptz(6)
+  startedAt          DateTime?            @db.Timestamptz(6)
+  finishedAt         DateTime?            @db.Timestamptz(6)
   status             FarmProductionStatus @default(READY_TO_PRODUCE)
   quantity           Int // Quantità totale da produrre
   quantityPrinted    Int                  @default(0) // Pezzi stampati con successo
@@ -122,28 +123,28 @@ model ProductionJob {
   parts     ProjectPart[]        @relation("ProductionJobParts")
   filaments Item[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   // Collegamento al Prodotto
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id])
+  productId String? @db.Uuid
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   // Collegamento alla Parte specifica del prodotto
-  productPartId String?
-  productPart   ProductPart? @relation(fields: [productPartId], references: [id])
+  productPartId String?      @db.Uuid
+  productPart   ProductPart? @relation(fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   // Collegamento all'Ordine di Produzione (dall'inventario)
-  productOrderId String?
-  productOrder   ProductOrder? @relation("ProductOrderJobs", fields: [productOrderId], references: [id])
+  productOrderId String?       @db.Uuid
+  productOrder   ProductOrder? @relation("ProductOrderJobs", fields: [productOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Collegamento logico all'AssemblyOrder che ha generato questo job (cron).
   /// È un campo di tracking: non è una relazione Prisma perché `AssemblyOrder` vive nello schema "inventory".
-  assemblyOrderId String?
+  assemblyOrderId String? @db.Uuid
 
   // Collegamento al Lotto di Produzione (per tracciabilità ISO)
-  productionLotId String?
-  productionLot   ProductionLot? @relation(fields: [productionLotId], references: [id])
+  productionLotId String?         @db.Uuid
+  productionLot   ProductionLot?  @relation(fields: [productionLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   powerConsumed Decimal? @db.Decimal(12, 3) // Consumo energia in kWh
 
@@ -164,20 +165,20 @@ model ProductionJob {
 }
 
 model PrintRun {
-  id         String    @id @default(uuid())
-  startedAt  DateTime?
-  finishedAt DateTime?
+  id         String    @id @default(uuid()) @db.Uuid
+  startedAt  DateTime? @db.Timestamptz(6)
+  finishedAt DateTime? @db.Timestamptz(6)
 
   /// Assegnazione stampante (PrinterAssignment) che ha generato/gestito questa run.
   /// Serve a legare l'esecuzione reale (run) al workflow operativo (assignment).
-  assignmentId String?
-  assignment   PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  assignmentId String?            @db.Uuid
+  assignment   PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  productionJob   ProductionJob? @relation(fields: [productionJobId], references: [id])
-  productionJobId String?
+  productionJob   ProductionJob? @relation(fields: [productionJobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productionJobId String?        @db.Uuid
 
   filePrinted ProjectThreeMFFile @relation(fields: [fileId], references: [id])
-  fileId      String
+  fileId      String            @db.Uuid
 
   printTimeMinutes   Decimal?       @db.Decimal(12, 2)
   powerConsumed      Decimal?       @db.Decimal(12, 3)
@@ -186,18 +187,26 @@ model PrintRun {
   quantityFailed     Int            @default(0)
   status             PrintRunStatus @default(PENDING)
   filaments          Item[]
-  spoolId            String? // Bobina usata per questa run
-  spool              FilamentSpool? @relation(fields: [spoolId], references: [id])
+  spoolId            String?         @db.Uuid // Bobina usata per questa run
+  spool              FilamentSpool?  @relation(fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   notes              String?
 
   failureLogs PrintFailureLog[]
 
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
   @@index([assignmentId])
+  @@index([productionJobId])
+  @@index([fileId])
+  @@index([spoolId])
+  @@index([status])
+  @@index([startedAt])
   @@schema("print-farm")
 }
 
 model Printer {
-  id     String       @id @default(uuid())
+  id     String       @id @default(uuid()) @db.Uuid
   serial String? // Serial number BambuLab (es. 00M09C433002451)
   name   String
   brand  PrinterBrand @default(BAMBU_LAB)
@@ -228,9 +237,9 @@ model Printer {
 
   /// --- HEALTH / TELEMETRIA ---
   /// Ultimo aggiornamento ricevuto dalla stampante via WebSocket.
-  lastWssAt  DateTime?
+  lastWssAt  DateTime? @db.Timestamptz(6)
   /// Ultimo aggiornamento ricevuto via MQTT (errori/eventi).
-  lastMqttAt DateTime?
+  lastMqttAt DateTime? @db.Timestamptz(6)
 
   /// --- OVERRIDE MANUALE (OPERATORE) ---
   /// Override esplicito impostato dall'operatore (es. MAINTENANCE/DISABLED).
@@ -239,24 +248,24 @@ model Printer {
   manualOverrideReason String?
   /// User ID (stringa) che ha impostato l'override (evita vincoli cross-schema).
   manualOverrideBy     String?
-  manualOverrideAt     DateTime?
+  manualOverrideAt     DateTime? @db.Timestamptz(6)
 
   /// --- STATO PIATTO / SCARICO ---
   /// True quando il piatto è considerato "occupato" e serve scarico (anche in caso di FAILED).
   bedOccupied             Boolean            @default(false)
-  bedOccupiedAt           DateTime?
+  bedOccupiedAt           DateTime?          @db.Timestamptz(6)
   /// Assignment che attualmente "occupa" il piatto (se noto).
-  bedOccupiedAssignmentId String?            @unique
-  bedOccupiedAssignment   PrinterAssignment? @relation("BedOccupiedAssignment", fields: [bedOccupiedAssignmentId], references: [id], onDelete: SetNull)
+  bedOccupiedAssignmentId String?            @unique @db.Uuid
+  bedOccupiedAssignment   PrinterAssignment? @relation("BedOccupiedAssignment", fields: [bedOccupiedAssignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Posizione fisica della stampante nella print farm (fila/slot di magazzino).
-  locationId String?
-  location   WarehouseLocation? @relation(fields: [locationId], references: [id])
+  locationId String?            @db.Uuid
+  location   WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   // Gestione Preferenze e Assegnazione
-  currentMaterialId String? // ID dell'Item (filamento) attualmente caricato
-  currentSpoolId    String? // ID della bobina (Virtuale o Fisica) attualmente montata
-  currentSpool      FilamentSpool? @relation("ActiveSpool", fields: [currentSpoolId], references: [id])
+  currentMaterialId String?        @db.Uuid // ID dell'Item (filamento) attualmente caricato
+  currentSpoolId    String?        @db.Uuid // ID della bobina (Virtuale o Fisica) attualmente montata
+  currentSpool      FilamentSpool? @relation("ActiveSpool", fields: [currentSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   preferredTags     String[] // es. ["PETG", "BLACK", "PLA_SILK"] - per suggerire l'assegnazione
 
   logs            PrinterLogs[]
@@ -276,6 +285,9 @@ model Printer {
   harvests      PrinterHarvest[]
   /// Storico carichi filamento su questa stampante
   filamentLoads PrinterFilamentLoad[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([operationalStatus])
   @@index([manualOverrideStatus])
@@ -311,8 +323,8 @@ model PrinterMacro {
   printers             Printer[]      @relation("PrinterCompatibility")
   /// Modelli di stampante con cui la macro è compatibile
   printerModels        PrinterModel[] @relation("PrinterModelMacroCompatibility")
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  createdAt            DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@schema("print-farm")
 }
@@ -339,8 +351,8 @@ model ErrorCode {
   qrCodeData    String?
   logs          PrinterLogs[]
   issues        PrinterIssue[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@schema("print-farm")
 }
@@ -354,16 +366,18 @@ enum ErrorType {
 
 model PrinterLogs {
   id          Int    @id @default(autoincrement())
-  printerId   String
+  printerId   String @db.Uuid
   errorCodeId Int
 
   errorCode ErrorCode @relation(fields: [errorCodeId], references: [id])
-  printer   Printer   @relation(fields: [printerId], references: [id])
+  printer   Printer   @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  occurredAt DateTime  @default(now())
-  fixedAt    DateTime?
-  createdAt  DateTime  @default(now())
+  occurredAt DateTime  @default(now()) @db.Timestamptz(6)
+  fixedAt    DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
 
+  @@index([printerId])
+  @@index([occurredAt])
   @@schema("print-farm")
 }
 
@@ -372,6 +386,9 @@ model FarmSettings {
   value        Json         @map("settings")
   settingsname String
   settingstype SettingsType
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@unique([settingsname, settingstype])
   @@map("Settings")
@@ -463,15 +480,15 @@ enum AssignmentStatus {
 /// Assegnazione di una stampante a un ProductionJob.
 /// Traccia la coda, lo stato, i tempi e lo scarico dei pezzi.
 model PrinterAssignment {
-  id String @id @default(uuid())
+  id String @id @default(uuid()) @db.Uuid
 
   /// Job di produzione assegnato
-  productionJobId String
-  productionJob   ProductionJob @relation(fields: [productionJobId], references: [id], onDelete: Cascade)
+  productionJobId String        @db.Uuid
+  productionJob   ProductionJob @relation(fields: [productionJobId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Stampante assegnata
-  printerId String
-  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  printerId String @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Relazione 1:1 (opzionale) per tracciare quale assignment "occupa" il piatto.
   /// È una relazione separata da `printer` quindi deve essere nominata.
@@ -482,9 +499,9 @@ model PrinterAssignment {
   status        AssignmentStatus @default(QUEUED)
 
   // === Timing ===
-  scheduledAt DateTime? // Quando è stato schedulato
-  startedAt   DateTime? // Inizio stampa effettivo
-  completedAt DateTime? // Fine stampa
+  scheduledAt DateTime? @db.Timestamptz(6) // Quando è stato schedulato
+  startedAt   DateTime? @db.Timestamptz(6) // Inizio stampa effettivo
+  completedAt DateTime? @db.Timestamptz(6) // Fine stampa
 
   /// Operazioni di raccolta pezzi associate a questa assegnazione
   harvests PrinterHarvest[]
@@ -513,13 +530,13 @@ model PrinterAssignment {
   /// Se il materiale è stato cambiato per questo assignment
   materialChanged   Boolean   @default(false)
   /// Timestamp conferma cambio materiale
-  materialChangedAt DateTime?
+  materialChangedAt DateTime? @db.Timestamptz(6)
 
   // === Note ===
   notes String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@unique([productionJobId, printerId])
   @@index([productionJobId])
@@ -557,18 +574,18 @@ enum FileStatus {
 /// Operazione di raccolta pezzi stampati dalla stampante all'odette (harvesting).
 /// Traccia chi ha effettuato la raccolta, quando, e la qualità dei pezzi.
 model PrinterHarvest {
-  id String @id @default(uuid())
+  id String @id @default(uuid()) @db.Uuid
 
   /// Assegnazione da cui provengono i pezzi
-  assignmentId String
-  assignment   PrinterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignmentId String            @db.Uuid
+  assignment   PrinterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Stampante da cui è stata effettuata la raccolta
-  printerId String
-  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  printerId String @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Odette di destinazione
-  odetteId String
+  odetteId String @db.Uuid
   odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Restrict)
 
   /// Operatore che ha effettuato la raccolta
@@ -576,7 +593,7 @@ model PrinterHarvest {
   harvestedByUser   User @relation("PrinterHarvests", fields: [harvestedByUserId], references: [id], onDelete: Restrict)
 
   /// Timestamp raccolta
-  harvestedAt DateTime @default(now())
+  harvestedAt DateTime @default(now()) @db.Timestamptz(6)
 
   // === Conteggi pezzi ===
   /// Pezzi raccolti correttamente
@@ -596,10 +613,11 @@ model PrinterHarvest {
 
   // === Lotto ===
   /// Lotto di produzione associato
-  productionLotId String?
-  productionLot   ProductionLot? @relation(fields: [productionLotId], references: [id], onDelete: SetNull)
+  productionLotId String?        @db.Uuid
+  productionLot   ProductionLot? @relation(fields: [productionLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([assignmentId])
   @@index([printerId])
@@ -613,27 +631,27 @@ model PrinterHarvest {
 /// Operazione di carico filamento/materiale sulla stampante.
 /// Traccia il cambio bobina e la conferma di caricamento.
 model PrinterFilamentLoad {
-  id String @id @default(uuid())
+  id String @id @default(uuid()) @db.Uuid
 
   /// Assegnazione per cui viene effettuato il carico (opzionale)
-  assignmentId String?
-  assignment   PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  assignmentId String?            @db.Uuid
+  assignment   PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Stampante su cui viene caricato
-  printerId String
-  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  printerId String @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Operatore che ha effettuato il carico
   loadedByUserId Int
   loadedByUser   User @relation("PrinterFilamentLoads", fields: [loadedByUserId], references: [id], onDelete: Restrict)
 
   /// Timestamp carico
-  loadedAt DateTime @default(now())
+  loadedAt DateTime @default(now()) @db.Timestamptz(6)
 
   // === Dettagli materiale ===
   /// Bobina caricata
-  spoolId          String?
-  spool            FilamentSpool? @relation(fields: [spoolId], references: [id], onDelete: SetNull)
+  spoolId          String?        @db.Uuid
+  spool            FilamentSpool? @relation(fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Materiale precedente (per tracking cambio)
   previousMaterial String?
   /// Materiale nuovo
@@ -643,12 +661,13 @@ model PrinterFilamentLoad {
 
   /// Conferma che il carico è stato completato correttamente
   confirmed   Boolean   @default(false)
-  confirmedAt DateTime?
+  confirmedAt DateTime? @db.Timestamptz(6)
 
   /// Note dell'operatore
   notes String?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([assignmentId])
   @@index([printerId])

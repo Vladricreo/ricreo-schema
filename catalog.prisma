@@ -2,7 +2,7 @@
 /// Può rappresentare materie prime, imballaggi, componenti, accessori, ricambi, attrezzi o prodotti finiti.
 /// Il campo 'type' (ItemType) distingue la natura specifica dell'articolo.
 model Item {
-  id       String  @id @default(uuid())
+  id       String  @id @default(uuid()) @db.Uuid
   imageUrl String?
   name     String
   sku      String  @unique
@@ -11,13 +11,13 @@ model Item {
   weight           Decimal? @db.Decimal(12, 3) /// prima: Float?
   /// Tipologia di articolo (es. MATERIALE, IMBALLAGGIO, COMPONENTE).
   type             ItemType
-  categoryId       String?
-  colorId          String?
-  brandId          String?
-  supplierId       String?
-  locationId       String?
-  standardWeightId String?
-  dimensionsId     String?
+  categoryId       String? @db.Uuid
+  colorId          String? @db.Uuid
+  brandId          String? @db.Uuid
+  supplierId       String? @db.Uuid
+  locationId       String? @db.Uuid
+  standardWeightId String? @db.Uuid
+  dimensionsId     String? @db.Uuid
 
   properties Json?
 
@@ -29,18 +29,18 @@ model Item {
   minOrder Int @default(0)
   maxOrder Int @default(0)
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  packagingTypeId String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  packagingTypeId String? @db.Uuid
 
-  brand          Brand?             @relation(fields: [brandId], references: [id])
-  category       Category?          @relation(fields: [categoryId], references: [id])
-  color          Color?             @relation(fields: [colorId], references: [id])
-  location       WarehouseLocation? @relation(fields: [locationId], references: [id])
-  packagingType  PackagingType?     @relation(fields: [packagingTypeId], references: [id])
-  standardWeight StandardWeight?    @relation(fields: [standardWeightId], references: [id])
-  supplier       Supplier?          @relation(fields: [supplierId], references: [id])
-  dimensions     Dimensions?        @relation(fields: [dimensionsId], references: [id])
+  brand          Brand?             @relation(fields: [brandId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  category       Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  color          Color?             @relation(fields: [colorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  location       WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  packagingType  PackagingType?     @relation(fields: [packagingTypeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  standardWeight StandardWeight?    @relation(fields: [standardWeightId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  supplier       Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  dimensions     Dimensions?        @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   movements Movement[]
 
@@ -77,7 +77,7 @@ model Item {
 /// Un prodotto è composto da vari 'Item' (componenti, materiali) e può avere più fasi di assemblaggio.
 /// Gestisce informazioni su costi, prezzi, e logistica (FBM/FBA).
 model Product {
-  id        String  @id @unique @default(uuid())
+  id        String  @id @unique @default(uuid()) @db.Uuid
   imageUrl  String?
   treemfUrl String?
   name      String
@@ -90,12 +90,12 @@ model Product {
   profitMargin   Decimal? @db.Decimal(5, 4) /// prima: Float? (0.1234 = 12.34%)
   laborCost      Decimal? @db.Decimal(12, 4) /// prima: Float?
   laborMinutes   Decimal? @db.Decimal(8, 2) /// prima: Float?
-  dimensionsId   String?
+  dimensionsId   String? @db.Uuid
 
-  itemId     String?
+  itemId     String? @db.Uuid
   properties Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   skus Sku[]
 
@@ -106,7 +106,7 @@ model Product {
   averageDailySales    Decimal?  @db.Decimal(12, 4)
   suggestedMinStock    Int?
   autoAdjustMinStock   Boolean   @default(false)
-  lastSalesCalculation DateTime?
+  lastSalesCalculation DateTime? @db.Timestamptz(6)
 
   amazonProduct  AmazonProduct?
   stages         AssemblyStage[]
@@ -115,7 +115,7 @@ model Product {
   parts          ProductPart[]
   movements      Movement[]
   /// Relazione opzionale verso l'Item collegato
-  item           Item?                @relation(fields: [itemId], references: [id])
+  item           Item?                @relation(fields: [itemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   components     ProductToComponent[] @relation("ProductComponents")
   productOrders  ProductOrder[]
   packages       ProductToPackage[]   @relation("ProductPackages")
@@ -123,7 +123,7 @@ model Product {
   utilities      ProductToUtility[]   @relation("ProductUtilities")
   shipments      Shipment[]
   assemblyOrders AssemblyOrder[]
-  dimensions     Dimensions?          @relation(fields: [dimensionsId], references: [id])
+  dimensions     Dimensions?          @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   finishedAllocations FinishedAllocation[]
   lots                InventoryLot[]
@@ -139,19 +139,19 @@ model Product {
 
 /// Rappresenta un sotto-assieme o una parte stampata in 3D di un 'ProductItem'.
 model ProductPart {
-  id             String                    @id @unique @default(uuid())
+  id             String                    @id @unique @default(uuid()) @db.Uuid
   imageUrl       String?
   name           String
   price          Decimal?                  @db.Decimal(12, 4) /// prima: Float?
   weight         Decimal                   @default(0) @db.Decimal(12, 3) /// prima: Float
   properties     Json?
-  productId      String
+  productId      String                    @db.Uuid
   quantityNeeded Int                       @default(0)
-  dimensionsId   String?
-  dimensions     Dimensions?               @relation(fields: [dimensionsId], references: [id])
+  dimensionsId   String?                   @db.Uuid
+  dimensions     Dimensions?               @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   inStock        Int                       @default(0)
   onOrder        Int                       @default(0)
-  product        Product                   @relation(fields: [productId], references: [id])
+  product        Product                   @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   movements      Movement[]
   productOrders  ProductOrderProductPart[]
   materials      Item[]                    @relation("ItemToItemPart")
@@ -167,7 +167,7 @@ model ProductPart {
 }
 
 model Dimensions {
-  id            String          @id @unique @default(uuid())
+  id            String          @id @unique @default(uuid()) @db.Uuid
   width         Decimal         @default(0) @db.Decimal(12, 3)
   height        Decimal         @default(0) @db.Decimal(12, 3)
   depth         Decimal         @default(0) @db.Decimal(12, 3)
@@ -178,23 +178,26 @@ model Dimensions {
   odetteType    OdetteType[]
   sku           Sku[]
 
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
   @@schema("inventory")
 }
 
 /// Rappresenta una singola fase nel processo di assemblaggio di un 'Product'.
 /// Include informazioni come il tempo di assemblaggio, l'ordine e il tipo di fase.
 model AssemblyStage {
-  id                  String               @id @unique @default(uuid())
+  id                  String               @id @unique @default(uuid()) @db.Uuid
   imageUrl            String?
   name                String
-  productId           String
+  productId           String               @db.Uuid
   order               Int?                 @default(0)
   instock             Int?                 @default(0)
   description         String?
   /// Tempo in minuti richiesto per completare questa fase.
   assemblyTime        Int                  @default(0)
   type                AssemblyStageType    @default(RAW)
-  product             Product              @relation(fields: [productId], references: [id])
+  product             Product              @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   movements           Movement[]
   finishedAllocations FinishedAllocation[]
 
@@ -209,6 +212,9 @@ model AssemblyStage {
 
   odetteContents OdetteContent[]
 
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
   @@unique([productId, name])
   @@index([productId])
   @@schema("inventory")
@@ -218,7 +224,7 @@ model AssemblyStage {
 /// Puo essere associata a zero, uno o piu AssemblyStages tramite la tabella di join.
 /// Se non ha stages associati, la guida si applica a tutto il prodotto.
 model Guide {
-  id           String  @id @default(uuid())
+  id           String  @id @default(uuid()) @db.Uuid
   title        String
   description  String? @db.Text
   url          String? /// URL esterno (es. YouTube, documentazione)
@@ -227,14 +233,14 @@ model Guide {
   order        Int     @default(0) /// Ordine di visualizzazione
   appliesToAll Boolean @default(true) /// Se true, si applica a tutte le fasi
   isnew        Boolean @default(false) /// Se true, la guida è nuova
-  productId    String
-  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId    String  @db.Uuid
+  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Relazione many-to-many con AssemblyStage
   stages GuideToAssemblyStage[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([productId])
   @@schema("inventory")
@@ -242,11 +248,11 @@ model Guide {
 
 /// Tabella di join per Guide e AssemblyStage (many-to-many)
 model GuideToAssemblyStage {
-  guideId         String
-  assemblyStageId String
+  guideId         String @db.Uuid
+  assemblyStageId String @db.Uuid
 
-  guide         Guide         @relation(fields: [guideId], references: [id], onDelete: Cascade)
-  assemblyStage AssemblyStage @relation(fields: [assemblyStageId], references: [id], onDelete: Cascade)
+  guide         Guide         @relation(fields: [guideId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  assemblyStage AssemblyStage @relation(fields: [assemblyStageId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([guideId, assemblyStageId])
   @@index([assemblyStageId])
@@ -257,7 +263,7 @@ model GuideToAssemblyStage {
 /// Puo essere associato a zero, uno o piu AssemblyStages tramite la tabella di join.
 /// Se non ha stages associati, avviso si applica a tutto il prodotto.
 model Warning {
-  id           String          @id @default(uuid())
+  id           String          @id @default(uuid()) @db.Uuid
   type         WarningType     @default(OTHER)
   severity     WarningSeverity @default(MEDIUM)
   description  String          @db.Text
@@ -265,14 +271,14 @@ model Warning {
   order        Int             @default(0) /// Ordine di visualizzazione
   appliesToAll Boolean         @default(true) /// Se true, si applica a tutte le fasi
   isnew        Boolean         @default(false) /// Se true, l'avviso è nuovo
-  productId    String
-  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId    String          @db.Uuid
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Relazione many-to-many con AssemblyStage
   stages WarningToAssemblyStage[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([productId])
   @@index([severity])
@@ -281,11 +287,11 @@ model Warning {
 
 /// Tabella di join per Warning e AssemblyStage (many-to-many)
 model WarningToAssemblyStage {
-  warningId       String
-  assemblyStageId String
+  warningId       String @db.Uuid
+  assemblyStageId String @db.Uuid
 
-  warning       Warning       @relation(fields: [warningId], references: [id], onDelete: Cascade)
-  assemblyStage AssemblyStage @relation(fields: [assemblyStageId], references: [id], onDelete: Cascade)
+  warning       Warning       @relation(fields: [warningId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  assemblyStage AssemblyStage @relation(fields: [assemblyStageId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([warningId, assemblyStageId])
   @@index([assemblyStageId])
@@ -295,86 +301,120 @@ model WarningToAssemblyStage {
 /// Definisce una categoria per raggruppare gli 'Item'.
 /// Utile per l'organizzazione e il filtraggio.
 model Category {
-  id                  String       @id @default(uuid())
-  name                String       @unique
-  associatedItemTypes ItemType[]   @default([])
+  id                 String   @id @default(uuid()) @db.Uuid
+  name               String
+  associatedItemType ItemType
   items               Item[]
   odetteTypes         OdetteType[]
 
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([name, associatedItemType])
+  @@index([associatedItemType])
+  @@index([name])
   @@schema("inventory")
 }
 
 /// Definisce un tipo di imballaggio per gli articoli (es. scatola, contenitore).
 model PackagingType {
-  id                  String         @id @default(uuid())
-  name                String         @unique
+  id                  String         @id @default(uuid()) @db.Uuid
+  name                String
   class               PackagingClass @default(PRIMARY)
-  associatedItemTypes ItemType[]     @default([])
+  associatedItemType  ItemType
   items               Item[]
 
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([name, associatedItemType])
+  @@index([associatedItemType])
+  @@index([name])
   @@schema("inventory")
 }
 
 /// Definisce un colore per gli 'Item', con codice esadecimale opzionale.
 model Color {
-  id                  String     @id @default(uuid())
-  name                String     @unique
+  id                  String     @id @default(uuid()) @db.Uuid
+  name                String
   hexCode             String?
-  associatedItemTypes ItemType[] @default([])
+  associatedItemType  ItemType
   items               Item[]
 
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([name, associatedItemType])
+  @@index([associatedItemType])
+  @@index([name])
   @@schema("inventory")
 }
 
 /// Definisce un marchio o brand per gli 'Item'.
 model Brand {
-  id                  String     @id @default(uuid())
-  name                String     @unique
-  associatedItemTypes ItemType[] @default([])
+  id                  String     @id @default(uuid()) @db.Uuid
+  name               String
+  associatedItemType ItemType
   items               Item[]
 
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([name, associatedItemType])
+  @@index([associatedItemType])
+  @@index([name])
   @@schema("inventory")
 }
 
 /// Definisce un peso standard per un articolo, utile per calcoli logistici.
 model StandardWeight {
-  id                  String     @id @default(uuid())
+  id                  String     @id @default(uuid()) @db.Uuid
   weight              Decimal    @db.Decimal(12, 3)
-  associatedItemTypes ItemType[] @default([])
+  associatedItemType  ItemType
   items               Item[]
 
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([associatedItemType])
   @@schema("inventory")
 }
 
 /// Modello per le macchine compatibili con i ricambi ('SPARE_PART').
 model CompatibleMachine {
-  id                  String     @id @default(uuid())
-  name                String     @unique
-  associatedItemTypes ItemType[] @default([SPARE_PART])
+  id                  String     @id @default(uuid()) @db.Uuid
+  name               String
+  associatedItemType ItemType   @default(SPARE_PART)
   spareParts          Item[]     @relation("SpareParts")
 
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
   @@index([name])
+  @@unique([name, associatedItemType])
+  @@index([associatedItemType])
   @@schema("inventory")
 }
 
 /// Tabella di join per associare un 'ProductItem' con i suoi imballaggi ('Item' di tipo 'PACKAGING').
 model ProductToPackage {
-  productId String
-  itemId    String
+  productId String @db.Uuid
+  itemId    String @db.Uuid
   quantity  Int     @default(1)
-  item      Item    @relation(fields: [itemId], references: [id])
-  product   Product @relation("ProductPackages", fields: [productId], references: [id])
+  item      Item    @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product   Product @relation("ProductPackages", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([productId, itemId])
+  @@index([itemId])
   @@schema("inventory")
 }
 
 /// Tabella di join per associare un 'ProductItem' con gli attrezzi ('Item' di tipo 'TOOL') necessari.
 model ProductToTool {
-  productId String
-  itemId    String
+  productId String @db.Uuid
+  itemId    String @db.Uuid
   item      Item    @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  product   Product @relation("ProductTools", fields: [productId], references: [id], onDelete: Cascade)
+  product   Product @relation("ProductTools", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([productId, itemId])
   @@index([itemId])
@@ -384,13 +424,13 @@ model ProductToTool {
 /// Tabella di join per associare un 'ProductItem' con le utility ('Item' di tipo 'UTILITY') necessarie.
 /// Le utility sono consumabili assegnati a una specifica fase di assemblaggio.
 model ProductToUtility {
-  productId       String
-  itemId          String
+  productId       String @db.Uuid
+  itemId          String @db.Uuid
   quantity        Int            @default(1)
-  assemblyStageId String? /// Fase di assemblaggio a cui è assegnata la utility
+  assemblyStageId String?        @db.Uuid /// Fase di assemblaggio a cui è assegnata la utility
   item            Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  product         Product        @relation("ProductUtilities", fields: [productId], references: [id], onDelete: Cascade)
-  assemblyStage   AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull)
+  product         Product        @relation("ProductUtilities", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  assemblyStage   AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@id([productId, itemId])
   @@index([itemId])
@@ -400,11 +440,11 @@ model ProductToUtility {
 
 /// Tabella di join per associare un 'ProductItem' con i suoi componenti ('Item' di tipo 'COMPONENT').
 model ProductToComponent {
-  productId String
-  itemId    String
+  productId String @db.Uuid
+  itemId    String @db.Uuid
   quantity  Int     @default(1)
   item      Item    @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  product   Product @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade)
+  product   Product @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([productId, itemId])
   @@index([itemId])

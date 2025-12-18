@@ -1,11 +1,11 @@
 /// Profilo tecnico di un filamento (collegato a Item di tipo MATERIAL).
 /// Contiene tutte le specifiche per la stampa: temperature, codici BambuLab, etc.
 model FilamentProfile {
-  id String @id @default(uuid())
+  id String @id @default(uuid()) @db.Uuid
 
   // Collegamento all'Item (materiale)
-  itemId String @unique
-  item   Item   @relation(fields: [itemId], references: [id])
+  itemId String @unique @db.Uuid
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   // Codici esterni per integrazione
   bambuCode String? @unique // Es. "GFA00", "GFB00", "GFL99"
@@ -30,8 +30,8 @@ model FilamentProfile {
   // Velocità consigliate
   maxVolumetricSpeed Decimal? @db.Decimal(6, 2) // mm³/s
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@schema("print-farm")
 }
@@ -44,10 +44,10 @@ model FilamentProfile {
 /// 4. Quando finisce o viene rimossa (senza essere finita), si marca come ARCHIVED.
 ///    Se rimossa parzialmente e si vuole riusare: solo allora si etichetta fisicamente e si tiene isVirtual=false.
 model FilamentSpool {
-  id String @id @default(uuid())
+  id String @id @default(uuid()) @db.Uuid
 
-  itemId String
-  item   Item   @relation(fields: [itemId], references: [id]) // Il tipo di materiale (es. PLA Nero)
+  itemId String @db.Uuid
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade) // Il tipo di materiale (es. PLA Nero)
 
   // Tracciamento Peso
   initialWeight   Decimal @db.Decimal(10, 3) // Peso netto iniziale (es. 1000g)
@@ -61,8 +61,8 @@ model FilamentSpool {
   lotCode        String? // Lotto del produttore (facoltativo, per qualità ISO)
   /// Lotto di inventario associato a questa bobina (acquisto o produzione interna).
   /// Permette di risalire al fornitore o al lotto di produzione anche via spool.
-  inventoryLotId String?
-  inventoryLot   InventoryLot? @relation("InventoryLotFilamentSpools", fields: [inventoryLotId], references: [id], onDelete: SetNull)
+  inventoryLotId String?        @db.Uuid
+  inventoryLot   InventoryLot?  @relation("InventoryLotFilamentSpools", fields: [inventoryLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// ID del gettone RFID/NFC fisico associato temporaneamente.
   /// FLUSSO "GETTONE RIUTILIZZABILE":
@@ -73,12 +73,12 @@ model FilamentSpool {
   /// 5. Il gettone torna nel cesto pronto per un'altra bobina.
   nfcTagId String? @unique
 
-  openedAt   DateTime  @default(now()) // Per scadenza/umidità
-  finishedAt DateTime?
+  openedAt   DateTime  @default(now()) @db.Timestamptz(6) // Per scadenza/umidità
+  finishedAt DateTime? @db.Timestamptz(6)
 
   // Dove si trova?
-  mountedOnId String? // ID Stampante se montata
-  mountedOn   Printer? @relation("MountedSpool", fields: [mountedOnId], references: [id])
+  mountedOnId String?  @db.Uuid // ID Stampante se montata
+  mountedOn   Printer? @relation("MountedSpool", fields: [mountedOnId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   activeOnPrinters Printer[] @relation("ActiveSpool")
 
@@ -87,8 +87,8 @@ model FilamentSpool {
   /// Operazioni di carico filamento in cui è stata usata questa bobina
   filamentLoads PrinterFilamentLoad[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([inventoryLotId])
   @@schema("print-farm")

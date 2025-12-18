@@ -1,8 +1,11 @@
 /// Modello per le impostazioni globali dell'applicazione, gestite come coppie chiave-valore.
 model InventorySettings {
-  id    String       @id @default(uuid())
+  id    String       @id @default(uuid()) @db.Uuid
   name  SettingsName @unique
   value Json
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@map("Settings")
   @@schema("inventory")

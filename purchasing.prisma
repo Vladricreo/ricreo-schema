@@ -1,36 +1,41 @@
 /// Perché: nella realtà un ordine ha più articoli; migliore reportistica.
 model PurchaseOrder {
-  id           String      @id @default(uuid())
-  supplierId   String
+  id           String      @id @default(uuid()) @db.Uuid
+  supplierId   String      @db.Uuid
   status       OrderStatus
-  createdAt    DateTime    @default(now())
-  orderedAt    DateTime?
-  receivedAt   DateTime?
+  createdAt    DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime    @default(now()) @updatedAt @db.Timestamptz(6)
+  orderedAt    DateTime?   @db.Timestamptz(6)
+  receivedAt   DateTime?   @db.Timestamptz(6)
   shippingCost Decimal?    @db.Decimal(12, 4)
   customsDuty  Decimal?    @db.Decimal(12, 4)
 
-  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   lines    PurchaseOrderLine[]
 
   @@index([supplierId])
   @@index([status])
+  @@index([orderedAt])
   @@schema("inventory")
 }
 
 /// Riga di un ordine di acquisto per un singolo Item (materia prima, componente, ecc.).
 /// Collega quantità, prezzo e lotti di acquisto (InventoryLot) all'ordine fornitore.
 model PurchaseOrderLine {
-  id        String   @id @default(uuid())
-  orderId   String
-  itemId    String
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @db.Uuid
+  itemId    String   @db.Uuid
   quantity  Int
   /// MIGLIORIA: Decimal per prezzo riga
   pricePaid Decimal? @db.Decimal(12, 4)
 
-  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  item  Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  item  Item          @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   lots InventoryLot[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([orderId])
   @@index([itemId])
@@ -39,7 +44,7 @@ model PurchaseOrderLine {
 
 /// Definisce un fornitore da cui vengono acquistati gli 'Item'.
 model Supplier {
-  id                  String          @id @default(uuid())
+  id                  String          @id @default(uuid()) @db.Uuid
   name                String          @unique
   website             String?
   email               String?
@@ -53,6 +58,9 @@ model Supplier {
   items               Item[]
   purchaseOrders      PurchaseOrder[]
   lots                InventoryLot[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@schema("inventory")
 }

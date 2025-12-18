@@ -3,7 +3,10 @@ model Profile {
   id     Int     @id @default(autoincrement())
   bio    String?
   userId Int     @unique ///
-  user   User    @relation(fields: [userId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@schema("public")
 }
@@ -16,8 +19,8 @@ model User {
   password            String
   name                String?
   isActive            Boolean             @default(true)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  createdAt           DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
   posts               Post[]
   profile             Profile?
   roles               UserRole[]
@@ -38,11 +41,11 @@ model User {
 }
 
 model Role {
-  id          String           @id @default(uuid())
+  id          String           @id @default(uuid()) @db.Uuid
   name        String           @unique
   description String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime         @default(now()) @updatedAt @db.Timestamptz(6)
   users       UserRole[]
   permissions RolePermission[]
 
@@ -51,10 +54,10 @@ model Role {
 
 model UserRole {
   userId     Int
-  roleId     String
-  assignedAt DateTime @default(now())
+  roleId     String @db.Uuid
+  assignedAt DateTime @default(now()) @db.Timestamptz(6)
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([userId, roleId])
   @@index([userId])
@@ -63,13 +66,13 @@ model UserRole {
 }
 
 model Permission {
-  id          String           @id @default(uuid())
+  id          String           @id @default(uuid()) @db.Uuid
   name        String           @unique
   resource    String
   action      String
   description String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime         @default(now()) @updatedAt @db.Timestamptz(6)
   roles       RolePermission[]
 
   @@unique([resource, action])
@@ -78,10 +81,10 @@ model Permission {
 }
 
 model RolePermission {
-  roleId       String
-  permissionId String
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([roleId, permissionId])
   @@index([roleId])
