@@ -196,7 +196,7 @@ model Odette {
   purpose OdettePurpose @default(PRODUCTS)
 
   /// Blocco stage: appena entra la prima riga si "fissa" lo stage;
-  /// serve a impedire mix RAW/ASSEMBLED nella stessa odette.
+  /// serve a impedire mix di stage diversi nella stessa odette.
   lockedStage AssemblyStageType?
 
   /// Tipo di odette (dimensioni/capacità)

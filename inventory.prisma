@@ -134,7 +134,7 @@ model WarehouseRow {
 
   /// Scaffale di appartenenza (opzionale: alcune righe possono essere "libere").
   shelfId String?         @db.Uuid
-  shelf   WarehouseShelf? @relation(fields: [shelfId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  shelf   WarehouseShelf? @relation(fields: [shelfId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   /// Ordine del ripiano all'interno dello scaffale (1..N).
   orderInShelf Int?
 
@@ -191,7 +191,7 @@ model WarehouseLocation {
 
   /// Fila di appartenenza (scaffale/linea fisica).
   rowId String?       @db.Uuid
-  row   WarehouseRow? @relation(fields: [rowId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  row   WarehouseRow? @relation(fields: [rowId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Posizione progressiva all'interno della stessa fila (1, 2, 3...).
   positionInRow Int?
