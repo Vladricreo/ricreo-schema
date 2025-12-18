@@ -102,6 +102,29 @@ model InventoryLot {
 }
 
 /// Rappresenta una fila/riga fisica di scaffale o area di magazzino (es. "A", "B", "PF-1").
+model WarehouseShelf {
+  id          String @id @default(uuid()) @db.Uuid
+  /// Codice leggibile (es. "S-01", "MAG-A").
+  code        String @unique
+  /// Nome descrittivo (es. "Scaffale Imballi", "Scaffale Print Farm").
+  name        String
+  /// Descrizione opzionale.
+  description String?
+  /// Immagine opzionale (usata dalla UI).
+  imageUrl    String?
+
+  /// Ripiani/righe fisiche appartenenti allo scaffale.
+  rows WarehouseRow[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([code])
+  @@index([name])
+  @@schema("inventory")
+}
+
+/// Rappresenta una fila/riga fisica di scaffale o area di magazzino (es. "A", "B", "PF-1").
 model WarehouseRow {
   id          String  @id @default(uuid()) @db.Uuid
   /// Codice leggibile che appare sui cartelli fisici (es. "A", "B", "PF-1").
@@ -109,11 +132,54 @@ model WarehouseRow {
   /// Descrizione opzionale (es. "Print Farm fila A", "Assemblaggio fila 1").
   description String?
 
+  /// Scaffale di appartenenza (opzionale: alcune righe possono essere "libere").
+  shelfId String?         @db.Uuid
+  shelf   WarehouseShelf? @relation(fields: [shelfId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Ordine del ripiano all'interno dello scaffale (1..N).
+  orderInShelf Int?
+
+  /// Tipo di contenuto della riga (determina cosa può essere allocato).
+  rowType WarehouseRowType @default(MIXED)
+
+  /// Filtro opzionale per tipo ITEM: categoria principale (MATERIAL, PACKAGING, etc.).
+  itemType ItemType?
+
+  /// Filtro opzionale per tipo ITEM: sottocategoria.
+  categoryId String?   @db.Uuid
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   /// Tutte le posizioni (slot) appartenenti a questa fila.
   locations WarehouseLocation[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([shelfId])
+  @@index([shelfId, orderInShelf])
+  @@index([rowType])
+  @@index([itemType])
+  @@index([categoryId])
+  @@schema("inventory")
+}
+
+/// Tipo di contenuto di una riga/ripiano di scaffale.
+enum WarehouseRowType {
+  /// Slot per stampanti 3D.
+  PRINTER
+  /// Item generici (filtra per ItemType + Category).
+  ITEM
+  /// Prodotti FBA.
+  PRODUCT_FBA
+  /// Prodotti FBM.
+  PRODUCT_FBM
+  /// Prodotti custom.
+  PRODUCT_CUSTOM
+  /// Odette con prodotti assemblati.
+  ODETTE_ASSEMBLED
+  /// Odette per scarico stampanti.
+  ODETTE_UNLOAD
+  /// Qualsiasi cosa (nessun filtro).
+  MIXED
 
   @@schema("inventory")
 }
@@ -144,6 +210,10 @@ model WarehouseLocation {
   odetteMovesTo      OdetteMove[] @relation("OdetteMoveTo")
   odettes            Odette[]
 
+  /// Allocazioni di quantità (multi-location) per Item/SKU.
+  itemAllocations WarehouseItemAllocation[]
+  skuAllocations  WarehouseSkuAllocation[]
+
   odetteLocationPreferences OdetteLocationPreference[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -153,6 +223,52 @@ model WarehouseLocation {
   @@index([rowId, positionInRow])
   @@index([kind])
   @@index([associatedItemType])
+  @@schema("inventory")
+}
+
+/// Quantità di un Item allocata in una specifica posizione di magazzino.
+/// Serve per supportare lo stesso Item presente in più slot contemporaneamente.
+model WarehouseItemAllocation {
+  id String @id @default(uuid()) @db.Uuid
+
+  locationId String            @db.Uuid
+  location   WarehouseLocation @relation(fields: [locationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  itemId String @db.Uuid
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// Quantità attualmente presente nello slot (sempre >= 0 lato applicativo).
+  quantity Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([locationId, itemId])
+  @@index([locationId])
+  @@index([itemId])
+  @@schema("inventory")
+}
+
+/// Quantità di uno SKU allocata in una specifica posizione di magazzino.
+/// Serve per prodotti finiti/stock per canale.
+model WarehouseSkuAllocation {
+  id String @id @default(uuid()) @db.Uuid
+
+  locationId String            @db.Uuid
+  location   WarehouseLocation @relation(fields: [locationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  skuId String @db.Uuid
+  sku   Sku    @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// Quantità attualmente presente nello slot (sempre >= 0 lato applicativo).
+  quantity Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([locationId, skuId])
+  @@index([locationId])
+  @@index([skuId])
   @@schema("inventory")
 }
 

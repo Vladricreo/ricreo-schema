@@ -42,6 +42,9 @@ model Item {
   supplier       Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   dimensions     Dimensions?        @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Allocazioni multi-location per questo Item (quantità per slot).
+  warehouseItemAllocations WarehouseItemAllocation[]
+
   movements Movement[]
 
   productComponents         ProductToComponent[]
@@ -306,6 +309,7 @@ model Category {
   associatedItemType ItemType
   items               Item[]
   odetteTypes         OdetteType[]
+  warehouseRows       WarehouseRow[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
