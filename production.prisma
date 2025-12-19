@@ -4,7 +4,11 @@
 /// Ora collegato a uno SKU specifico per determinare il canale (FBA/FBM).
 model ProductOrder {
   id                String           @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
+  number            BigInt           @unique @default(autoincrement()) @db.BigInt
   productId         String           @db.Uuid
+  
   skuId             String?          @db.Uuid /// SKU di destinazione - determina il canale (FBA/FBM)
   quantityToProduce Int /// Quantità totale di prodotti finiti da produrre
   quantityProduced  Int              @default(0) /// Quantità di prodotti finiti completati
@@ -79,6 +83,9 @@ model ProductOrderProductPart {
 /// Lo SKU determina il canale (FBA/FBM) e le parti necessarie per l'assemblaggio.
 model AssemblyOrder {
   id                 String @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
+  number             BigInt @unique @default(autoincrement()) @db.BigInt
   productId          String @db.Uuid
   skuId              String @db.Uuid // SKU determina canale e parti necessarie
   quantityToAssemble Int    @default(0)
@@ -153,6 +160,9 @@ model AssemblyOperation {
 /// Lotto/commessa di produzione (es. job di stampa 3D).
 model ProductionLot {
   id            String         @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK; questo è solo un numero sequenziale (compatibile Supabase).
+  number        BigInt         @unique @default(autoincrement()) @db.BigInt
   code          String         @unique /// es. JOB-2025-10-001
   printerId     String? /// opzionale: id macchina/stampante
   material      String? /// es. PLA, ABS...

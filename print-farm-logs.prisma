@@ -1,6 +1,9 @@
 /// Registro degli interventi di manutenzione sulla stampante.
 model PrinterMaintenanceLog {
   id        String  @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
+  number    BigInt  @unique @default(autoincrement()) @db.BigInt
   printerId String  @db.Uuid
   printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
@@ -25,6 +28,9 @@ model PrinterMaintenanceLog {
 /// con lifecycle OPEN -> ACKED -> RESOLVED e aggiornamento `lastSeenAt`.
 model PrinterIssue {
   id String @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
+  number BigInt @unique @default(autoincrement()) @db.BigInt
 
   printerId String @db.Uuid
   printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
@@ -74,6 +80,9 @@ model PrinterIssue {
 /// Permette di analizzare le cause di fallimento e ricalcolare i job.
 model PrintFailureLog {
   id String @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
+  number BigInt @unique @default(autoincrement()) @db.BigInt
 
   productionJobId String        @db.Uuid
   productionJob   ProductionJob @relation(fields: [productionJobId], references: [id])
@@ -101,6 +110,9 @@ model PrintFailureLog {
 /// Es: "Questa stampante fa rumore", "Questo file ha supporti impossibili".
 model FarmFeedback {
   id String @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
+  number BigInt @unique @default(autoincrement()) @db.BigInt
 
   type     FeedbackType     @default(GENERAL)
   priority FeedbackPriority @default(NORMAL)

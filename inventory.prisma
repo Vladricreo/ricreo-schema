@@ -44,6 +44,9 @@ model Movement {
 /// Collega articoli/prodotti a ordini di acquisto, ordini di produzione, movimenti, odette e spedizioni.
 model InventoryLot {
   id         String                 @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK; questo è solo un numero sequenziale (compatibile Supabase).
+  number     BigInt                 @unique @default(autoincrement()) @db.BigInt
   code       String                 @unique
   originType InventoryLotOriginType
 

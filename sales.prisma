@@ -112,6 +112,9 @@ model AmazonIgnoredAsin {
 /// Traccia informazioni come corriere, tracking e stato dell'etichetta.
 model Shipment {
   id               String              @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
+  number           BigInt              @unique @default(autoincrement()) @db.BigInt
   movementId       String?             @db.Uuid
   /// Relazione al movimento.
   movement         Movement?           @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)

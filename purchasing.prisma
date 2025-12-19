@@ -1,6 +1,9 @@
 /// Perché: nella realtà un ordine ha più articoli; migliore reportistica.
 model PurchaseOrder {
   id           String      @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
+  number       BigInt      @unique @default(autoincrement()) @db.BigInt
   supplierId   String      @db.Uuid
   status       OrderStatus
   createdAt    DateTime    @default(now()) @db.Timestamptz(6)
@@ -23,6 +26,9 @@ model PurchaseOrder {
 /// Collega quantità, prezzo e lotti di acquisto (InventoryLot) all'ordine fornitore.
 model PurchaseOrderLine {
   id        String   @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico globale (BIGINT Postgres) per uso umano/reportistica.
+  /// Se in futuro vuoi il progressivo "per ordine" (1..N), serve una strategia diversa (trigger/logic applicativa).
+  number    BigInt   @unique @default(autoincrement()) @db.BigInt
   orderId   String   @db.Uuid
   itemId    String   @db.Uuid
   quantity  Int
