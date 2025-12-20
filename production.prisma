@@ -3,12 +3,12 @@
 /// Genera N ProductionJob (uno per ogni parte da stampare).
 /// Ora collegato a uno SKU specifico per determinare il canale (FBA/FBM).
 model ProductOrder {
-  id                String           @id @default(uuid()) @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
   /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
-  number            BigInt           @unique @default(autoincrement()) @db.BigInt
-  productId         String           @db.Uuid
-  
+  number    BigInt @unique @default(autoincrement()) @db.BigInt
+  productId String @db.Uuid
+
   skuId             String?          @db.Uuid /// SKU di destinazione - determina il canale (FBA/FBM)
   quantityToProduce Int /// Quantità totale di prodotti finiti da produrre
   quantityProduced  Int              @default(0) /// Quantità di prodotti finiti completati
@@ -31,8 +31,8 @@ model ProductOrder {
   items ProductOrderItem[]
   parts ProductOrderProductPart[]
 
-  assemblyOrderId String?         @db.Uuid
-  assemblyOrder   AssemblyOrder?  @relation("AssemblyOrderToProductItemOrder", fields: [assemblyOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assemblyOrderId String?        @db.Uuid
+  assemblyOrder   AssemblyOrder? @relation("AssemblyOrderToProductItemOrder", fields: [assemblyOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   lots InventoryLot[]
 
@@ -119,7 +119,7 @@ model AssemblyOrder {
 model AssemblyOperation {
   id String @id @default(uuid()) @db.Uuid
 
-  assemblyOrderId String @db.Uuid
+  assemblyOrderId String        @db.Uuid
   assemblyOrder   AssemblyOrder @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   type AssemblyOperationType
@@ -141,8 +141,8 @@ model AssemblyOperation {
   quantityScrapped Int @default(0) // Quanti pezzi ho SCARTATO in questa sessione?
 
   // --- TRACCIABILITÀ ---
-  lotId String?        @db.Uuid
-  lot   InventoryLot?  @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  lotId String?       @db.Uuid
+  lot   InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   notes    String?
   metadata Json? // Per info extra (es. motivo scarto, boxId, shelfId)
@@ -214,8 +214,8 @@ model Odette {
   type   OdetteType? @relation(fields: [typeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Posizione attuale in magazzino
-  locationId String?             @db.Uuid
-  location   WarehouseLocation?  @relation(fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  locationId String?            @db.Uuid
+  location   WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Contenuti correnti (righe)
   contents OdetteContent[]
@@ -233,9 +233,9 @@ model Odette {
   cleaningLogs OdetteCleaningLog[]
 
   /// Metadati prenotazione contenitore (per job di produzione)
-  reservedLotId String?         @db.Uuid
-  reservedLot   ProductionLot?  @relation(fields: [reservedLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  reservedAt    DateTime?       @db.Timestamptz(6)
+  reservedLotId String?        @db.Uuid
+  reservedLot   ProductionLot? @relation(fields: [reservedLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reservedAt    DateTime?      @db.Timestamptz(6)
 
   // Relazione Print Farm
   productionJobs ProductionJob[]
@@ -286,8 +286,8 @@ model OdetteContent {
   lotId String?        @db.Uuid
   lot   ProductionLot? @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  inventoryLotId String?        @db.Uuid
-  inventoryLot   InventoryLot?  @relation(fields: [inventoryLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  inventoryLotId String?       @db.Uuid
+  inventoryLot   InventoryLot? @relation(fields: [inventoryLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   createdAt         DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
@@ -309,7 +309,7 @@ model OdetteReservation {
   odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Prenoto da UNA specifica riga (così traccio item vs itemPart vs productItem)
-  odetteContentId String @db.Uuid
+  odetteContentId String        @db.Uuid
   odetteContent   OdetteContent @relation(fields: [odetteContentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   assemblyOrderId String?        @db.Uuid

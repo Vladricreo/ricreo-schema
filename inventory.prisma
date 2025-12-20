@@ -8,6 +8,9 @@ model Movement {
   quantity        Int //sempre positivo
   type            MovementType
   date            DateTime          @default(now()) @db.Timestamptz(6)
+  /// Utente che ha eseguito il movimento (audit).
+  byUserId        Int?              @db.Integer
+  byUser          User?             @relation(fields: [byUserId], references: [id], onDelete: SetNull)
   productId       String?           @db.Uuid
   assemblyStageId String?           @db.Uuid
   productPartId   String?           @db.Uuid
@@ -36,6 +39,7 @@ model Movement {
   @@index([skuId])
   @@index([odetteId])
   @@index([lotId])
+  @@index([byUserId])
   @@index([date])
   @@schema("inventory")
 }
@@ -66,12 +70,12 @@ model InventoryLot {
   supplier            Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   supplierLotCode     String?
 
-  productItemOrderId String?         @db.Uuid
+  productItemOrderId String?        @db.Uuid
   productItemOrder   ProductOrder?  @relation(fields: [productItemOrderId], references: [id], onDelete: SetNull)
-  assemblyOrderId    String?         @db.Uuid
+  assemblyOrderId    String?        @db.Uuid
   assemblyOrder      AssemblyOrder? @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull)
   /// Lotto di produzione stampa 3D da cui deriva (se applicabile).
-  productionLotId    String?         @db.Uuid
+  productionLotId    String?        @db.Uuid
   productionLot      ProductionLot? @relation(fields: [productionLotId], references: [id], onDelete: SetNull)
 
   manufacturedAt DateTime? @db.Timestamptz(6)
@@ -106,9 +110,9 @@ model InventoryLot {
 
 /// Rappresenta una fila/riga fisica di scaffale o area di magazzino (es. "A", "B", "PF-1").
 model WarehouseShelf {
-  id          String @id @default(uuid()) @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
   /// Codice leggibile (es. "S-01", "MAG-A").
-  code        String @unique
+  code        String  @unique
   /// Nome descrittivo (es. "Scaffale Imballi", "Scaffale Print Farm").
   name        String
   /// Descrizione opzionale.
@@ -136,8 +140,8 @@ model WarehouseRow {
   description String?
 
   /// Scaffale di appartenenza (opzionale: alcune righe possono essere "libere").
-  shelfId String?         @db.Uuid
-  shelf   WarehouseShelf? @relation(fields: [shelfId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  shelfId      String?         @db.Uuid
+  shelf        WarehouseShelf? @relation(fields: [shelfId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   /// Ordine del ripiano all'interno dello scaffale (1..N).
   orderInShelf Int?
 
@@ -305,7 +309,7 @@ enum WarehouseLocationKind {
 model LotInspection {
   id String @id @default(uuid()) @db.Uuid
 
-  lotId String @db.Uuid
+  lotId String       @db.Uuid
   lot   InventoryLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
 
   inspectedAt DateTime @default(now()) @db.Timestamptz(6)

@@ -61,8 +61,8 @@ model FilamentSpool {
   lotCode        String? // Lotto del produttore (facoltativo, per qualità ISO)
   /// Lotto di inventario associato a questa bobina (acquisto o produzione interna).
   /// Permette di risalire al fornitore o al lotto di produzione anche via spool.
-  inventoryLotId String?        @db.Uuid
-  inventoryLot   InventoryLot?  @relation("InventoryLotFilamentSpools", fields: [inventoryLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  inventoryLotId String?       @db.Uuid
+  inventoryLot   InventoryLot? @relation("InventoryLotFilamentSpools", fields: [inventoryLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// ID del gettone RFID/NFC fisico associato temporaneamente.
   /// FLUSSO "GETTONE RIUTILIZZABILE":

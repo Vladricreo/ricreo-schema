@@ -27,12 +27,12 @@ model PrinterMaintenanceLog {
 /// condizioni operative che bloccano la produzione (es. FILAMENT out, BED da scaricare, rete offline),
 /// con lifecycle OPEN -> ACKED -> RESOLVED e aggiornamento `lastSeenAt`.
 model PrinterIssue {
-  id String @id @default(uuid()) @db.Uuid
+  id     String @id @default(uuid()) @db.Uuid
   /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
   number BigInt @unique @default(autoincrement()) @db.BigInt
 
-  printerId String @db.Uuid
+  printerId String  @db.Uuid
   printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
 
   /// Se l'issue è correlata a un assignment specifico (stampa/coda).
@@ -79,7 +79,7 @@ model PrinterIssue {
 /// Registro puntuale degli scarti/errori.
 /// Permette di analizzare le cause di fallimento e ricalcolare i job.
 model PrintFailureLog {
-  id String @id @default(uuid()) @db.Uuid
+  id     String @id @default(uuid()) @db.Uuid
   /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
   number BigInt @unique @default(autoincrement()) @db.BigInt
@@ -109,7 +109,7 @@ model PrintFailureLog {
 /// Feedback degli operatori su stampanti o file.
 /// Es: "Questa stampante fa rumore", "Questo file ha supporti impossibili".
 model FarmFeedback {
-  id String @id @default(uuid()) @db.Uuid
+  id     String @id @default(uuid()) @db.Uuid
   /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
   number BigInt @unique @default(autoincrement()) @db.BigInt
@@ -124,8 +124,8 @@ model FarmFeedback {
   printerId String?  @db.Uuid
   printer   Printer? @relation(fields: [printerId], references: [id])
 
-  fileId String?               @db.Uuid
-  file   ProjectThreeMFFile?   @relation(fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  fileId String?             @db.Uuid
+  file   ProjectThreeMFFile? @relation(fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   reportedBy String? // User ID
   resolvedBy String? // User ID

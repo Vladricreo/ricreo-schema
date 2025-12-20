@@ -26,6 +26,113 @@ enum SettingsName {
   AMAZON_ORDER_FIXED_COST
   AMAZON_STORAGE_FEE_LOW
   AMAZON_STORAGE_FEE_HIGH
+  /// Credenziali SP-API/LWA (cifrate a DB) usate per import Amazon (solo admin).
+  AMAZON_SP_API_CREDENTIALS
+
+  @@schema("inventory")
+}
+
+/// Stampante gestita tramite CUPS (tipicamente su Raspberry Pi).
+/// Serve per stampanti etichette (label) o stampanti a fogli (A4/A5 ecc.).
+model CupsPrinter {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Nome leggibile in UI (es. "Zebra GK420d - Banco 1").
+  name String
+
+  /// Nome stampante in CUPS (queue name), es. "zebra_gk420d".
+  cupsName String @unique
+
+  /// URL base del server CUPS (es. "http://raspberrypi.local:631").
+  /// Se NULL si usa la variabile d'ambiente (CUPS_BASE_URL) lato server.
+  cupsServerUrl String?
+
+  kind         CupsPrinterKind @default(LABEL)
+  imageUrl     String?
+  description  String?
+  location     String?
+  isDefault    Boolean         @default(false)
+  isArchived   Boolean         @default(false)
+
+  /// Capacità/funzionalità dichiarative (non garantite) utili alla UI.
+  supportsColor Boolean @default(false)
+
+  /// DPI preferiti per la stampa etichette (se applicabile).
+  preferredDpi Int?
+
+  /// Opzioni CUPS predefinite per i job (es. { "FitToPage": "true" } ).
+  /// Vengono mergeate con le opzioni del singolo job.
+  defaultJobOptions Json @default("{}")
+
+  /// Formato etichetta predefinito per questa stampante (se label).
+  defaultLabelFormatId String?          @db.Uuid
+  defaultLabelFormat   CupsLabelFormat? @relation("DefaultLabelFormat", fields: [defaultLabelFormatId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Formati etichetta compatibili/consigliati per questa stampante.
+  labelFormats CupsLabelFormat[] @relation("PrinterLabelFormats")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([kind])
+  @@index([isArchived])
+  @@index([isDefault])
+  @@schema("inventory")
+}
+
+/// Preset/definizione di un formato etichetta (dimensioni in mm).
+/// È indipendente dalla stampante: può essere riutilizzato e associato a più stampanti.
+model CupsLabelFormat {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Nome leggibile (es. "40x30 - Amazon FNSKU").
+  name String @unique
+
+  /// Larghezza/altezza in mm.
+  widthMm  Decimal @db.Decimal(8, 2)
+  heightMm Decimal @db.Decimal(8, 2)
+
+  /// Gap/spacing tra etichette (mm). Utile per roll con etichette pretagliate.
+  gapMm Decimal? @db.Decimal(8, 2)
+
+  /// Margini (mm) se vuoi lasciare area “vuota” sul supporto.
+  marginTopMm    Decimal? @db.Decimal(8, 2)
+  marginRightMm  Decimal? @db.Decimal(8, 2)
+  marginBottomMm Decimal? @db.Decimal(8, 2)
+  marginLeftMm   Decimal? @db.Decimal(8, 2)
+
+  /// Rotazione/Orientamento preferito.
+  orientation CupsLabelOrientation @default(PORTRAIT)
+
+  /// Media name CUPS (es. "Custom.40x30mm" oppure un nome standard come "iso_a4_210x297mm").
+  /// Se NULL verrà calcolato come Custom.<W>x<H>mm.
+  cupsMediaName String?
+
+  /// Opzioni job suggerite per questo formato (es. scaling/fit-to-page).
+  jobOptions Json @default("{}")
+
+  /// Stampanti associate (molti-a-molti).
+  printers CupsPrinter[] @relation("PrinterLabelFormats")
+
+  /// Stampanti che lo usano come default (relazione 1:N via FK su CupsPrinter).
+  defaultForPrinters CupsPrinter[] @relation("DefaultLabelFormat")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@schema("inventory")
+}
+
+enum CupsPrinterKind {
+  LABEL
+  SHEET
+
+  @@schema("inventory")
+}
+
+enum CupsLabelOrientation {
+  PORTRAIT
+  LANDSCAPE
 
   @@schema("inventory")
 }
