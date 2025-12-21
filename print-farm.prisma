@@ -10,11 +10,11 @@ model ProjectThreeMFFile {
   imageUrl                 String   @default("")
   estimatedDurationMinutes Int // tempo stimato in minuti
   compatiblePrinters       String[] // nomi stampanti compatibili
-  zHeight                  Decimal  @db.Decimal(12, 3) // altezza modello in mm
+  zHeight                  Decimal  @db.Decimal(12, 2) // altezza modello in mm
   nozzleDiameter           Decimal  @db.Decimal(4, 2) // diametro ugello in mm
   partCount                Int // numero di parti nel plate
   totalLayers              Int // numero di strati
-  totalFilamentWeight      Decimal? @db.Decimal(12, 3) // peso totale filamento usato in grammi
+  totalFilamentWeight      Decimal? @db.Decimal(12, 2) // peso totale filamento usato in grammi
   plateNumber              Int      @default(1) // Numero del plate (index) per il comando di stampa
 
   /// Percentuale di riempimento del piano (es. 0.70 = 70%)
@@ -60,7 +60,7 @@ model ProjectFileMaterial {
   materialId String @db.Uuid
   material   Item   @relation("FileMaterialUsage", fields: [materialId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  usedWeight Decimal @db.Decimal(12, 3) // Grammi usati nel file
+  usedWeight Decimal @db.Decimal(12, 2) // Grammi usati nel file
   colorUsed  String? // Colore usato (può essere diverso dal colore in anagrafica)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -77,7 +77,7 @@ model ProjectFileMaterial {
 model ProjectPart {
   id               String   @id @default(uuid()) @db.Uuid
   quantity         Int      @default(0) // Quantità di parti nel file 3MF
-  weight           Decimal? @db.Decimal(12, 3) // Peso calcolato per singola parte (totalWeight / quantity)
+  weight           Decimal? @db.Decimal(12, 2) // Peso calcolato per singola parte (totalWeight / quantity)
   imageFromFileUrl String? // URL immagine estratta dal file 3MF
 
   productPartId String?      @db.Uuid
@@ -188,7 +188,7 @@ model PrintRun {
 
   printTimeMinutes   Decimal?       @db.Decimal(12, 2)
   powerConsumed      Decimal?       @db.Decimal(12, 3)
-  energyCostSnapshot Decimal?       @db.Decimal(12, 4) // Costo energia al momento della stampa
+  energyCostSnapshot Decimal?       @db.Decimal(12, 2) // Costo energia al momento della stampa
   quantitySuccess    Int            @default(0)
   quantityFailed     Int            @default(0)
   status             PrintRunStatus @default(PENDING)

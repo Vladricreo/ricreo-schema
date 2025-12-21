@@ -50,8 +50,8 @@ model FilamentSpool {
   item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade) // Il tipo di materiale (es. PLA Nero)
 
   // Tracciamento Peso
-  initialWeight   Decimal @db.Decimal(10, 3) // Peso netto iniziale (es. 1000g)
-  remainingWeight Decimal @db.Decimal(10, 3) // Peso stimato residuo
+  initialWeight   Decimal @db.Decimal(10, 2) // Peso netto iniziale (es. 1000g)
+  remainingWeight Decimal @db.Decimal(10, 2) // Peso stimato residuo
 
   // Stato
   isVirtual Boolean     @default(true) // True = Nessuna etichetta fisica, esiste solo "montata" sulla stampante

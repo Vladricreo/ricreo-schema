@@ -14,7 +14,7 @@ model ProductOrder {
   quantityProduced  Int              @default(0) /// Quantità di prodotti finiti completati
   eta               DateTime?        @db.Timestamptz(6)
   finishedAt        DateTime?        @db.Timestamptz(6)
-  cost              Decimal?         @db.Decimal(12, 4)
+  cost              Decimal?         @db.Decimal(12, 2)
   priority          Int              @default(1) /// 1=low, 2=medium, 3=high, 4=critical
   productionStatus  ProductionStatus @default(READY_TO_PRODUCE)
   status            OrderStatus      @default(TO_ORDER)

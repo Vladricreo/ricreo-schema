@@ -59,15 +59,15 @@ model AmazonProduct {
   quantityAvailable Int                @default(0)
   quantityReserved  Int                @default(0)
   inboundShipment   Boolean            @default(false)
-  price             Decimal?           @db.Decimal(12, 4)
-  salesVelocity     Decimal?           @db.Decimal(12, 4)
+  price             Decimal?           @db.Decimal(12, 2)
+  salesVelocity     Decimal?           @db.Decimal(12, 2)
   stockDays         Int?
   restockDate       DateTime?          @db.Timestamptz(6)
   restockAction     RestockAction?
   optimalLotSize    Int?
   dimensionsId      String?            @db.Uuid
   dimensions        Dimensions?        @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  weight            Decimal            @default(0) @db.Decimal(12, 3) /// prima: Float
+  weight            Decimal            @default(0) @db.Decimal(12, 2) /// prima: Float
   orderStatus       AmazonOrderStatus? @default(TO_ORDER)
   createdAt         DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
@@ -187,17 +187,17 @@ model AmazonOrderItem {
 
   quantity Int?
 
-  itemPrice            Decimal? @db.Decimal(12, 4)
-  itemTax              Decimal? @db.Decimal(12, 4)
-  shippingPrice        Decimal? @db.Decimal(12, 4)
-  shippingTax          Decimal? @db.Decimal(12, 4)
-  giftWrapPrice        Decimal? @db.Decimal(12, 4)
-  giftWrapTax          Decimal? @db.Decimal(12, 4)
-  itemPromotionDiscount Decimal? @db.Decimal(12, 4)
-  shipPromotionDiscount Decimal? @db.Decimal(12, 4)
-  vatExclusiveItemPrice      Decimal? @db.Decimal(12, 4)
-  vatExclusiveShippingPrice  Decimal? @db.Decimal(12, 4)
-  vatExclusiveGiftwrapPrice  Decimal? @db.Decimal(12, 4)
+  itemPrice            Decimal? @db.Decimal(12, 2)
+  itemTax              Decimal? @db.Decimal(12, 2)
+  shippingPrice        Decimal? @db.Decimal(12, 2)
+  shippingTax          Decimal? @db.Decimal(12, 2)
+  giftWrapPrice        Decimal? @db.Decimal(12, 2)
+  giftWrapTax          Decimal? @db.Decimal(12, 2)
+  itemPromotionDiscount Decimal? @db.Decimal(12, 2)
+  shipPromotionDiscount Decimal? @db.Decimal(12, 2)
+  vatExclusiveItemPrice      Decimal? @db.Decimal(12, 2)
+  vatExclusiveShippingPrice  Decimal? @db.Decimal(12, 2)
+  vatExclusiveGiftwrapPrice  Decimal? @db.Decimal(12, 2)
 
   /// Campi descrittivi del report (non PII).
   productName String?

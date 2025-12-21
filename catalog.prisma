@@ -7,8 +7,8 @@ model Item {
   name     String
   sku      String  @unique
 
-  price            Decimal  @db.Decimal(12, 4) /// prima: Float
-  weight           Decimal? @db.Decimal(12, 3) /// prima: Float?
+  price            Decimal  @db.Decimal(12, 2) /// prima: Float
+  weight           Decimal? @db.Decimal(12, 2) /// prima: Float?
   /// Tipologia di articolo (es. MATERIALE, IMBALLAGGIO, COMPONENTE).
   type             ItemType
   categoryId       String?  @db.Uuid
@@ -90,11 +90,11 @@ model Product {
   asin      String?
   ean       String?
 
-  cost           Decimal  @default(0) @db.Decimal(12, 4) /// prima: Float
-  estimatedPrice Decimal? @db.Decimal(12, 4) /// prima: Float?
-  sellingPrice   Decimal? @db.Decimal(12, 4) /// prima: Float?
+  cost           Decimal  @default(0) @db.Decimal(12, 2) /// prima: Float
+  estimatedPrice Decimal? @db.Decimal(12, 2) /// prima: Float?
+  sellingPrice   Decimal? @db.Decimal(12, 2) /// prima: Float?
   profitMargin   Decimal? @db.Decimal(5, 4) /// prima: Float? (0.1234 = 12.34%)
-  laborCost      Decimal? @db.Decimal(12, 4) /// prima: Float?
+  laborCost      Decimal? @db.Decimal(12, 2) /// prima: Float?
   laborMinutes   Decimal? @db.Decimal(8, 2) /// prima: Float?
   dimensionsId   String?  @db.Uuid
 
@@ -109,7 +109,7 @@ model Product {
   minOrder Int @default(0) // Lotto minimo di produzione (batching)
 
   // Campi per ottimizzazione dinamica (Velocity)
-  averageDailySales    Decimal?  @db.Decimal(12, 4)
+  averageDailySales    Decimal?  @db.Decimal(12, 2)
   suggestedMinStock    Int?
   autoAdjustMinStock   Boolean   @default(false)
   lastSalesCalculation DateTime? @db.Timestamptz(6)
@@ -148,7 +148,7 @@ model ProductPart {
   id                String                    @id @unique @default(uuid()) @db.Uuid
   imageUrl          String?
   name              String
-  price             Decimal?                  @db.Decimal(12, 4) /// prima: Float?
+  price             Decimal?                  @db.Decimal(12, 2) /// prima: Float?
   properties        Json?
   productId         String                    @db.Uuid
   quantityNeeded    Int                       @default(0)
@@ -185,7 +185,7 @@ model ProductPartMaterial {
   material   Item   @relation(fields: [materialId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   /// Grammi di questo materiale usati per UNA singola parte.
-  usedWeight Decimal @default(0) @db.Decimal(12, 3)
+  usedWeight Decimal @default(0) @db.Decimal(12, 2)
 
   notes String?
 
@@ -200,9 +200,9 @@ model ProductPartMaterial {
 
 model Dimensions {
   id            String          @id @unique @default(uuid()) @db.Uuid
-  width         Decimal         @default(0) @db.Decimal(12, 3)
-  height        Decimal         @default(0) @db.Decimal(12, 3)
-  depth         Decimal         @default(0) @db.Decimal(12, 3)
+  width         Decimal         @default(0) @db.Decimal(12, 2)
+  height        Decimal         @default(0) @db.Decimal(12, 2)
+  depth         Decimal         @default(0) @db.Decimal(12, 2)
   poductpart    ProductPart[]
   item          Item[]
   product       Product[]
@@ -402,7 +402,7 @@ model Brand {
 /// Definisce un peso standard per un articolo, utile per calcoli logistici.
 model StandardWeight {
   id                 String   @id @default(uuid()) @db.Uuid
-  weight             Decimal  @db.Decimal(12, 3)
+  weight             Decimal  @db.Decimal(12, 2)
   associatedItemType ItemType
   items              Item[]
 
