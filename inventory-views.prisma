@@ -1,0 +1,269 @@
+/// ============================================================================
+/// VIEW MODELS - Schema "inventory_views"
+/// Modelli read-only per le view della dashboard.
+/// Queste view sono create in SQL (vedi migrations) e mappate qui per tipizzazione.
+/// Nota: le view in Prisma non possono avere @id.
+/// ============================================================================
+
+/// Stock prodotti finiti per canale (riga per SKU)
+view VDashboardFinishedStockByChannel {
+  channel String @unique
+  units   Int
+
+  @@map("v_dashboard_finished_stock_by_channel")
+  @@schema("inventory_views")
+}
+
+/// Valore prodotti finiti aggregato per canale
+view VDashboardFinishedValueByChannel {
+  channel    String  @unique
+  units      BigInt
+  costValue  Decimal @map("cost_value") @db.Decimal(20, 2)
+  salesValue Decimal @map("sales_value") @db.Decimal(20, 2)
+
+  @@map("v_dashboard_finished_value_by_channel")
+  @@schema("inventory_views")
+}
+
+/// Totali valore prodotti finiti
+view VDashboardFinishedValueTotals {
+  totalUnits      BigInt  @unique @map("total_units")
+  totalCostValue  Decimal @map("total_cost_value") @db.Decimal(20, 2)
+  totalSalesValue Decimal @map("total_sales_value") @db.Decimal(20, 2)
+
+  @@map("v_dashboard_finished_value_totals")
+  @@schema("inventory_views")
+}
+
+/// Totale articoli in stock
+view VDashboardItemTotals {
+  totalItems BigInt @unique @map("total_items")
+
+  @@map("v_dashboard_item_totals")
+  @@schema("inventory_views")
+}
+
+/// Articoli con stock basso (solo SKU, niente nomi)
+view VDashboardLowStockItems {
+  sku       String @unique
+  available Int
+  minStock  Int    @map("min_stock")
+  onOrder   Int    @map("on_order")
+  deficit   Int
+  severity  String
+
+  @@map("v_dashboard_low_stock_items")
+  @@schema("inventory_views")
+}
+
+/// Conteggio ordini produzione e assemblaggio attivi
+view VDashboardOrdersCounts {
+  pendingProduction Int @unique @map("pending_production")
+  pendingAssembly   Int @map("pending_assembly")
+
+  @@map("v_dashboard_orders_counts")
+  @@schema("inventory_views")
+}
+
+/// Ore assemblaggio per giorno
+view VDashboardAssemblyHoursByDay {
+  day           DateTime @unique @db.Date
+  hours         Decimal  @db.Decimal(10, 2)
+  producedUnits Int      @map("produced_units")
+  scrappedUnits Int      @map("scrapped_units")
+
+  @@map("v_dashboard_assembly_hours_by_day")
+  @@schema("inventory_views")
+}
+
+/// Consumo item giornaliero per categoria
+view VDashboardItemConsumptionDailyByCategory {
+  day          DateTime @db.Date
+  categoryName String   @map("category_name")
+  quantityUsed Int      @map("quantity_used")
+
+  @@unique([day, categoryName])
+  @@map("v_dashboard_item_consumption_daily_by_category")
+  @@schema("inventory_views")
+}
+
+/// Vendite giornaliere (ibrido FBA/FBM)
+view VDashboardSalesDailyBestEffort {
+  day       DateTime @db.Date
+  channel   String
+  unitsSold Int      @map("units_sold")
+  source    String
+
+  @@unique([day, channel])
+  @@map("v_dashboard_sales_daily_best_effort")
+  @@schema("inventory_views")
+}
+
+/// Ordini acquisto aperti con lead time
+view VDashboardPurchaseOrdersLeadtimeOpen {
+  poNumber     BigInt    @unique @map("po_number")
+  supplierName String    @map("supplier_name")
+  orderedAt    DateTime? @map("ordered_at") @db.Timestamptz(6)
+  expectedBy   DateTime? @map("expected_by") @db.Timestamptz(6)
+  daysOpen     Int?      @map("days_open")
+  isLate       Boolean   @map("is_late")
+  status       String
+
+  @@map("v_dashboard_purchase_orders_leadtime_open")
+  @@schema("inventory_views")
+}
+
+/// Valore per categoria (solo costo)
+view VDashboardValueByCategory {
+  categoryName String  @unique @map("category_name")
+  itemsCount   BigInt  @map("items_count")
+  costValue    Decimal @map("cost_value") @db.Decimal(20, 2)
+
+  @@map("v_dashboard_value_by_category")
+  @@schema("inventory_views")
+}
+
+/// ============================================================================
+/// KPI VIEWS - Metriche avanzate per dashboard
+/// ============================================================================
+
+/// KPI principali: Inventory Turnover e Days of Inventory on Hand
+view VDashboardKpiTurnoverDoh {
+  inventoryValue       Decimal @unique @map("inventory_value") @db.Decimal(20, 2)
+  inventoryUnits       BigInt  @map("inventory_units")
+  cogs30Days           Decimal @map("cogs_30_days") @db.Decimal(20, 2)
+  consumedUnits30Days  BigInt  @map("consumed_units_30_days")
+  avgDailyConsumption  Decimal @map("avg_daily_consumption") @db.Decimal(10, 2)
+  inventoryTurnover    Decimal @map("inventory_turnover") @db.Decimal(10, 2)
+  daysOfInventory      Int     @map("days_of_inventory")
+  consumptionTrendPct  Decimal @map("consumption_trend_pct") @db.Decimal(5, 1)
+
+  @@map("v_dashboard_kpi_turnover_doh")
+  @@schema("inventory_views")
+}
+
+/// Consumo medio giornaliero per categoria
+view VDashboardAvgDailyConsumption {
+  categoryName     String  @unique @map("category_name")
+  totalConsumed30d BigInt  @map("total_consumed_30d")
+  avgDailyQuantity Decimal @map("avg_daily_quantity") @db.Decimal(10, 2)
+  movementCount    BigInt  @map("movement_count")
+
+  @@map("v_dashboard_avg_daily_consumption")
+  @@schema("inventory_views")
+}
+
+/// Distribuzione item per categoria (per Pie Chart)
+view VDashboardItemsByCategory {
+  categoryName  String  @map("category_name")
+  itemType      String  @map("item_type")
+  itemsCount    BigInt  @map("items_count")
+  totalQuantity BigInt  @map("total_quantity")
+  totalValue    Decimal @map("total_value") @db.Decimal(20, 2)
+
+  @@unique([categoryName, itemType])
+  @@map("v_dashboard_items_by_category")
+  @@schema("inventory_views")
+}
+
+/// ============================================================================
+/// CONSUMPTION VIEWS - Analisi consumo per grafici
+/// ============================================================================
+
+/// Consumo aggregato per categoria con periodi multipli
+view VDashboardConsumptionByCategoryPeriod {
+  periodDay        DateTime @map("period_day") @db.Date
+  periodWeek       DateTime @map("period_week") @db.Date
+  periodMonth      DateTime @map("period_month") @db.Date
+  categoryName     String   @map("category_name")
+  consumedQuantity BigInt   @map("consumed_quantity")
+  movementCount    BigInt   @map("movement_count")
+
+  @@unique([periodDay, categoryName])
+  @@map("v_dashboard_consumption_by_category_period")
+  @@schema("inventory_views")
+}
+
+/// Stagionalità consumo per mese dell'anno
+view VDashboardSeasonality {
+  monthOfYear         Int     @map("month_of_year")
+  categoryName        String  @map("category_name")
+  avgDailyConsumption Decimal @map("avg_daily_consumption") @db.Decimal(10, 2)
+  totalConsumption    BigInt  @map("total_consumption")
+  daysWithData        BigInt  @map("days_with_data")
+
+  @@unique([monthOfYear, categoryName])
+  @@map("v_dashboard_seasonality")
+  @@schema("inventory_views")
+}
+
+/// Consumo giornaliero per line chart (ultimi 90gg)
+view VDashboardConsumptionDaily {
+  day              DateTime @map("day") @db.Date
+  categoryName     String   @map("category_name")
+  consumedQuantity BigInt   @map("consumed_quantity")
+
+  @@unique([day, categoryName])
+  @@map("v_dashboard_consumption_daily")
+  @@schema("inventory_views")
+}
+
+/// ============================================================================
+/// SKU VIEWS - Analisi SKU per grafici
+/// ============================================================================
+
+/// Velocità SKU (vendite ultimi 30gg)
+view VDashboardSkuVelocity {
+  skuId         String  @map("sku_id") @db.Uuid
+  skuCode       String  @unique @map("sku_code")
+  channel       String
+  unitsSold30d  BigInt  @map("units_sold_30d")
+  currentStock  Int     @map("current_stock")
+  minStock      Int     @map("min_stock")
+  salesVelocity Decimal @map("sales_velocity") @db.Decimal(10, 2)
+  daysOfStock   Int     @map("days_of_stock")
+
+  @@map("v_dashboard_sku_velocity")
+  @@schema("inventory_views")
+}
+
+/// Vendite vs Stock per SKU (serie temporale)
+view VDashboardSkuSalesVsStock {
+  date                 DateTime @map("date") @db.Date
+  skuCode              String   @map("sku_code")
+  skuId                String   @map("sku_id") @db.Uuid
+  unitsSold            Int      @map("units_sold")
+  currentStock         Int      @map("current_stock")
+  minStock             Int      @map("min_stock")
+  estimatedStockAtDate BigInt   @map("estimated_stock_at_date")
+
+  @@unique([date, skuCode])
+  @@map("v_dashboard_sku_sales_vs_stock")
+  @@schema("inventory_views")
+}
+
+/// Heatmap SKU per mese
+view VDashboardSkuMonthlyHeatmap {
+  skuCode       String @map("sku_code")
+  skuId         String @map("sku_id") @db.Uuid
+  year          Int
+  month         Int
+  unitsSold     BigInt @map("units_sold")
+  daysWithSales BigInt @map("days_with_sales")
+
+  @@unique([skuCode, year, month])
+  @@map("v_dashboard_sku_monthly_heatmap")
+  @@schema("inventory_views")
+}
+
+/// Top SKU per volume (per dropdown selezione)
+view VDashboardTopSkus {
+  skuId        String @map("sku_id") @db.Uuid
+  skuCode      String @unique @map("sku_code")
+  channel      String
+  currentStock Int    @map("current_stock")
+  totalSold90d BigInt @map("total_sold_90d")
+
+  @@map("v_dashboard_top_skus")
+  @@schema("inventory_views")
+}
