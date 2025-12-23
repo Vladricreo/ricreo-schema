@@ -199,6 +199,9 @@ model PrintRun {
 
   failureLogs PrintFailureLog[]
 
+  /// Metriche aggiuntive per questa run (consumo filamento, scarto)
+  metrics PrintRunMetrics?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -291,6 +294,11 @@ model Printer {
   harvests      PrinterHarvest[]
   /// Storico carichi filamento su questa stampante
   filamentLoads PrinterFilamentLoad[]
+
+  /// Eventi di cambio stato per calcolo uptime/utilization
+  stateEvents PrinterStateEvent[]
+  /// Eventi di downtime per KPI
+  downtimeEvents PrinterDowntimeEvent[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

@@ -1,0 +1,142 @@
+/// ============================================================================
+/// VIEW MODELS - Schema "print_farm_views"
+/// Modelli read-only per le view della dashboard print farm.
+/// Queste view sono create in SQL (vedi migrations/print_farm_views.sql)
+/// e mappate qui per tipizzazione Prisma.
+/// ============================================================================
+
+/// KPI aggregati ultimi 30 giorni.
+view VPfKpiTotals30d {
+  printsCount    Int     @unique @map("printsCount")
+  successQty     Int     @map("successQty")
+  failedQty      Int     @map("failedQty")
+  failureRatePct Decimal @map("failureRatePct") @db.Decimal(5, 2)
+  avgPrintTimeMin Decimal @map("avgPrintTimeMin") @db.Decimal(12, 2)
+  kwh            Decimal @db.Decimal(12, 3)
+  energyCost     Decimal @map("energyCost") @db.Decimal(12, 2)
+
+  @@map("v_pf_kpi_totals_30d")
+  @@schema("print_farm_views")
+}
+
+/// Stampe giornaliere OK/fallite per AreaGraph (90 giorni).
+view VPfPrintsDaily90d {
+  day        DateTime @unique @db.Date
+  successQty Int      @map("successQty")
+  failedQty  Int      @map("failedQty")
+  kwh        Decimal  @db.Decimal(12, 3)
+
+  @@map("v_pf_prints_daily_90d")
+  @@schema("print_farm_views")
+}
+
+/// Utilizzo giornaliero stampanti per BarGraph (30 giorni).
+view VPfUtilizationDaily30d {
+  day            DateTime @unique @db.Date
+  runMinutes     Decimal  @map("runMinutes") @db.Decimal(12, 2)
+  utilizationPct Decimal  @map("utilizationPct") @db.Decimal(5, 2)
+
+  @@map("v_pf_utilization_daily_30d")
+  @@schema("print_farm_views")
+}
+
+/// Distribuzione stampanti per stato operativo (PieGraph alternativa).
+view VPfPrintersByOperationalStatus {
+  operationalStatus String @unique @map("operationalStatus")
+  count             Int
+
+  @@map("v_pf_printers_by_operational_status")
+  @@schema("print_farm_views")
+}
+
+/// Issue aperte per categoria (PieGraph consigliata).
+view VPfIssuesOpenByCategory {
+  category      String @unique
+  openCount     Int    @map("openCount")
+  ackedCount    Int    @map("ackedCount")
+  criticalCount Int    @map("criticalCount")
+
+  @@map("v_pf_issues_open_by_category")
+  @@schema("print_farm_views")
+}
+
+/// Cause di fallimento con quantità scartata (30 giorni).
+view VPfFailuresByReason30d {
+  reason      String @unique
+  scrappedQty Int    @map("scrappedQty")
+  eventsCount Int    @map("eventsCount")
+
+  @@map("v_pf_failures_by_reason_30d")
+  @@schema("print_farm_views")
+}
+
+/// Attività recente unificata (issue/failure/manutenzione).
+view VPfRecentActivity {
+  id          String   @unique @db.Uuid
+  type        String
+  at          DateTime @db.Timestamptz(6)
+  title       String
+  subtitle    String
+  severity    String
+  printerName String   @map("printerName")
+
+  @@map("v_pf_recent_activity")
+  @@schema("print_farm_views")
+}
+
+/// Costo e durata manutenzione aggregati per mese (12 mesi).
+view VPfMaintenanceMonthly {
+  month              DateTime @unique @db.Date
+  totalCost          Decimal  @map("totalCost") @db.Decimal(12, 2)
+  totalMinutes       Int      @map("totalMinutes")
+  interventionsCount Int      @map("interventionsCount")
+
+  @@map("v_pf_maintenance_monthly")
+  @@schema("print_farm_views")
+}
+
+/// Riepilogo stato per stampante con issue aperte e ultima run.
+view VPfPrinterStatusSummary {
+  printerId           String    @unique @map("printerId") @db.Uuid
+  printerName         String    @map("printerName")
+  wssStatus           String    @map("wssStatus")
+  operationalStatus   String    @map("operationalStatus")
+  manualOverrideStatus String?  @map("manualOverrideStatus")
+  bedOccupied         Boolean   @map("bedOccupied")
+  openIssuesCount     Int       @map("openIssuesCount")
+  lastRunFinishedAt   DateTime? @map("lastRunFinishedAt") @db.Timestamptz(6)
+
+  @@map("v_pf_printer_status_summary")
+  @@schema("print_farm_views")
+}
+
+/// Downtime giornaliero (eventi e minuti) per trend (30 giorni).
+view VPfDowntimeDaily30d {
+  day             DateTime @unique @db.Date
+  eventsCount     Int      @map("eventsCount")
+  downtimeMinutes Decimal  @map("downtimeMinutes") @db.Decimal(12, 2)
+
+  @@map("v_pf_downtime_daily_30d")
+  @@schema("print_farm_views")
+}
+
+/// Consumo energia giornaliero (kWh e costo) per trend (30 giorni).
+view VPfEnergyDaily30d {
+  day        DateTime @unique @db.Date
+  kwh        Decimal  @db.Decimal(12, 3)
+  energyCost Decimal  @map("energyCost") @db.Decimal(12, 2)
+
+  @@map("v_pf_energy_daily_30d")
+  @@schema("print_farm_views")
+}
+
+/// Consumo filamento stimato per colore (30 giorni).
+view VPfFilamentConsumption30d {
+  color          String  @unique
+  estimatedGrams Decimal @map("estimatedGrams") @db.Decimal(12, 2)
+  runsCount      Int     @map("runsCount")
+
+  @@map("v_pf_filament_consumption_30d")
+  @@schema("print_farm_views")
+}
+

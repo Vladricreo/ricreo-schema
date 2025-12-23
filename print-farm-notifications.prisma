@@ -1,0 +1,100 @@
+/// Severità della notifica (utile per UI e filtri) per la Print Farm.
+enum PrintFarmNotificationSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+
+  @@schema("print-farm")
+}
+
+/// Tipologia di notifica (macro-categorie applicative) per la Print Farm.
+enum PrintFarmNotificationType {
+  SYSTEM
+  PRODUCTION
+  PRINTER
+  MAINTENANCE
+  FILES
+
+  @@schema("print-farm")
+}
+
+/// Notifica applicativa persistita a DB (dominio Print Farm).
+/// Pattern:
+/// - `PrintFarmNotification` contiene contenuto e metadata comuni
+/// - `PrintFarmNotificationRecipient` traccia lo stato per-utente (letto, archiviato, ecc.)
+model PrintFarmNotification {
+  id String @id @default(uuid()) @db.Uuid
+
+  type     PrintFarmNotificationType
+  severity PrintFarmNotificationSeverity @default(INFO)
+
+  /// Titolo breve, ideale per list item / toast.
+  title String
+  /// Corpo esteso (opzionale). Se serve solo il titolo, lascia null.
+  body  String?
+
+  /// Deep-link interno (path) per aprire la schermata correlata.
+  /// Esempio: "/dashboard/printers?printerId=..."
+  url String?
+
+  /// Chi ha generato la notifica (se applicabile).
+  createdByUserId Int?
+  createdBy       User? @relation("PrintFarmNotificationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Payload libero per metadati specifici (es. { entity: { type, id }, diff, ... }).
+  data Json?
+
+  /// Chiave di deduplicazione opzionale (idempotenza).
+  /// Esempio: "printer:offline:X1C-01" per evitare spam.
+  dedupeKey String? @unique
+
+  /// Se valorizzata, la notifica è considerata "scaduta" e può essere esclusa dalle query.
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  recipients PrintFarmNotificationRecipient[]
+
+  @@index([type])
+  @@index([severity])
+  @@index([createdAt(sort: Desc)])
+  @@index([createdByUserId])
+  @@index([expiresAt])
+  @@schema("print-farm")
+}
+
+/// Stato di una notifica per uno specifico utente (dominio Print Farm).
+model PrintFarmNotificationRecipient {
+  id String @id @default(uuid()) @db.Uuid
+
+  notificationId String               @db.Uuid
+  notification   PrintFarmNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Flag comodo per filtri rapidi.
+  isRead Boolean   @default(false)
+  /// Timestamp lettura (se `isRead=true`).
+  readAt DateTime? @db.Timestamptz(6)
+
+  /// Timestamp archiviazione (se valorizzato la notifica non appare nel feed "attivo").
+  archivedAt DateTime? @db.Timestamptz(6)
+
+  /// Timestamp "consegna" (utile se in futuro inviamo anche email/push).
+  deliveredAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([notificationId, userId])
+  @@index([userId, isRead])
+  @@index([userId, archivedAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([notificationId])
+  @@schema("print-farm")
+}
+
+

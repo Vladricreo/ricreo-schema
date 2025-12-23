@@ -1,0 +1,111 @@
+/// ============================================================================
+/// TELEMETRY MODELS - Schema "print-farm"
+/// Modelli per tracciare state changes, downtime e metriche run.
+/// Creati da migrations/print_farm_telemetry.sql
+/// ============================================================================
+
+/// Log di transizioni di stato stampante per calcolo uptime/utilization.
+/// Ogni volta che cambia operationalStatus o status (WSS) si inserisce un record.
+model PrinterStateEvent {
+  id     String @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  number BigInt @unique @default(autoincrement()) @db.BigInt
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Stato operativo precedente (NULL se primo evento)
+  fromOperationalStatus String?
+  /// Stato operativo attuale
+  toOperationalStatus   String
+
+  /// Stato runtime WSS precedente (NULL se primo evento)
+  fromStatus String?
+  /// Stato runtime WSS attuale
+  toStatus   String?
+
+  /// Origine dell'evento: MQTT, WSS, OPERATOR, SCHEDULER
+  source String @default("WSS")
+
+  /// Timestamp dell'evento
+  at DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Payload extra (snapshot, raw data, ecc.)
+  metadata Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([printerId, at(sort: Desc)])
+  @@index([toOperationalStatus, at(sort: Desc)])
+  @@index([at(sort: Desc)])
+  @@schema("print-farm")
+}
+
+/// Periodi di fermo stampante con categoria e motivazione per KPI downtime.
+/// Può essere derivato da PrinterIssue (OPEN→RESOLVED) ma avere una tabella
+/// dedicata semplifica KPI e storicizzazione.
+model PrinterDowntimeEvent {
+  id     String @id @default(uuid()) @db.Uuid
+  /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
+  number BigInt @unique @default(autoincrement()) @db.BigInt
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Categoria del fermo (riuso PrinterIssueCategory)
+  category String @default("OTHER") // FILAMENT, BED, PRINT, NETWORK, MAINTENANCE, SAFETY, OTHER
+
+  /// Motivazione testuale
+  reason String?
+
+  /// Severità: WARNING, CRITICAL
+  severity String @default("WARNING")
+
+  /// Origine del rilevamento: MQTT, WSS, OPERATOR, SCHEDULER
+  source String @default("MQTT")
+
+  /// Periodo di downtime
+  openedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  resolvedAt DateTime? @db.Timestamptz(6)
+
+  /// Chi ha risolto (User ID string)
+  resolvedBy String?
+
+  /// Payload extra
+  metadata Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerId, openedAt(sort: Desc)])
+  @@index([category, openedAt(sort: Desc)])
+  @@index([resolvedAt(sort: Desc)])
+  @@index([openedAt(sort: Desc)])
+  @@schema("print-farm")
+}
+
+/// Metriche aggiuntive per PrintRun: consumo filamento effettivo e scarto.
+/// Relazione 1:1 con PrintRun.
+model PrintRunMetrics {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// FK a PrintRun (unique = relazione 1:1)
+  printRunId String   @unique @db.Uuid
+  printRun   PrintRun @relation(fields: [printRunId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Filamento effettivamente usato (in grammi)
+  filamentUsedGrams Decimal? @db.Decimal(12, 2)
+
+  /// Filamento sprecato (purge, prime, supporti scartati, ecc.)
+  wasteGrams Decimal? @db.Decimal(12, 2)
+
+  /// Note libere
+  notes String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printRunId])
+  @@schema("print-farm")
+}
+
