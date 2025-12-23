@@ -54,7 +54,7 @@ model Supplier {
   name                String          @unique
   website             String?
   email               String?
-  leadTime            Int?
+  leadTime            Int           @default(7)
   apiToken            String?
   apiKey              String?
   apiSecret           String?
