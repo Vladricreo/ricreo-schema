@@ -19,6 +19,9 @@ enum SettingsName {
   LANGUAGE
   VAT_RATE
   STOCK_THRESHOLD
+  /// Finestra temporale (in giorni) per la sync delle spedizioni (ShippyPro -> DB).
+  /// Usata da `POST /api/shipments/sync` per decidere da quanto indietro importare.
+  SHIPMENTS_SYNC_DAYS
   AMAZON_RESTOCK_TIME
   AMAZON_OPTIMAL_STOCK_DAYS
   FBM_OPTIMAL_STOCK_DAYS
