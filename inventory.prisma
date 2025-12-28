@@ -63,6 +63,9 @@ model InventoryLot {
   item      Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
   productId String?  @db.Uuid
   product   Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
+  /// Opzionale: lotto riferito a una singola ProductPart (per acquisti di parti esterne).
+  productPartId String?      @db.Uuid
+  productPart   ProductPart? @relation(fields: [productPartId], references: [id], onDelete: Restrict)
 
   purchaseOrderLineId String?            @db.Uuid
   purchaseOrderLine   PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
@@ -100,6 +103,7 @@ model InventoryLot {
   @@index([status])
   @@index([itemId])
   @@index([productId])
+  @@index([productPartId])
   @@index([purchaseOrderLineId])
   @@index([productItemOrderId])
   @@index([assemblyOrderId])
