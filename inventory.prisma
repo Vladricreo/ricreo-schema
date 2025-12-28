@@ -124,6 +124,13 @@ model WarehouseShelf {
   /// Immagine opzionale (usata dalla UI).
   imageUrl    String?
 
+  /// Codice della fila fisica (linea) su cui lo scaffale è posizionato (es. "A", "PF", "MAG-1").
+  /// Serve per raggruppare più scaffali che, fisicamente, stanno sulla stessa fila.
+  lineCode String?
+  /// Indice/progressivo dello scaffale all'interno della stessa fila (1..N).
+  /// Utile per ordinare e calcolare "vicinanza" lungo la fila.
+  indexInLine Int?
+
   /// Ripiani/righe fisiche appartenenti allo scaffale.
   rows WarehouseRow[]
 
@@ -132,6 +139,7 @@ model WarehouseShelf {
 
   @@index([code])
   @@index([name])
+  @@index([lineCode, indexInLine])
   @@schema("inventory")
 }
 
