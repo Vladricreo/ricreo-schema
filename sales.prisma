@@ -11,6 +11,9 @@ model Sku {
   isDefault   Boolean          @default(false)
 
   isActive                 Boolean            @default(true)
+  /// Se true, questo SKU NON deve essere stoccato/riassortito automaticamente.
+  /// Effetto: la generazione automatica di `ProductOrder` deve ignorarlo.
+  doNotStock               Boolean            @default(false)
   minStock                 Int                @default(0)
   currentStock             Int                @default(0)
   dimensionsId             String?            @db.Uuid
