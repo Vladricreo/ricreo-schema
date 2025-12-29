@@ -17,6 +17,14 @@ model ProjectThreeMFFile {
   totalFilamentWeight      Decimal? @db.Decimal(12, 2) // peso totale filamento usato in grammi
   plateNumber              Int      @default(1) // Numero del plate (index) per il comando di stampa
 
+  /// Metadati estratti da `Metadata/slice_info.config` (Bambu Studio)
+  printerModelId String?  // es. "C12"
+  supportsUsed   Boolean  @default(false)
+  objectCount    Int      @default(0) // numero <object skipped="false" />
+  /// Oggetti nel plate (per skip/selezione oggetti singoli in stampa)
+  /// JSON array: [{ identifyId: number, name: string, skipped: boolean }]
+  sliceObjects   Json?
+
   /// Percentuale di riempimento del piano (es. 0.70 = 70%)
   /// Usata per stimare l'area delle parti quando non conosciamo le dimensioni esatte
   plateFillPercentage Decimal @default(0.70) @db.Decimal(3, 2)
@@ -57,16 +65,26 @@ model ProjectFileMaterial {
   fileId String             @db.Uuid
   file   ProjectThreeMFFile @relation(fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  materialId String @db.Uuid
-  material   Item   @relation("FileMaterialUsage", fields: [materialId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// Indice filamento nel file (0-based) - usato per AMS mapping
+  fileFilamentIndex Int @default(1)
+  /// ID filamento in slice_info.config (spesso 1-based, string)
+  fileFilamentId    String?
+  /// tray_info_idx (es. GFB99)
+  trayInfoIdx       String?
+  /// Tipo filamento nel file (PLA/ABS/...)
+  filamentType      String?
 
-  usedWeight Decimal @db.Decimal(12, 2) // Grammi usati nel file
-  colorUsed  String? // Colore usato (può essere diverso dal colore in anagrafica)
+  /// Materiale inventario associato (opzionale, può essere mappato successivamente)
+  materialId String? @db.Uuid
+  material   Item?   @relation("FileMaterialUsage", fields: [materialId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  usedWeight Decimal @db.Decimal(12, 2) // Grammi usati nel file (per quel filamento)
+  colorUsed  String? // Colore usato (tipicamente il colore del filamento nel file)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
-  @@unique([fileId, materialId]) // Un materiale può essere usato una sola volta per file
+  @@unique([fileId, fileFilamentIndex]) // Un filamento (indice) una sola volta per file
   @@index([fileId])
   @@index([materialId])
   @@schema("print-farm")
@@ -175,6 +193,14 @@ model PrintRun {
   startedAt  DateTime? @db.Timestamptz(6)
   finishedAt DateTime? @db.Timestamptz(6)
 
+  /// Stampante associata a questa run.
+  ///
+  /// Per le run “pianificate” l'informazione passa da `assignment -> printer`.
+  /// Questo campo serve soprattutto per run “unplanned/custom” (es. stampa avviata dal pannello della stampante),
+  /// dove potremmo non avere una `PrinterAssignment` da collegare.
+  printerId String?  @db.Uuid
+  printer   Printer? @relation("PrintRunPrinter", fields: [printerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   /// Assegnazione stampante (PrinterAssignment) che ha generato/gestito questa run.
   /// Serve a legare l'esecuzione reale (run) al workflow operativo (assignment).
   assignmentId String?            @db.Uuid
@@ -183,8 +209,26 @@ model PrintRun {
   productionJob   ProductionJob? @relation(fields: [productionJobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   productionJobId String?        @db.Uuid
 
-  filePrinted ProjectThreeMFFile @relation(fields: [fileId], references: [id])
-  fileId      String             @db.Uuid
+  /// File stampato, se noto e presente nel sistema.
+  ///
+  /// Nota: per supportare run “unplanned/custom” rendiamo `fileId` opzionale: in quel caso useremo `taskFileName`
+  /// (nome file riportato dalla stampante) finché non riusciamo a risolvere/mappare un `ProjectThreeMFFile`.
+  filePrinted ProjectThreeMFFile? @relation(fields: [fileId], references: [id])
+  fileId      String?             @db.Uuid
+
+  /// Identificativo task runtime riportato dalla stampante (NON unico globalmente: può ripetersi tra stampanti e nel tempo).
+  /// Va sempre interpretato insieme a `printerId`/`assignment` e ad un timestamp di osservazione (`detectedAt`).
+  taskId Int? @db.SmallInt
+
+  /// Nome file riportato dalla stampante (es. `.3mf` o `.gcode`) anche se non presente come `ProjectThreeMFFile`.
+  taskFileName String?
+
+  /// Timestamp lato server della prima osservazione (firstSeen) di questa run/task tramite WSS/MQTT.
+  /// Non è lo "startedAt" della stampante: serve solo per disambiguare `taskId` riusati nel tempo.
+  detectedAt DateTime? @db.Timestamptz(6)
+
+  /// Origine della run (UI, stampante, ecc.) per audit e riconciliazione.
+  source PrintRunSource @default(UI)
 
   printTimeMinutes   Decimal?       @db.Decimal(12, 2)
   powerConsumed      Decimal?       @db.Decimal(12, 3)
@@ -205,12 +249,24 @@ model PrintRun {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
+  @@index([printerId])
+  @@index([printerId, taskId])
   @@index([assignmentId])
   @@index([productionJobId])
   @@index([fileId])
   @@index([spoolId])
   @@index([status])
   @@index([startedAt])
+  @@schema("print-farm")
+}
+
+/// Origine/contesto con cui è stata generata una PrintRun.
+/// Utile per distinguere run “pianificate” dall'app vs run avviate direttamente dalla stampante o da processi automatici.
+enum PrintRunSource {
+  UI
+  PRINTER
+  SYSTEM
+
   @@schema("print-farm")
 }
 
@@ -289,6 +345,10 @@ model Printer {
 
   /// Assegnazioni job a questa stampante (coda di lavoro)
   assignments PrinterAssignment[]
+
+  /// PrintRun collegate direttamente a questa stampante (supporto run “unplanned/custom”).
+  /// Relazione separata da `assignments -> printRuns` quindi deve essere nominata.
+  printRuns PrintRun[] @relation("PrintRunPrinter")
 
   /// Storico raccolte pezzi da questa stampante
   harvests      PrinterHarvest[]
