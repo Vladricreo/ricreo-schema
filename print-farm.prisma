@@ -192,6 +192,9 @@ model PrintRun {
   number     BigInt    @unique @default(autoincrement()) @db.BigInt
   startedAt  DateTime? @db.Timestamptz(6)
   finishedAt DateTime? @db.Timestamptz(6)
+  /// Quantità attesa/target per questa singola run.
+  /// Utile per run con "skip oggetti" (es. completamento job) e per audit/metriche.
+  expectedQuantity Int?
 
   /// Stampante associata a questa run.
   ///
@@ -559,9 +562,12 @@ model PrinterAssignment {
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
   number BigInt @unique @default(autoincrement()) @db.BigInt
 
-  /// Job di produzione assegnato
-  productionJobId String        @db.Uuid
-  productionJob   ProductionJob @relation(fields: [productionJobId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// Job di produzione assegnato.
+  ///
+  /// Nota: lo rendiamo opzionale per supportare stampe "unplanned" (senza job/prodotto),
+  /// che comunque devono creare una `PrinterAssignment` per poter gestire harvest e stati operativi.
+  productionJobId String?        @db.Uuid
+  productionJob   ProductionJob? @relation(fields: [productionJobId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Stampante assegnata
   printerId String  @db.Uuid
