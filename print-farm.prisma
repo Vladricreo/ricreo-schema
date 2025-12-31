@@ -621,7 +621,10 @@ model PrinterAssignment {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
-  @@unique([productionJobId, printerId])
+  /// Nota: NON usiamo più unique su (productionJobId, printerId) perché adottiamo la strategia
+  /// "1 run = 1 assignment" (micro-assignments). Quindi per lo stesso job e la stessa stampante
+  /// possono esistere più assignment (in coda).
+  @@index([productionJobId, printerId])
   @@index([productionJobId])
   @@index([printerId])
   @@index([status])
