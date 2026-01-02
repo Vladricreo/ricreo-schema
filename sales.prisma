@@ -243,6 +243,9 @@ model Shipment {
   lines            ShipmentLine[]
   orderedAt        DateTime            @db.Timestamptz(6)
   shippedAt        DateTime?           @db.Timestamptz(6)
+  /// Timestamp interno: quando l'etichetta è stata stampata dalla nostra app (CUPS).
+  /// Serve per distinguere "stampato lato corriere" vs "stampato da noi".
+  printedAt        DateTime?           @db.Timestamptz(6)
   courier          String?
   labelUrl         String?
   isShipped        Boolean             @default(false)
