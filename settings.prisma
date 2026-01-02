@@ -74,6 +74,9 @@ model CupsPrinter {
   /// Formati etichetta compatibili/consigliati per questa stampante.
   labelFormats CupsLabelFormat[] @relation("PrinterLabelFormats")
 
+  /// Profili di stampa che puntano a questa stampante (routing per tipo job).
+  printProfiles CupsPrintProfile[] @relation("PrintProfilePrinter")
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -120,6 +123,9 @@ model CupsLabelFormat {
   /// Stampanti che lo usano come default (relazione 1:N via FK su CupsPrinter).
   defaultForPrinters CupsPrinter[] @relation("DefaultLabelFormat")
 
+  /// Profili di stampa che puntano a questo formato (routing per tipo job).
+  printProfiles CupsPrintProfile[] @relation("PrintProfileLabelFormat")
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -137,5 +143,50 @@ enum CupsLabelOrientation {
   PORTRAIT
   LANDSCAPE
 
+  @@schema("inventory")
+}
+
+/// Tipologia di job di stampa gestita dall'app (routing: quale stampante + quale formato usare).
+/// Serve per impostare default diversi per casi d'uso (es. spedizioni vs item vs odette).
+enum CupsPrintJobKind {
+  /// Etichetta di spedizione (tipicamente 4x6).
+  SHIPMENT_LABEL
+  /// Etichetta per item (es. 30x50).
+  ITEM_LABEL
+  /// Etichetta per odette (es. 60x50).
+  ODETTE_LABEL
+
+  /// Etichetta per prodotti (es. 60x50).
+  PRODUCT_LABEL
+
+  @@schema("inventory")
+}
+
+/// Profilo di stampa per una specifica tipologia di job.
+/// Consente di associare una stampante e (opzionalmente) un formato etichetta.
+model CupsPrintProfile {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Tipologia del job (univoca).
+  kind CupsPrintJobKind
+
+  /// Stampante selezionata per questa tipologia di job.
+  printerId String?     @db.Uuid
+  printer   CupsPrinter? @relation("PrintProfilePrinter", fields: [printerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Formato etichetta selezionato per questa tipologia di job.
+  /// Se NULL, il sistema può usare il default della stampante (se presente).
+  labelFormatId String?          @db.Uuid
+  labelFormat   CupsLabelFormat? @relation("PrintProfileLabelFormat", fields: [labelFormatId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Opzioni CUPS specifiche per questo profilo (mergeate con stampante/formato/job).
+  jobOptions Json @default("{}")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([kind])
+  @@index([printerId])
+  @@index([labelFormatId])
   @@schema("inventory")
 }

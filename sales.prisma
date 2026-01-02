@@ -268,7 +268,9 @@ model Shipment {
 model ShipmentLine {
   id         String @id @default(uuid()) @db.Uuid
   shipmentId String @db.Uuid
-  skuId      String @db.Uuid /// MIGLIORIA: FK verso Sku (niente più String[])
+  /// FK verso Sku. Può essere NULL quando arriva uno SKU sconosciuto dal corriere:
+  /// in quel caso salviamo comunque la riga usando `skuCodeSnapshot` per mostrarla come "non collegata".
+  skuId      String? @db.Uuid
   quantity   Int    @default(1)
 
   /// MIGLIORIA: snapshot testuale dello SKU per documenti/archivio
@@ -278,7 +280,7 @@ model ShipmentLine {
   lot   InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  sku      Sku      @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sku      Sku?     @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
