@@ -523,9 +523,10 @@ enum PrinterStatus {
 enum PrinterOperationalStatus {
   AVAILABLE // Pronta per nuovi job
   QUEUED // Ha job in coda, sta lavorando
-  TO_LOAD // Richiede caricamento materiale/file
+  NEEDS_SETUP // Richiede setup (file/configurazione) - ex TO_LOAD
   TO_HARVEST // Stampa completata, richiede scarico pezzi
-  FILAMENT_SWAP_NEEDED // Filamento finito, richiede carico nuovo
+  FILAMENT_RUNOUT // Filamento finito durante stampa (richiede ricarica)
+  FILAMENT_SWAP_NEEDED // Serve cambio colore/materiale per prossimo job
   ERROR // Errore bloccante (richiede intervento)
 
   @@schema("print-farm")
@@ -544,10 +545,9 @@ enum PrinterManualOverrideStatus {
 enum AssignmentStatus {
   QUEUED // In coda, in attesa
   READY // Materiale ok, pronta a partire
-  TO_LOAD // File da caricare/materiale da cambiare
   PRINTING // In stampa
   COMPLETED // Stampa finita, da scaricare
-  UNLOADED // Scaricato nell'odette
+  HARVESTED // Scaricato nell'odette (ex UNLOADED)
   FAILED // Fallito
   CANCELLED // Annullato
 
@@ -670,9 +670,10 @@ model PrinterHarvest {
   printerId String  @db.Uuid
   printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  /// Odette di destinazione
-  odetteId String @db.Uuid
-  odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Restrict)
+  /// Odette di destinazione (opzionale).
+  /// Serve per permettere lo scarico anche quando non c'è un contenitore disponibile.
+  odetteId String? @db.Uuid
+  odette   Odette? @relation(fields: [odetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Operatore che ha effettuato la raccolta
   harvestedByUserId Int
