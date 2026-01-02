@@ -489,7 +489,7 @@ enum FarmProductionStatus {
   NEEDS_CONFIGURATION // Manca configurazione (file, materiali, ecc.)
   AWAITING_RESOURCES // Configurato ma mancano risorse (odette, stampanti libere)
   IN_PROGRESS // In produzione
-  COMPLETED // Completato
+  FULFILLED // Job completato, tutti i pezzi prodotti
   FAILED // Fallito
 
   @@schema("print-farm")
@@ -542,14 +542,14 @@ enum PrinterManualOverrideStatus {
 }
 
 /// Stato di un'assegnazione stampante per un ProductionJob.
+/// Flusso: SCHEDULED → PRINTING → TO_HARVEST → COMPLETED
 enum AssignmentStatus {
-  QUEUED // In coda, in attesa
-  READY // Materiale ok, pronta a partire
-  PRINTING // In stampa
-  COMPLETED // Stampa finita, da scaricare
-  HARVESTED // Scaricato nell'odette (ex UNLOADED)
-  FAILED // Fallito
-  CANCELLED // Annullato
+  SCHEDULED  // Assignment creato, stampante assegnata, in attesa del suo turno
+  PRINTING   // In stampa attiva (1 solo per stampante)
+  TO_HARVEST // Stampa finita, da scaricare
+  COMPLETED  // Scaricato, tutto fatto
+  FAILED     // Fallito
+  CANCELLED  // Annullato
 
   @@schema("print-farm")
 }
@@ -579,7 +579,7 @@ model PrinterAssignment {
 
   /// Posizione in coda (0 = attuale, 1+ = in attesa)
   queuePosition Int              @default(0)
-  status        AssignmentStatus @default(QUEUED)
+  status        AssignmentStatus @default(SCHEDULED)
 
   // === Timing ===
   scheduledAt DateTime? @db.Timestamptz(6) // Quando è stato schedulato
