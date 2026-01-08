@@ -65,7 +65,9 @@ model ProjectFileMaterial {
   fileId String             @db.Uuid
   file   ProjectThreeMFFile @relation(fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  /// Indice filamento nel file (0-based) - usato per AMS mapping
+  /// Indice del filamento *nel 3MF* (0-based).
+  /// Corrisponde alla posizione del filamento nell'elenco estratto da `Metadata/slice_info.config`
+  /// (es. `fileFilaments[*].fileFilamentIndex`) e serve per ricostruire correttamente il mapping AMS/tray.
   fileFilamentIndex Int @default(1)
   /// ID filamento in slice_info.config (spesso 1-based, string)
   fileFilamentId    String?
