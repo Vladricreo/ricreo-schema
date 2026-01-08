@@ -1,0 +1,4 @@
+-- Questa migration era originariamente pensata per rimuovere valori enum obsoleti.
+-- La rimozione è stata spostata a una migration successiva (20260108210000_cleanup_obsolete_enum_values)
+-- per evitare conflitti con le migration intermedie che usano ancora i vecchi valori.
+-- Questa migration è intenzionalmente vuota.

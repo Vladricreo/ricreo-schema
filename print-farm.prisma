@@ -524,7 +524,8 @@ enum PrinterStatus {
 /// Questo stato è "superiore" rispetto al PrinterStatus che arriva dal WebSocket.
 enum PrinterOperationalStatus {
   AVAILABLE // Pronta per nuovi job
-  QUEUED // Ha job in coda, sta lavorando
+  QUEUED // Ha job in coda, in attesa di partire (non ancora in stampa)
+  PRINTING // In stampa attiva (distingue da QUEUED che indica solo "in coda")
   NEEDS_SETUP // Richiede setup (file/configurazione) - ex TO_LOAD
   TO_HARVEST // Stampa completata, richiede scarico pezzi
   FILAMENT_RUNOUT // Filamento finito durante stampa (richiede ricarica)
@@ -619,6 +620,12 @@ model PrinterAssignment {
 
   // === Note ===
   notes String?
+
+
+  /// Payload JSON per avvio stampa (usato dallo scheduler backend).
+  /// Contiene tutte le informazioni per far partire la stampa anche a UI chiusa.
+  /// Schema (v1): { version: 1, printerSerial, fileId?, filenameToPrint, plateNumber, useAms, amsMapping, options }
+  startPayload Json?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
