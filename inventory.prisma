@@ -235,6 +235,9 @@ model WarehouseLocation {
 
   odetteLocationPreferences OdetteLocationPreference[]
 
+  /// Bobine filamento stoccate in questa posizione
+  filamentSpools FilamentSpool[] @relation("SpoolLocation")
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -313,6 +316,8 @@ enum WarehouseLocationKind {
   BUFFER
   /// Posizione in reparto assemblaggio.
   ASSEMBLY
+  /// Area dedicata allo stoccaggio di bobine/spool parzialmente usate.
+  SPOOL_STORAGE
 
   @@schema("inventory")
 }

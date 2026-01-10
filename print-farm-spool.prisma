@@ -87,10 +87,16 @@ model FilamentSpool {
   /// Operazioni di carico filamento in cui è stata usata questa bobina
   filamentLoads PrinterFilamentLoad[]
 
+  /// Posizione in magazzino (quando non montata su stampante).
+  /// Usata per bobine parziali stoccate in attesa di riutilizzo.
+  locationId String?            @db.Uuid
+  location   WarehouseLocation? @relation("SpoolLocation", fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([inventoryLotId])
+  @@index([locationId])
   @@schema("print-farm")
 }
 

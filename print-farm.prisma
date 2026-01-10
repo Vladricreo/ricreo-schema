@@ -305,6 +305,10 @@ model Printer {
   /// deterministica che combina: override manuale + issue attive + assignment/coda + stato WSS.
   operationalStatus PrinterOperationalStatus @default(AVAILABLE)
 
+  /// True quando il piatto è *attivamente* in riscaldamento verso il target (indipendente da operationalStatus).
+  /// Viene aggiornato dal backend in base a `bedTemp` e `bedTargetTemp` con isteresi (evita toggle rapido).
+  isBedHeating Boolean @default(false)
+
   /// --- HEALTH / TELEMETRIA ---
   /// Ultimo aggiornamento ricevuto dalla stampante via WebSocket.
   lastWssAt  DateTime? @db.Timestamptz(6)
@@ -560,9 +564,10 @@ enum PrinterManualOverrideStatus {
 }
 
 /// Stato di un'assegnazione stampante per un ProductionJob.
-/// Flusso: SCHEDULED → PRINTING → TO_HARVEST → COMPLETED
+/// Flusso: SCHEDULED → QUEUED → PRINTING → TO_HARVEST → COMPLETED
 enum AssignmentStatus {
-  SCHEDULED  // Assignment creato, stampante assegnata, in attesa del suo turno
+  SCHEDULED  // Pianificato, NON parte automaticamente
+  QUEUED     // In coda attiva, lo scheduler lo avvia appena c'è budget kW
   PRINTING   // In stampa attiva (1 solo per stampante)
   TO_HARVEST // Stampa finita, da scaricare
   COMPLETED  // Scaricato, tutto fatto
