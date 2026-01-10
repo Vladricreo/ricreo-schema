@@ -626,9 +626,7 @@ model PrinterAssignment {
   issues PrinterIssue[]
 
   // === Conteggi parti ===
-  printsExpected  Int // Numero stampe da fare (file × ripetizioni)
-  printsCompleted Int @default(0) // Stampe completate
-  partsExpected   Int // Parti totali attese (printsExpected × partCount)
+  partsExpected   Int // Parti totali attese per questa stampa (micro-assignment)
   partsProduced   Int @default(0) // Parti prodotte ok
   partsRejected   Int @default(0) // Parti scartate
 
