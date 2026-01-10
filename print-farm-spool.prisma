@@ -92,6 +92,10 @@ model FilamentSpool {
   locationId String?            @db.Uuid
   location   WarehouseLocation? @relation("SpoolLocation", fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Slot AMS in cui è caricata questa spool (per stampanti con AMS).
+  /// Se presente, indica che la spool è in uno slot AMS specifico.
+  amsSlot PrinterAmsSlot? @relation("AmsSlotSpool")
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -105,5 +109,36 @@ enum SpoolStatus {
   DEPLETED // Finita (0g o scarto)
   ARCHIVED // Rimossa e non più tracciata (es. buttata parziale o persa)
 
+  @@schema("print-farm")
+}
+
+/// Slot AMS di una stampante.
+/// Ogni stampante con AMS può avere fino a 4 unità (A-D), ciascuna con 4 slot (1-4).
+/// Questo model traccia quale spool è caricata in ogni slot.
+model PrinterAmsSlot {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Stampante a cui appartiene lo slot
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterAmsSlots", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Unità AMS (0-3 = A, B, C, D)
+  amsUnit Int
+
+  /// Slot all'interno dell'unità (0-3 = slot 1-4)
+  slot Int
+
+  /// Spool attualmente caricata in questo slot (null = slot vuoto)
+  /// @unique perché una spool può stare in un solo slot AMS alla volta
+  spoolId String?        @unique @db.Uuid
+  spool   FilamentSpool? @relation("AmsSlotSpool", fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  /// Un solo record per combinazione stampante + unità + slot
+  @@unique([printerId, amsUnit, slot])
+  @@index([printerId])
+  @@index([spoolId])
   @@schema("print-farm")
 }

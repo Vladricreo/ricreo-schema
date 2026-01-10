@@ -48,6 +48,8 @@ model User {
   printFarmNotificationsCreated PrintFarmNotification[] @relation("PrintFarmNotificationCreatedBy")
   /// Stato notifiche Print Farm ricevute da questo utente.
   printFarmNotificationRecipients PrintFarmNotificationRecipient[]
+  /// Preferenze notifiche Print Farm per questo utente.
+  printFarmNotificationPreferences PrintFarmNotificationPreference[]
 
   @@index([isActive]) /// Indice pratico per filtri frequenti
   @@schema("public") ///  la tabella degli utenti

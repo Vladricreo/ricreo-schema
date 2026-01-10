@@ -23,11 +23,17 @@ enum PrintFarmNotificationType {
 /// Pattern:
 /// - `PrintFarmNotification` contiene contenuto e metadata comuni
 /// - `PrintFarmNotificationRecipient` traccia lo stato per-utente (letto, archiviato, ecc.)
+/// - Se `isBroadcast=true`, la notifica è visibile a tutti gli utenti; lo stato per-utente
+///   viene creato "lazy" (solo quando l'utente interagisce: read/archive).
 model PrintFarmNotification {
   id String @id @default(uuid()) @db.Uuid
 
   type     PrintFarmNotificationType
   severity PrintFarmNotificationSeverity @default(INFO)
+
+  /// Se true, la notifica è visibile a tutti gli utenti (annuncio broadcast).
+  /// Lo stato per-utente (letto/archiviato) viene creato solo quando l'utente interagisce.
+  isBroadcast Boolean @default(false)
 
   /// Titolo breve, ideale per list item / toast.
   title String
@@ -59,6 +65,7 @@ model PrintFarmNotification {
 
   @@index([type])
   @@index([severity])
+  @@index([isBroadcast])
   @@index([createdAt(sort: Desc)])
   @@index([createdByUserId])
   @@index([expiresAt])
@@ -97,4 +104,33 @@ model PrintFarmNotificationRecipient {
   @@schema("print-farm")
 }
 
+/// Preferenze di notifica per-utente (opt-in/out per tipo e severità).
+/// Permette all'utente di filtrare quali notifiche vedere e su quali canali riceverle.
+model PrintFarmNotificationPreference {
+  id String @id @default(uuid()) @db.Uuid
 
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Tipo di notifica a cui si riferisce questa preferenza.
+  type PrintFarmNotificationType
+
+  /// Se false, le notifiche di questo tipo non vengono mostrate all'utente.
+  enabled Boolean @default(true)
+
+  /// Severità minima per mostrare notifiche di questo tipo.
+  /// Es: se minSeverity=WARNING, le notifiche INFO e SUCCESS non vengono mostrate.
+  minSeverity PrintFarmNotificationSeverity @default(INFO)
+
+  /// Canali di consegna (per estensioni future).
+  inApp Boolean @default(true)
+  email Boolean @default(false)
+  push  Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@schema("print-farm")
+}

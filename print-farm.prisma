@@ -364,6 +364,10 @@ model Printer {
   /// Storico carichi filamento su questa stampante
   filamentLoads PrinterFilamentLoad[]
 
+  /// Slot AMS per stampanti con AMS.
+  /// Ogni slot può contenere una spool. Per stampanti senza AMS, usare currentSpoolId.
+  amsSlots PrinterAmsSlot[] @relation("PrinterAmsSlots")
+
   /// Eventi di cambio stato per calcolo uptime/utilization
   stateEvents PrinterStateEvent[]
   /// Eventi di downtime per KPI
