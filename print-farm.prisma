@@ -415,6 +415,18 @@ enum ErrorSeverity {
   @@schema("print-farm")
 }
 
+/// Categoria funzionale dell'errore.
+/// Determina come il backend/UI reagiscono all'errore (es. impostare operationalStatus).
+enum ErrorCategory {
+  WARNING         // Avviso non bloccante, la stampa può continuare
+  RECOVERABLE     // Errore risolvibile senza intervento urgente
+  BLOCKING        // Errore bloccante, richiede intervento immediato
+  FILAMENT_RUNOUT // Filamento esaurito (runtime → FILAMENT_RUNOUT status)
+  IGNORE          // Errore ignorato (non mostrare notifiche/badge)
+
+  @@schema("print-farm")
+}
+
 model ErrorCode {
   id            Int            @id @default(autoincrement())
   code          String         @unique
@@ -424,6 +436,8 @@ model ErrorCode {
   skipthiserror Boolean        @default(false)
   severity      ErrorSeverity  @default(WARNING)
   errorType     ErrorType      @default(HMS)
+  /// Categoria funzionale: determina il comportamento del backend (es. FILAMENT_RUNOUT → operationalStatus).
+  category      ErrorCategory  @default(WARNING)
   action        String?
   guideUrl      String?
   qrCodeUrl     String?
@@ -433,6 +447,7 @@ model ErrorCode {
   createdAt     DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
 
+  @@index([category])
   @@schema("print-farm")
 }
 
