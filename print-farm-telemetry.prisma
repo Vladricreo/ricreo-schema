@@ -108,4 +108,3 @@ model PrintRunMetrics {
   @@index([printRunId])
   @@schema("print-farm")
 }
-

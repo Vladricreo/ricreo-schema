@@ -20,6 +20,9 @@ CREATE UNIQUE INDEX "PrinterAmsSlot_printerId_amsUnit_slot_key" ON "print-farm".
 -- CreateIndex: ricerca per stampante
 CREATE INDEX "PrinterAmsSlot_printerId_idx" ON "print-farm"."PrinterAmsSlot"("printerId");
 
+-- CreateIndex: ricerca per spool (per trovare in quale slot è una determinata spool)
+CREATE INDEX "PrinterAmsSlot_spoolId_idx" ON "print-farm"."PrinterAmsSlot"("spoolId");
+
 -- CreateIndex: una spool può stare in un solo slot alla volta
 CREATE UNIQUE INDEX "PrinterAmsSlot_spoolId_key" ON "print-farm"."PrinterAmsSlot"("spoolId");
 

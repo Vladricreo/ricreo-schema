@@ -101,10 +101,10 @@ model AmazonSalesData {
   /// La rendiamo NOT NULL così non esistono righe "anonime" difficili da deduplicare.
   uniqueIdentifier String        @unique
 
-  @@index([fbaProductId])
-  @@index([amazonOrderId])
   /// Vincolo forte: al massimo una riga al giorno per uno stesso prodotto FBA.
   @@unique([fbaProductId, date])
+  @@index([fbaProductId])
+  @@index([amazonOrderId])
   @@schema("inventory")
 }
 
@@ -114,45 +114,45 @@ model AmazonOrder {
   id String @id @default(uuid()) @db.Uuid
 
   /// ID ordine Amazon (es. "123-1234567-1234567").
-  amazonOrderId String
+  amazonOrderId   String
   /// ID ordine “merchant” (se presente nel report).
   merchantOrderId String?
   /// Marketplace su cui l'ordine è stato effettuato (es. "APJ6JRA9NG5V4" per IT).
-  marketplaceId String
+  marketplaceId   String
 
-  purchaseDate     DateTime? @db.Timestamptz(6)
-  lastUpdatedDate  DateTime? @db.Timestamptz(6)
-  orderStatus      String?
+  purchaseDate       DateTime? @db.Timestamptz(6)
+  lastUpdatedDate    DateTime? @db.Timestamptz(6)
+  orderStatus        String?
   fulfillmentChannel String? /// AFN (FBA) / MFN
 
-  salesChannel String?
-  orderChannel String?
+  salesChannel     String?
+  orderChannel     String?
   shipServiceLevel String?
   /// Numero totale item dell'ordine (colonna `number-of-items`).
-  numberOfItems Int?
+  numberOfItems    Int?
 
   /// Destinazione spedizione (attenzione: dati potenzialmente sensibili).
   /// Conserviamo dati utili per analytics senza dettagli completi:
   /// - `shipPostalCode` è consigliato salvarlo in forma mascherata lato applicativo.
-  shipCity String?
-  shipState String?
+  shipCity       String?
+  shipState      String?
   shipPostalCode String?
-  shipCountry String?
+  shipCountry    String?
 
   /// Quantità totale ordinata (somma delle righe) per questo ordine.
   /// Nota: è derivabile da `AmazonOrderItem.quantity`, ma salvarla qui evita join per dashboard/report veloci.
   totalQuantity Int?
 
-  promotionIds String?
-  isBusinessOrder Boolean? @default(false)
-  priceDesignation String?
+  promotionIds                String?
+  isBusinessOrder             Boolean? @default(false)
+  priceDesignation            String?
   buyerTaxRegistrationCountry String?
-  buyerTaxRegistrationType String?
-  isAmazonInvoiced Boolean?
-  isIba Boolean?
-  iossNumber String?
-  orderInvoiceType String?
-  currency String?
+  buyerTaxRegistrationType    String?
+  isAmazonInvoiced            Boolean?
+  isIba                       Boolean?
+  iossNumber                  String?
+  orderInvoiceType            String?
+  currency                    String?
 
   items AmazonOrderItem[]
 
@@ -170,7 +170,7 @@ model AmazonOrder {
 model AmazonOrderItem {
   id String @id @default(uuid()) @db.Uuid
 
-  orderId String     @db.Uuid
+  orderId String      @db.Uuid
   order   AmazonOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   /// Chiave idempotente per la riga (es. "<amazonOrderId>-<orderItemId>" oppure fallback).
@@ -183,24 +183,24 @@ model AmazonOrderItem {
   asin String?
 
   /// Collegamenti opzionali al modello locale.
-  skuId          String?       @db.Uuid
-  skuRef         Sku?          @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  amazonProductId String?      @db.Uuid
+  skuId           String?        @db.Uuid
+  skuRef          Sku?           @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  amazonProductId String?        @db.Uuid
   amazonProduct   AmazonProduct? @relation(fields: [amazonProductId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   quantity Int?
 
-  itemPrice            Decimal? @db.Decimal(12, 2)
-  itemTax              Decimal? @db.Decimal(12, 2)
-  shippingPrice        Decimal? @db.Decimal(12, 2)
-  shippingTax          Decimal? @db.Decimal(12, 2)
-  giftWrapPrice        Decimal? @db.Decimal(12, 2)
-  giftWrapTax          Decimal? @db.Decimal(12, 2)
-  itemPromotionDiscount Decimal? @db.Decimal(12, 2)
-  shipPromotionDiscount Decimal? @db.Decimal(12, 2)
-  vatExclusiveItemPrice      Decimal? @db.Decimal(12, 2)
-  vatExclusiveShippingPrice  Decimal? @db.Decimal(12, 2)
-  vatExclusiveGiftwrapPrice  Decimal? @db.Decimal(12, 2)
+  itemPrice                 Decimal? @db.Decimal(12, 2)
+  itemTax                   Decimal? @db.Decimal(12, 2)
+  shippingPrice             Decimal? @db.Decimal(12, 2)
+  shippingTax               Decimal? @db.Decimal(12, 2)
+  giftWrapPrice             Decimal? @db.Decimal(12, 2)
+  giftWrapTax               Decimal? @db.Decimal(12, 2)
+  itemPromotionDiscount     Decimal? @db.Decimal(12, 2)
+  shipPromotionDiscount     Decimal? @db.Decimal(12, 2)
+  vatExclusiveItemPrice     Decimal? @db.Decimal(12, 2)
+  vatExclusiveShippingPrice Decimal? @db.Decimal(12, 2)
+  vatExclusiveGiftwrapPrice Decimal? @db.Decimal(12, 2)
 
   /// Campi descrittivi del report (non PII).
   productName String?
@@ -269,12 +269,12 @@ model Shipment {
 /// Riga di spedizione per uno specifico SKU.
 /// Può essere collegata a un InventoryLot per tracciare il lotto fisico spedito al cliente.
 model ShipmentLine {
-  id         String @id @default(uuid()) @db.Uuid
-  shipmentId String @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  shipmentId String  @db.Uuid
   /// FK verso Sku. Può essere NULL quando arriva uno SKU sconosciuto dal corriere:
   /// in quel caso salviamo comunque la riga usando `skuCodeSnapshot` per mostrarla come "non collegata".
   skuId      String? @db.Uuid
-  quantity   Int    @default(1)
+  quantity   Int     @default(1)
 
   /// MIGLIORIA: snapshot testuale dello SKU per documenti/archivio
   skuCodeSnapshot String?

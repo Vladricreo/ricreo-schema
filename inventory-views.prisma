@@ -129,14 +129,14 @@ view VDashboardValueByCategory {
 
 /// KPI principali: Inventory Turnover e Days of Inventory on Hand
 view VDashboardKpiTurnoverDoh {
-  inventoryValue       Decimal @unique @map("inventory_value") @db.Decimal(20, 2)
-  inventoryUnits       BigInt  @map("inventory_units")
-  cogs30Days           Decimal @map("cogs_30_days") @db.Decimal(20, 2)
-  consumedUnits30Days  BigInt  @map("consumed_units_30_days")
-  avgDailyConsumption  Decimal @map("avg_daily_consumption") @db.Decimal(10, 2)
-  inventoryTurnover    Decimal @map("inventory_turnover") @db.Decimal(10, 2)
-  daysOfInventory      Int     @map("days_of_inventory")
-  consumptionTrendPct  Decimal @map("consumption_trend_pct") @db.Decimal(5, 1)
+  inventoryValue      Decimal @unique @map("inventory_value") @db.Decimal(20, 2)
+  inventoryUnits      BigInt  @map("inventory_units")
+  cogs30Days          Decimal @map("cogs_30_days") @db.Decimal(20, 2)
+  consumedUnits30Days BigInt  @map("consumed_units_30_days")
+  avgDailyConsumption Decimal @map("avg_daily_consumption") @db.Decimal(10, 2)
+  inventoryTurnover   Decimal @map("inventory_turnover") @db.Decimal(10, 2)
+  daysOfInventory     Int     @map("days_of_inventory")
+  consumptionTrendPct Decimal @map("consumption_trend_pct") @db.Decimal(5, 1)
 
   @@map("v_dashboard_kpi_turnover_doh")
   @@schema("inventory_views")
@@ -337,22 +337,22 @@ view VInventoryLotRemaining {
 
 /// Stato lotti produzione stampa 3D
 view VProductionLotStatus {
-  productionLotId       String    @unique @map("production_lot_id") @db.Uuid
-  productionLotCode     String    @map("production_lot_code")
-  productionLotNumber   BigInt    @map("production_lot_number")
-  printerId             String?   @map("printerId")
-  material              String?
-  color                 String?
-  startedAt             DateTime? @map("startedAt") @db.Timestamptz(6)
-  finishedAt            DateTime? @map("finishedAt") @db.Timestamptz(6)
-  note                  String?
-  inventoryLotsCount    Int       @map("inventory_lots_count")
-  totalProducedQuantity Int       @map("total_produced_quantity")
-  totalHarvestedQuantity Int      @map("total_harvested_quantity")
-  totalInOdettes        Int       @map("total_in_odettes")
-  calculatedStatus      String    @map("calculated_status")
-  createdAt             DateTime  @map("createdAt") @db.Timestamptz(6)
-  updatedAt             DateTime  @map("updatedAt") @db.Timestamptz(6)
+  productionLotId        String    @unique @map("production_lot_id") @db.Uuid
+  productionLotCode      String    @map("production_lot_code")
+  productionLotNumber    BigInt    @map("production_lot_number")
+  printerId              String?   @map("printerId")
+  material               String?
+  color                  String?
+  startedAt              DateTime? @map("startedAt") @db.Timestamptz(6)
+  finishedAt             DateTime? @map("finishedAt") @db.Timestamptz(6)
+  note                   String?
+  inventoryLotsCount     Int       @map("inventory_lots_count")
+  totalProducedQuantity  Int       @map("total_produced_quantity")
+  totalHarvestedQuantity Int       @map("total_harvested_quantity")
+  totalInOdettes         Int       @map("total_in_odettes")
+  calculatedStatus       String    @map("calculated_status")
+  createdAt              DateTime  @map("createdAt") @db.Timestamptz(6)
+  updatedAt              DateTime  @map("updatedAt") @db.Timestamptz(6)
 
   @@map("v_production_lot_status")
   @@schema("inventory_views")
@@ -363,26 +363,26 @@ view VProductionLotStatus {
 /// - inventoryLotId -> InventoryLot (lotto inventario da acquisto/produzione)
 /// - lotId -> ProductionLot (lotto produzione stampa 3D)
 view VOdetteContentByLot {
-  odetteId           String    @map("odetteId") @db.Uuid
-  odetteCode         String    @map("odette_code")
-  odetteStatus       String    @map("odette_status")
-  odetteLocation     String?   @map("odette_location")
-  inventoryLotId     String?   @map("inventoryLotId") @db.Uuid
-  inventoryLotCode   String?   @map("inventory_lot_code")
-  productionLotId    String?   @map("productionLotId") @db.Uuid  // Mappato da OdetteContent.lotId
-  productionLotCode  String?   @map("production_lot_code")
-  itemId             String?   @map("itemId") @db.Uuid
-  itemName           String?   @map("item_name")
-  itemSku            String?   @map("item_sku")
-  productPartId      String?   @map("product_part_id") @db.Uuid
-  productPartName    String?   @map("product_part_name")
-  skuId              String?   @map("skuId") @db.Uuid
-  skuCode            String?   @map("sku_code")
-  assemblyStageId    String?   @map("assemblyStageId") @db.Uuid
-  assemblyStageType  String?   @map("assembly_stage_type")
-  quantity           Int
-  createdAt          DateTime  @map("createdAt") @db.Timestamptz(6)
-  updatedAt          DateTime  @map("updatedAt") @db.Timestamptz(6)
+  odetteId          String   @map("odetteId") @db.Uuid
+  odetteCode        String   @map("odette_code")
+  odetteStatus      String   @map("odette_status")
+  odetteLocation    String?  @map("odette_location")
+  inventoryLotId    String?  @map("inventoryLotId") @db.Uuid
+  inventoryLotCode  String?  @map("inventory_lot_code")
+  productionLotId   String?  @map("productionLotId") @db.Uuid // Mappato da OdetteContent.lotId
+  productionLotCode String?  @map("production_lot_code")
+  itemId            String?  @map("itemId") @db.Uuid
+  itemName          String?  @map("item_name")
+  itemSku           String?  @map("item_sku")
+  productPartId     String?  @map("product_part_id") @db.Uuid
+  productPartName   String?  @map("product_part_name")
+  skuId             String?  @map("skuId") @db.Uuid
+  skuCode           String?  @map("sku_code")
+  assemblyStageId   String?  @map("assemblyStageId") @db.Uuid
+  assemblyStageType String?  @map("assembly_stage_type")
+  quantity          Int
+  createdAt         DateTime @map("createdAt") @db.Timestamptz(6)
+  updatedAt         DateTime @map("updatedAt") @db.Timestamptz(6)
 
   @@unique([odetteId, inventoryLotId, productionLotId, itemId, productPartId, skuId, assemblyStageId])
   @@map("v_odette_content_by_lot")
@@ -391,30 +391,30 @@ view VOdetteContentByLot {
 
 /// Audit trail: ogni movimento con dettagli lotto e operatore
 view VMovementByLot {
-  movementId        String    @unique @map("movement_id") @db.Uuid
-  movementDate      DateTime  @map("movement_date") @db.Timestamptz(6)
-  movementType      String    @map("movement_type")
+  movementId        String   @unique @map("movement_id") @db.Uuid
+  movementDate      DateTime @map("movement_date") @db.Timestamptz(6)
+  movementType      String   @map("movement_type")
   quantity          Int
-  byUserId          Int?      @map("byUserId")
-  userName          String?   @map("user_name")
-  lotId             String?   @map("lotId") @db.Uuid
-  inventoryLotCode  String?   @map("inventory_lot_code")
-  lotOriginType     String?   @map("lot_origin_type")
-  productionLotId   String?   @map("productionLotId") @db.Uuid
-  productionLotCode String?   @map("production_lot_code")
-  itemId            String?   @map("itemId") @db.Uuid
-  itemName          String?   @map("item_name")
-  itemSku           String?   @map("item_sku")
-  productPartId     String?   @map("productPartId") @db.Uuid
-  productPartName   String?   @map("product_part_name")
-  skuId             String?   @map("skuId") @db.Uuid
-  skuCode           String?   @map("sku_code")
-  odetteId          String?   @map("odetteId") @db.Uuid
-  odetteCode        String?   @map("odette_code")
-  assemblyStageId   String?   @map("assemblyStageId") @db.Uuid
-  assemblyStageType String?   @map("assembly_stage_type")
-  productId         String?   @map("productId") @db.Uuid
-  productName       String?   @map("product_name")
+  byUserId          Int?     @map("byUserId")
+  userName          String?  @map("user_name")
+  lotId             String?  @map("lotId") @db.Uuid
+  inventoryLotCode  String?  @map("inventory_lot_code")
+  lotOriginType     String?  @map("lot_origin_type")
+  productionLotId   String?  @map("productionLotId") @db.Uuid
+  productionLotCode String?  @map("production_lot_code")
+  itemId            String?  @map("itemId") @db.Uuid
+  itemName          String?  @map("item_name")
+  itemSku           String?  @map("item_sku")
+  productPartId     String?  @map("productPartId") @db.Uuid
+  productPartName   String?  @map("product_part_name")
+  skuId             String?  @map("skuId") @db.Uuid
+  skuCode           String?  @map("sku_code")
+  odetteId          String?  @map("odetteId") @db.Uuid
+  odetteCode        String?  @map("odette_code")
+  assemblyStageId   String?  @map("assemblyStageId") @db.Uuid
+  assemblyStageType String?  @map("assembly_stage_type")
+  productId         String?  @map("productId") @db.Uuid
+  productName       String?  @map("product_name")
 
   @@map("v_movement_by_lot")
   @@schema("inventory_views")

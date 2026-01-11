@@ -12,7 +12,7 @@ ON "print-farm"."PrintFarmNotification"("isBroadcast");
 
 -- Create PrintFarmNotificationPreference table
 CREATE TABLE "print-farm"."PrintFarmNotificationPreference" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "id" UUID NOT NULL,
     "userId" INTEGER NOT NULL,
     "type" "print-farm"."PrintFarmNotificationType" NOT NULL,
     "enabled" BOOLEAN NOT NULL DEFAULT true,

@@ -45,9 +45,9 @@ model User {
   notificationRecipients NotificationRecipient[]
 
   /// Notifiche Print Farm create da questo utente (audit/actor).
-  printFarmNotificationsCreated PrintFarmNotification[] @relation("PrintFarmNotificationCreatedBy")
+  printFarmNotificationsCreated    PrintFarmNotification[]           @relation("PrintFarmNotificationCreatedBy")
   /// Stato notifiche Print Farm ricevute da questo utente.
-  printFarmNotificationRecipients PrintFarmNotificationRecipient[]
+  printFarmNotificationRecipients  PrintFarmNotificationRecipient[]
   /// Preferenze notifiche Print Farm per questo utente.
   printFarmNotificationPreferences PrintFarmNotificationPreference[]
 

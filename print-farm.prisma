@@ -18,9 +18,9 @@ model ProjectThreeMFFile {
   plateNumber              Int      @default(1) // Numero del plate (index) per il comando di stampa
 
   /// Metadati estratti da `Metadata/slice_info.config` (Bambu Studio)
-  printerModelId String?  // es. "C12"
-  supportsUsed   Boolean  @default(false)
-  objectCount    Int      @default(0) // numero <object skipped="false" />
+  printerModelId String? // es. "C12"
+  supportsUsed   Boolean @default(false)
+  objectCount    Int     @default(0) // numero <object skipped="false" />
   /// Oggetti nel plate (per skip/selezione oggetti singoli in stampa)
   /// JSON array: [{ identifyId: number, name: string, skipped: boolean }]
   sliceObjects   Json?
@@ -68,7 +68,7 @@ model ProjectFileMaterial {
   /// Indice del filamento *nel 3MF* (0-based).
   /// Corrisponde alla posizione del filamento nell'elenco estratto da `Metadata/slice_info.config`
   /// (es. `fileFilaments[*].fileFilamentIndex`) e serve per ricostruire correttamente il mapping AMS/tray.
-  fileFilamentIndex Int @default(1)
+  fileFilamentIndex Int     @default(1)
   /// ID filamento in slice_info.config (spesso 1-based, string)
   fileFilamentId    String?
   /// tray_info_idx (es. GFB99)
@@ -188,12 +188,12 @@ model ProductionJob {
 }
 
 model PrintRun {
-  id         String    @id @default(uuid()) @db.Uuid
+  id               String    @id @default(uuid()) @db.Uuid
   /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
-  number     BigInt    @unique @default(autoincrement()) @db.BigInt
-  startedAt  DateTime? @db.Timestamptz(6)
-  finishedAt DateTime? @db.Timestamptz(6)
+  number           BigInt    @unique @default(autoincrement()) @db.BigInt
+  startedAt        DateTime? @db.Timestamptz(6)
+  finishedAt       DateTime? @db.Timestamptz(6)
   /// Quantità attesa/target per questa singola run.
   /// Utile per run con "skip oggetti" (es. completamento job) e per audit/metriche.
   expectedQuantity Int?
@@ -340,7 +340,10 @@ model Printer {
   currentMaterialId String?        @db.Uuid // ID dell'Item (filamento) attualmente caricato
   currentSpoolId    String?        @db.Uuid // ID della bobina (Virtuale o Fisica) attualmente montata
   currentSpool      FilamentSpool? @relation("ActiveSpool", fields: [currentSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  preferredTags     String[] // es. ["PETG", "BLACK", "PLA_SILK"] - per suggerire l'assegnazione
+
+  /// Categorie materiali preferite per questa stampante (relazione M2M con Category filtrate per ItemType.MATERIAL).
+  /// Serve per suggerire automaticamente l'assegnazione dei job in base al materiale richiesto.
+  preferredMaterialCategories PrinterPreferredMaterialCategory[]
 
   logs            PrinterLogs[]
   maintenanceLogs PrinterMaintenanceLog[]
@@ -355,7 +358,7 @@ model Printer {
   /// Assegnazioni job a questa stampante (coda di lavoro)
   assignments PrinterAssignment[]
 
-  /// PrintRun collegate direttamente a questa stampante (supporto run “unplanned/custom”).
+  /// PrintRun collegate direttamente a questa stampante (supporto run "unplanned/custom").
   /// Relazione separata da `assignments -> printRuns` quindi deve essere nominata.
   printRuns PrintRun[] @relation("PrintRunPrinter")
 
@@ -369,7 +372,7 @@ model Printer {
   amsSlots PrinterAmsSlot[] @relation("PrinterAmsSlots")
 
   /// Eventi di cambio stato per calcolo uptime/utilization
-  stateEvents PrinterStateEvent[]
+  stateEvents    PrinterStateEvent[]
   /// Eventi di downtime per KPI
   downtimeEvents PrinterDowntimeEvent[]
 
@@ -426,11 +429,11 @@ enum ErrorSeverity {
 /// Categoria funzionale dell'errore.
 /// Determina come il backend/UI reagiscono all'errore (es. impostare operationalStatus).
 enum ErrorCategory {
-  WARNING         // Avviso non bloccante, la stampa può continuare
-  RECOVERABLE     // Errore risolvibile senza intervento urgente
-  BLOCKING        // Errore bloccante, richiede intervento immediato
+  WARNING // Avviso non bloccante, la stampa può continuare
+  RECOVERABLE // Errore risolvibile senza intervento urgente
+  BLOCKING // Errore bloccante, richiede intervento immediato
   FILAMENT_RUNOUT // Filamento esaurito (runtime → FILAMENT_RUNOUT status)
-  IGNORE          // Errore ignorato (non mostrare notifiche/badge)
+  IGNORE // Errore ignorato (non mostrare notifiche/badge)
 
   @@schema("print-farm")
 }
@@ -570,13 +573,13 @@ enum PrinterManualOverrideStatus {
 /// Stato di un'assegnazione stampante per un ProductionJob.
 /// Flusso: SCHEDULED → QUEUED → PRINTING → TO_HARVEST → COMPLETED
 enum AssignmentStatus {
-  SCHEDULED  // Pianificato, NON parte automaticamente
-  QUEUED     // In coda attiva, lo scheduler lo avvia appena c'è budget kW
-  PRINTING   // In stampa attiva (1 solo per stampante)
+  SCHEDULED // Pianificato, NON parte automaticamente
+  QUEUED // In coda attiva, lo scheduler lo avvia appena c'è budget kW
+  PRINTING // In stampa attiva (1 solo per stampante)
   TO_HARVEST // Stampa finita, da scaricare
-  COMPLETED  // Scaricato, tutto fatto
-  FAILED     // Fallito
-  CANCELLED  // Annullato
+  COMPLETED // Scaricato, tutto fatto
+  FAILED // Fallito
+  CANCELLED // Annullato
 
   @@schema("print-farm")
 }
@@ -626,9 +629,9 @@ model PrinterAssignment {
   issues PrinterIssue[]
 
   // === Conteggi parti ===
-  partsExpected   Int // Parti totali attese per questa stampa (micro-assignment)
-  partsProduced   Int @default(0) // Parti prodotte ok
-  partsRejected   Int @default(0) // Parti scartate
+  partsExpected Int // Parti totali attese per questa stampa (micro-assignment)
+  partsProduced Int @default(0) // Parti prodotte ok
+  partsRejected Int @default(0) // Parti scartate
 
   // === Materiale ===
   /// Categoria materiale richiesto dal file (es. "PETG", "PLA")
@@ -642,7 +645,6 @@ model PrinterAssignment {
 
   // === Note ===
   notes String?
-
 
   /// Payload JSON per avvio stampa (usato dallo scheduler backend).
   /// Contiene tutte le informazioni per far partire la stampa anche a UI chiusa.
@@ -791,5 +793,24 @@ model PrinterFilamentLoad {
   @@index([printerId])
   @@index([loadedByUserId])
   @@index([loadedAt])
+  @@schema("print-farm")
+}
+
+/// Relazione M2M tra Printer e Category (solo per materiali).
+/// Serve per gestire le "preferenze materiale" della stampante in modo type-safe.
+/// Sostituisce il campo `Printer.preferredTags` (array di stringhe).
+model PrinterPreferredMaterialCategory {
+  printerId  String @db.Uuid
+  categoryId String @db.Uuid
+
+  printer  Printer  @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@id([printerId, categoryId])
+  @@index([printerId])
+  @@index([categoryId])
   @@schema("print-farm")
 }

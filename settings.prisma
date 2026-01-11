@@ -50,12 +50,12 @@ model CupsPrinter {
   /// Se NULL si usa la variabile d'ambiente (CUPS_BASE_URL) lato server.
   cupsServerUrl String?
 
-  kind         CupsPrinterKind @default(LABEL)
-  imageUrl     String?
-  description  String?
-  location     String?
-  isDefault    Boolean         @default(false)
-  isArchived   Boolean         @default(false)
+  kind        CupsPrinterKind @default(LABEL)
+  imageUrl    String?
+  description String?
+  location    String?
+  isDefault   Boolean         @default(false)
+  isArchived  Boolean         @default(false)
 
   /// Capacità/funzionalità dichiarative (non garantite) utili alla UI.
   supportsColor Boolean @default(false)
@@ -171,7 +171,7 @@ model CupsPrintProfile {
   kind CupsPrintJobKind
 
   /// Stampante selezionata per questa tipologia di job.
-  printerId String?     @db.Uuid
+  printerId String?      @db.Uuid
   printer   CupsPrinter? @relation("PrintProfilePrinter", fields: [printerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Formato etichetta selezionato per questa tipologia di job.

@@ -59,10 +59,10 @@ model InventoryLot {
   /// Stato logico del lotto (aperto/chiuso), indipendente dal conteggio movimenti
   status          InventoryLotStatus @default(OPEN)
 
-  itemId    String?  @db.Uuid
-  item      Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  productId String?  @db.Uuid
-  product   Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
+  itemId        String?      @db.Uuid
+  item          Item?        @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  productId     String?      @db.Uuid
+  product       Product?     @relation(fields: [productId], references: [id], onDelete: Restrict)
   /// Opzionale: lotto riferito a una singola ProductPart (per acquisti di parti esterne).
   productPartId String?      @db.Uuid
   productPart   ProductPart? @relation(fields: [productPartId], references: [id], onDelete: Restrict)
@@ -126,7 +126,7 @@ model WarehouseShelf {
 
   /// Codice della fila fisica (linea) su cui lo scaffale è posizionato (es. "A", "PF", "MAG-1").
   /// Serve per raggruppare più scaffali che, fisicamente, stanno sulla stessa fila.
-  lineCode String?
+  lineCode    String?
   /// Indice/progressivo dello scaffale all'interno della stessa fila (1..N).
   /// Utile per ordinare e calcolare "vicinanza" lungo la fila.
   indexInLine Int?

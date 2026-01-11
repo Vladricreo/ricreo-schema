@@ -7,13 +7,13 @@
 
 /// KPI aggregati ultimi 30 giorni.
 view VPfKpiTotals30d {
-  printsCount    Int     @unique @map("printsCount")
-  successQty     Int     @map("successQty")
-  failedQty      Int     @map("failedQty")
-  failureRatePct Decimal @map("failureRatePct") @db.Decimal(5, 2)
+  printsCount     Int     @unique @map("printsCount")
+  successQty      Int     @map("successQty")
+  failedQty       Int     @map("failedQty")
+  failureRatePct  Decimal @map("failureRatePct") @db.Decimal(5, 2)
   avgPrintTimeMin Decimal @map("avgPrintTimeMin") @db.Decimal(12, 2)
-  kwh            Decimal @db.Decimal(12, 3)
-  energyCost     Decimal @map("energyCost") @db.Decimal(12, 2)
+  kwh             Decimal @db.Decimal(12, 3)
+  energyCost      Decimal @map("energyCost") @db.Decimal(12, 2)
 
   @@map("v_pf_kpi_totals_30d")
   @@schema("print_farm_views")
@@ -97,14 +97,14 @@ view VPfMaintenanceMonthly {
 
 /// Riepilogo stato per stampante con issue aperte e ultima run.
 view VPfPrinterStatusSummary {
-  printerId           String    @unique @map("printerId") @db.Uuid
-  printerName         String    @map("printerName")
-  wssStatus           String    @map("wssStatus")
-  operationalStatus   String    @map("operationalStatus")
-  manualOverrideStatus String?  @map("manualOverrideStatus")
-  bedOccupied         Boolean   @map("bedOccupied")
-  openIssuesCount     Int       @map("openIssuesCount")
-  lastRunFinishedAt   DateTime? @map("lastRunFinishedAt") @db.Timestamptz(6)
+  printerId            String    @unique @map("printerId") @db.Uuid
+  printerName          String    @map("printerName")
+  wssStatus            String    @map("wssStatus")
+  operationalStatus    String    @map("operationalStatus")
+  manualOverrideStatus String?   @map("manualOverrideStatus")
+  bedOccupied          Boolean   @map("bedOccupied")
+  openIssuesCount      Int       @map("openIssuesCount")
+  lastRunFinishedAt    DateTime? @map("lastRunFinishedAt") @db.Timestamptz(6)
 
   @@map("v_pf_printer_status_summary")
   @@schema("print_farm_views")
@@ -139,4 +139,3 @@ view VPfFilamentConsumption30d {
   @@map("v_pf_filament_consumption_30d")
   @@schema("print_farm_views")
 }
-

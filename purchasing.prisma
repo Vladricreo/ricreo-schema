@@ -25,24 +25,24 @@ model PurchaseOrder {
 /// Riga di un ordine di acquisto per un singolo Item (materia prima, componente, ecc.).
 /// Collega quantità, prezzo e lotti di acquisto (InventoryLot) all'ordine fornitore.
 model PurchaseOrderLine {
-  id        String   @id @default(uuid()) @db.Uuid
+  id            String   @id @default(uuid()) @db.Uuid
   /// Progressivo numerico globale (BIGINT Postgres) per uso umano/reportistica.
   /// Se in futuro vuoi il progressivo "per ordine" (1..N), serve una strategia diversa (trigger/logic applicativa).
-  number    BigInt   @unique @default(autoincrement()) @db.BigInt
-  orderId   String   @db.Uuid
+  number        BigInt   @unique @default(autoincrement()) @db.BigInt
+  orderId       String   @db.Uuid
   /// Riferimento alla riga acquistata:
   /// - `itemId` per acquisti di Item (materie prime, componenti, packaging, ecc.)
   /// - `productPartId` per acquisti di ProductPart (parti esterne)
   /// Nota: una sola tra `itemId` e `productPartId` dovrebbe essere valorizzata.
-  itemId         String? @db.Uuid
-  productPartId  String? @db.Uuid
-  quantity  Int
+  itemId        String?  @db.Uuid
+  productPartId String?  @db.Uuid
+  quantity      Int
   /// MIGLIORIA: Decimal per prezzo riga
-  pricePaid Decimal? @db.Decimal(12, 2)
+  pricePaid     Decimal? @db.Decimal(12, 2)
 
-  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  item        Item?        @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  productPart ProductPart? @relation(fields: [productPartId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  item        Item?         @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  productPart ProductPart?  @relation(fields: [productPartId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   lots InventoryLot[]
 
@@ -61,7 +61,7 @@ model Supplier {
   name                String          @unique
   website             String?
   email               String?
-  leadTime            Int           @default(7)
+  leadTime            Int             @default(7)
   apiToken            String?
   apiKey              String?
   apiSecret           String?
@@ -70,7 +70,7 @@ model Supplier {
   associatedItemTypes ItemType[]      @default([])
   items               Item[]
   /// Parti acquistabili collegate a questo fornitore (campo opposto di `ProductPart.supplier`).
-  productParts        ProductPart[] @relation("SupplierProductParts")
+  productParts        ProductPart[]   @relation("SupplierProductParts")
   purchaseOrders      PurchaseOrder[]
   lots                InventoryLot[]
 
