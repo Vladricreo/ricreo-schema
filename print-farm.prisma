@@ -251,6 +251,10 @@ model PrintRun {
   /// Metriche aggiuntive per questa run (consumo filamento, scarto)
   metrics PrintRunMetrics?
 
+  /// Operazioni di raccolta pezzi associate a questa run.
+  /// Utile specialmente per run unplanned/manuali dove l'assignment potrebbe non essere significativa.
+  harvests PrinterHarvest[]
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -703,6 +707,12 @@ model PrinterHarvest {
   printerId String  @db.Uuid
   printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
+  /// PrintRun associata a questa raccolta (opzionale).
+  /// Utile per tracciare direttamente quale run ha prodotto i pezzi,
+  /// specialmente per stampe unplanned/manuali dove l'assignment è meno significativa.
+  printRunId String?   @db.Uuid
+  printRun   PrintRun? @relation(fields: [printRunId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   /// Odette di destinazione (opzionale).
   /// Serve per permettere lo scarico anche quando non c'è un contenitore disponibile.
   odetteId String? @db.Uuid
@@ -741,6 +751,7 @@ model PrinterHarvest {
 
   @@index([assignmentId])
   @@index([printerId])
+  @@index([printRunId])
   @@index([odetteId])
   @@index([harvestedByUserId])
   @@index([harvestedAt])
