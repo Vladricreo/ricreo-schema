@@ -133,6 +133,14 @@ model PrinterAmsSlot {
   spoolId String?        @unique @db.Uuid
   spool   FilamentSpool? @relation("AmsSlotSpool", fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Snapshot "reported" dalla stampante (NON tracciamento spool).
+  /// Serve per salvare materiale/colore anche quando non abbiamo una FilamentSpool assegnata.
+  /// Non deve sovrascrivere la spool "reale" (spoolId) scelta dal frontend.
+  reportedMaterialType String? // es. "PLA", "ABS", "PETG"
+  reportedColor        String? // es. "BLACK", "RED", "#FF0000" (best-effort)
+  reportedTrayInfoIdx  String? // es. "GFB99" (Bambu tray_info_idx) - opzionale
+  reportedLastSeenAt   DateTime? @db.Timestamptz(6)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 

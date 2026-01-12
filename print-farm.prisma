@@ -345,6 +345,15 @@ model Printer {
   currentSpoolId    String?        @db.Uuid // ID della bobina (Virtuale o Fisica) attualmente montata
   currentSpool      FilamentSpool? @relation("ActiveSpool", fields: [currentSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Snapshot "reported" dalla stampante per la spool esterna (NON tracciamento spool).
+  /// Serve a salvare materiale/colore visto dalla stampante anche se:
+  /// - non abbiamo ancora creato/assegnato una FilamentSpool tracciata
+  /// - il frontend decide di assegnare una spool/materiale diverso (questi campi restano separati)
+  externalReportedMaterialType String? // es. "PLA", "ABS", "PETG"
+  externalReportedColor        String? // es. "BLACK", "RED", "#FF0000" (best-effort)
+  externalReportedTrayInfoIdx  String? // se disponibile (Bambu tray_info_idx)
+  externalReportedLastSeenAt   DateTime? @db.Timestamptz(6)
+
   /// Categorie materiali preferite per questa stampante (relazione M2M con Category filtrate per ItemType.MATERIAL).
   /// Serve per suggerire automaticamente l'assegnazione dei job in base al materiale richiesto.
   preferredMaterialCategories PrinterPreferredMaterialCategory[]
