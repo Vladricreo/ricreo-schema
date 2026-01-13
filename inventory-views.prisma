@@ -419,3 +419,26 @@ view VMovementByLot {
   @@map("v_movement_by_lot")
   @@schema("inventory_views")
 }
+
+/// Progress per stage per AssemblyOrder (audit per-task)
+/// - quantità STAGE_IN / STAGE_OUT / TRASH / USO / PRODUZIONE per stage
+/// - pensata per essere filtrata per `assemblyOrderId`
+view VAssemblyOrderStageProgress {
+  assemblyOrderId   String   @map("assembly_order_id") @db.Uuid
+  assemblyStageId   String?  @map("assembly_stage_id") @db.Uuid
+  assemblyStageType String?  @map("assembly_stage_type")
+
+  qtyStageIn   BigInt @map("qty_stage_in")
+  qtyStageOut  BigInt @map("qty_stage_out")
+  qtyScrapped  BigInt @map("qty_scrapped")
+  qtyUsed      BigInt @map("qty_used")
+  qtyProduced  BigInt @map("qty_produced")
+  wipDelta     BigInt @map("wip_delta")
+
+  firstMovementAt DateTime @map("first_movement_at") @db.Timestamptz(6)
+  lastMovementAt  DateTime @map("last_movement_at") @db.Timestamptz(6)
+
+  @@unique([assemblyOrderId, assemblyStageId])
+  @@map("v_assembly_order_stage_progress")
+  @@schema("inventory_views")
+}

@@ -12,6 +12,12 @@ model Movement {
   byUserId        Int?              @db.Integer
   byUser          User?             @relation(fields: [byUserId], references: [id], onDelete: SetNull)
   productId       String?           @db.Uuid
+  /// Collega il movimento all'ordine di assemblaggio (audit per-task).
+  assemblyOrderId String?           @db.Uuid
+  assemblyOrder   AssemblyOrder?    @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Collega il movimento all'ordine di produzione (per progetti futuri / audit).
+  productOrderId  String?           @db.Uuid
+  productOrder    ProductOrder?     @relation(fields: [productOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   assemblyStageId String?           @db.Uuid
   productPartId   String?           @db.Uuid
   /// Perché: tracciare quando l'uscita è FBM o FBA; WIP resta NULL (condiviso).
@@ -40,6 +46,10 @@ model Movement {
   @@index([odetteId])
   @@index([lotId])
   @@index([byUserId])
+  @@index([assemblyOrderId])
+  @@index([productOrderId])
+  @@index([assemblyOrderId, assemblyStageId, type])
+  @@index([assemblyOrderId, date(sort: Desc)])
   @@index([date(sort: Desc)])
   @@schema("inventory")
 }

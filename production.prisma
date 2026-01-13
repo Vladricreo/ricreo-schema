@@ -38,6 +38,7 @@ model ProductOrder {
 
   /// Job di stampa 3D generati da questo ordine (uno per parte)
   productionJobs ProductionJob[] @relation("ProductOrderJobs")
+  movements      Movement[]
 
   @@index([skuId])
   @@index([assemblyOrderId])
@@ -106,6 +107,8 @@ model AssemblyOrder {
   productOrders     ProductOrder[]      @relation("AssemblyOrderToProductItemOrder")
   OdetteReservation OdetteReservation[]
   lots              InventoryLot[]
+  /// Movimenti inventario collegati a questo ordine di assemblaggio (audit).
+  movements         Movement[]
   operations        AssemblyOperation[]
 
   /// Assegnazioni odette per questo ordine (traccia quali odette sono in uso per ogni stage)
