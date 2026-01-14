@@ -309,6 +309,10 @@ model Printer {
   /// deterministica che combina: override manuale + issue attive + assignment/coda + stato WSS.
   operationalStatus PrinterOperationalStatus @default(AVAILABLE)
 
+  /// True quando serve cambio filamento (colore/materiale) per poter far partire il prossimo job.
+  /// È un flag persistente “overlay” separato da `operationalStatus` per evitare conflitti.
+  needsFilamentSwap Boolean @default(false)
+
   /// True quando il piatto è *attivamente* in riscaldamento verso il target (indipendente da operationalStatus).
   /// Viene aggiornato dal backend in base a `bedTemp` e `bedTargetTemp` con isteresi (evita toggle rapido).
   isBedHeating Boolean @default(false)
@@ -329,12 +333,13 @@ model Printer {
   manualOverrideAt     DateTime?                    @db.Timestamptz(6)
 
   /// --- STATO PIATTO / SCARICO ---
-  /// True quando il piatto è considerato "occupato" e serve scarico (anche in caso di FAILED).
-  bedOccupied             Boolean            @default(false)
-  bedOccupiedAt           DateTime?          @db.Timestamptz(6)
+  /// True quando il piatto ha una stampa completata/terminata e richiede scarico pezzi.
+  /// È un flag persistente “overlay” separato da `operationalStatus` per evitare conflitti.
+  hasCompletedPrintOnBed Boolean @default(false)
+  hasCompletedPrintOnBedAt DateTime? @db.Timestamptz(6)
   /// Assignment che attualmente "occupa" il piatto (se noto).
-  bedOccupiedAssignmentId String?            @unique @db.Uuid
-  bedOccupiedAssignment   PrinterAssignment? @relation("BedOccupiedAssignment", fields: [bedOccupiedAssignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  hasCompletedPrintOnBedAssignmentId String? @unique @db.Uuid
+  hasCompletedPrintOnBedAssignment   PrinterAssignment? @relation("BedOccupiedAssignment", fields: [hasCompletedPrintOnBedAssignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Posizione fisica della stampante nella print farm (fila/slot di magazzino).
   locationId String?            @db.Uuid
@@ -394,7 +399,7 @@ model Printer {
 
   @@index([operationalStatus])
   @@index([manualOverrideStatus])
-  @@index([bedOccupied])
+  @@index([hasCompletedPrintOnBed])
   @@index([locationId])
   @@schema("print-farm")
 }
@@ -566,9 +571,7 @@ enum PrinterOperationalStatus {
   QUEUED // Ha job in coda, in attesa di partire (non ancora in stampa)
   PRINTING // In stampa attiva (distingue da QUEUED che indica solo "in coda")
   NEEDS_SETUP // Richiede setup (file/configurazione) - ex TO_LOAD
-  TO_HARVEST // Stampa completata, richiede scarico pezzi
   FILAMENT_RUNOUT // Filamento finito durante stampa (richiede ricarica)
-  FILAMENT_SWAP_NEEDED // Serve cambio colore/materiale per prossimo job
   ERROR // Errore bloccante (richiede intervento)
 
   @@schema("print-farm")
@@ -579,6 +582,7 @@ enum PrinterOperationalStatus {
 enum PrinterManualOverrideStatus {
   MAINTENANCE
   DISABLED
+  MANUAL_PRINTING
 
   @@schema("print-farm")
 }
@@ -618,7 +622,7 @@ model PrinterAssignment {
 
   /// Relazione 1:1 (opzionale) per tracciare quale assignment "occupa" il piatto.
   /// È una relazione separata da `printer` quindi deve essere nominata.
-  bedOccupiedOn Printer? @relation("BedOccupiedAssignment")
+  hasCompletedPrintOnBedOn Printer? @relation("BedOccupiedAssignment")
 
   /// Posizione in coda (0 = attuale, 1+ = in attesa)
   queuePosition Int              @default(0)

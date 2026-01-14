@@ -102,7 +102,8 @@ view VPfPrinterStatusSummary {
   wssStatus            String    @map("wssStatus")
   operationalStatus    String    @map("operationalStatus")
   manualOverrideStatus String?   @map("manualOverrideStatus")
-  bedOccupied          Boolean   @map("bedOccupied")
+  hasCompletedPrintOnBed Boolean @map("hasCompletedPrintOnBed")
+  needsFilamentSwap    Boolean   @map("needsFilamentSwap")
   openIssuesCount      Int       @map("openIssuesCount")
   lastRunFinishedAt    DateTime? @map("lastRunFinishedAt") @db.Timestamptz(6)
 
