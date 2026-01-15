@@ -424,16 +424,16 @@ view VMovementByLot {
 /// - quantità STAGE_IN / STAGE_OUT / TRASH / USO / PRODUZIONE per stage
 /// - pensata per essere filtrata per `assemblyOrderId`
 view VAssemblyOrderStageProgress {
-  assemblyOrderId   String   @map("assembly_order_id") @db.Uuid
-  assemblyStageId   String?  @map("assembly_stage_id") @db.Uuid
-  assemblyStageType String?  @map("assembly_stage_type")
+  assemblyOrderId   String  @map("assembly_order_id") @db.Uuid
+  assemblyStageId   String? @map("assembly_stage_id") @db.Uuid
+  assemblyStageType String? @map("assembly_stage_type")
 
-  qtyStageIn   BigInt @map("qty_stage_in")
-  qtyStageOut  BigInt @map("qty_stage_out")
-  qtyScrapped  BigInt @map("qty_scrapped")
-  qtyUsed      BigInt @map("qty_used")
-  qtyProduced  BigInt @map("qty_produced")
-  wipDelta     BigInt @map("wip_delta")
+  qtyStageIn  BigInt @map("qty_stage_in")
+  qtyStageOut BigInt @map("qty_stage_out")
+  qtyScrapped BigInt @map("qty_scrapped")
+  qtyUsed     BigInt @map("qty_used")
+  qtyProduced BigInt @map("qty_produced")
+  wipDelta    BigInt @map("wip_delta")
 
   firstMovementAt DateTime @map("first_movement_at") @db.Timestamptz(6)
   lastMovementAt  DateTime @map("last_movement_at") @db.Timestamptz(6)

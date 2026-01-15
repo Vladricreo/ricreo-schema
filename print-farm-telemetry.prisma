@@ -14,6 +14,14 @@ model PrinterStateEvent {
   printerId String  @db.Uuid
   printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
+  /// (Opzionale) Run/Assignment associati, per correlazione robusta in presenza di riavvii / taskId tardivo.
+  /// Sono opzionali perché molti eventi sono "di stampante" e non necessariamente legati ad una stampa.
+  printRunId String?   @db.Uuid
+  printRun   PrintRun? @relation("PrintRunStateEvents", fields: [printRunId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  assignmentId String?            @db.Uuid
+  assignment   PrinterAssignment? @relation("AssignmentStateEvents", fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   /// Stato operativo precedente (NULL se primo evento)
   fromOperationalStatus String?
   /// Stato operativo attuale
@@ -36,6 +44,8 @@ model PrinterStateEvent {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([printerId, at(sort: Desc)])
+  @@index([printRunId, at(sort: Desc)])
+  @@index([assignmentId, at(sort: Desc)])
   @@index([toOperationalStatus, at(sort: Desc)])
   @@index([at(sort: Desc)])
   @@schema("print-farm")
@@ -51,6 +61,13 @@ model PrinterDowntimeEvent {
 
   printerId String  @db.Uuid
   printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// (Opzionale) Run/Assignment associati al downtime, per correlare fermi a stampe specifiche.
+  printRunId String?   @db.Uuid
+  printRun   PrintRun? @relation("PrintRunDowntimeEvents", fields: [printRunId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  assignmentId String?            @db.Uuid
+  assignment   PrinterAssignment? @relation("AssignmentDowntimeEvents", fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Categoria del fermo (riuso PrinterIssueCategory)
   category String @default("OTHER") // FILAMENT, BED, PRINT, NETWORK, MAINTENANCE, SAFETY, OTHER
@@ -78,6 +95,8 @@ model PrinterDowntimeEvent {
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([printerId, openedAt(sort: Desc)])
+  @@index([printRunId, openedAt(sort: Desc)])
+  @@index([assignmentId, openedAt(sort: Desc)])
   @@index([category, openedAt(sort: Desc)])
   @@index([resolvedAt(sort: Desc)])
   @@index([openedAt(sort: Desc)])

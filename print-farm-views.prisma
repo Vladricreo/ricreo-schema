@@ -97,15 +97,15 @@ view VPfMaintenanceMonthly {
 
 /// Riepilogo stato per stampante con issue aperte e ultima run.
 view VPfPrinterStatusSummary {
-  printerId            String    @unique @map("printerId") @db.Uuid
-  printerName          String    @map("printerName")
-  wssStatus            String    @map("wssStatus")
-  operationalStatus    String    @map("operationalStatus")
-  manualOverrideStatus String?   @map("manualOverrideStatus")
-  hasCompletedPrintOnBed Boolean @map("hasCompletedPrintOnBed")
-  needsFilamentSwap    Boolean   @map("needsFilamentSwap")
-  openIssuesCount      Int       @map("openIssuesCount")
-  lastRunFinishedAt    DateTime? @map("lastRunFinishedAt") @db.Timestamptz(6)
+  printerId              String    @unique @map("printerId") @db.Uuid
+  printerName            String    @map("printerName")
+  wssStatus              String    @map("wssStatus")
+  operationalStatus      String    @map("operationalStatus")
+  manualOverrideStatus   String?   @map("manualOverrideStatus")
+  hasCompletedPrintOnBed Boolean   @map("hasCompletedPrintOnBed")
+  needsFilamentSwap      Boolean   @map("needsFilamentSwap")
+  openIssuesCount        Int       @map("openIssuesCount")
+  lastRunFinishedAt      DateTime? @map("lastRunFinishedAt") @db.Timestamptz(6)
 
   @@map("v_pf_printer_status_summary")
   @@schema("print_farm_views")

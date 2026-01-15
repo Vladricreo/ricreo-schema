@@ -251,6 +251,12 @@ model PrintRun {
   /// Metriche aggiuntive per questa run (consumo filamento, scarto)
   metrics PrintRunMetrics?
 
+  /// Telemetria (opzionale) correlata a questa run:
+  /// - eventi di cambio stato (quando si riesce a determinare printRunId)
+  /// - eventi di downtime correlati
+  stateEvents    PrinterStateEvent[]    @relation("PrintRunStateEvents")
+  downtimeEvents PrinterDowntimeEvent[] @relation("PrintRunDowntimeEvents")
+
   /// Operazioni di raccolta pezzi associate a questa run.
   /// Utile specialmente per run unplanned/manuali dove l'assignment potrebbe non essere significativa.
   harvests PrinterHarvest[]
@@ -335,10 +341,10 @@ model Printer {
   /// --- STATO PIATTO / SCARICO ---
   /// True quando il piatto ha una stampa completata/terminata e richiede scarico pezzi.
   /// È un flag persistente “overlay” separato da `operationalStatus` per evitare conflitti.
-  hasCompletedPrintOnBed Boolean @default(false)
-  hasCompletedPrintOnBedAt DateTime? @db.Timestamptz(6)
+  hasCompletedPrintOnBed             Boolean            @default(false)
+  hasCompletedPrintOnBedAt           DateTime?          @db.Timestamptz(6)
   /// Assignment che attualmente "occupa" il piatto (se noto).
-  hasCompletedPrintOnBedAssignmentId String? @unique @db.Uuid
+  hasCompletedPrintOnBedAssignmentId String?            @unique @db.Uuid
   hasCompletedPrintOnBedAssignment   PrinterAssignment? @relation("BedOccupiedAssignment", fields: [hasCompletedPrintOnBedAssignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Posizione fisica della stampante nella print farm (fila/slot di magazzino).
@@ -641,6 +647,12 @@ model PrinterAssignment {
 
   /// Run effettive collegate a questa assignment (storico esecuzioni reali).
   printRuns PrintRun[]
+
+  /// Telemetria (opzionale) correlata a questa assignment:
+  /// - eventi di cambio stato (quando si riesce a determinare assignmentId)
+  /// - eventi di downtime correlati
+  stateEvents    PrinterStateEvent[]    @relation("AssignmentStateEvents")
+  downtimeEvents PrinterDowntimeEvent[] @relation("AssignmentDowntimeEvents")
 
   /// Issue operative/tecniche collegate a questa assignment (opzionale).
   issues PrinterIssue[]
