@@ -51,6 +51,9 @@ model ProjectThreeMFFile {
   parts          ProjectPart[]         @relation("ProjectParts")
   feedbacks      FarmFeedback[]
 
+  /// Task di accodamento persistenti (flusso "send to print")
+  queueTasks QueueTask[] @relation("FileQueueTasks")
+
   @@index([productId])
   @@index([status])
   @@index([previousVersionId])
@@ -177,6 +180,9 @@ model ProductionJob {
   /// Assegnazioni stampanti per questo job
   printerAssignments PrinterAssignment[]
 
+  /// Task di accodamento persistenti (flusso "send to print")
+  queueTasks QueueTask[] @relation("JobQueueTasks")
+
   failureLogs PrintFailureLog[]
 
   @@index([productOrderId])
@@ -260,6 +266,9 @@ model PrintRun {
   /// Operazioni di raccolta pezzi associate a questa run.
   /// Utile specialmente per run unplanned/manuali dove l'assignment potrebbe non essere significativa.
   harvests PrinterHarvest[]
+
+  /// Task di accodamento che ha generato questa run (se presente)
+  queueTask QueueTask? @relation("QueueTaskPrintRun")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -399,6 +408,9 @@ model Printer {
   stateEvents    PrinterStateEvent[]
   /// Eventi di downtime per KPI
   downtimeEvents PrinterDowntimeEvent[]
+
+  /// Task di accodamento persistenti (flusso "send to print")
+  queueTasks QueueTask[] @relation("PrinterQueueTasks")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -679,6 +691,9 @@ model PrinterAssignment {
   /// Contiene tutte le informazioni per far partire la stampa anche a UI chiusa.
   /// Schema (v1): { version: 1, printerSerial, fileId?, filenameToPrint, plateNumber, useAms, amsMapping, options }
   startPayload Json?
+
+  /// Task di accodamento persistenti (flusso "send to print")
+  queueTasks QueueTask[] @relation("AssignmentQueueTasks")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

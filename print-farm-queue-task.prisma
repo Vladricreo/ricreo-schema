@@ -1,0 +1,87 @@
+/// Task di accodamento persistenti per il flusso "send to print".
+/// Permette di riprendere l'accodamento anche dopo page reload.
+/// 
+/// Flusso:
+/// 1. Utente seleziona stampanti e clicca "Accoda"
+/// 2. Si creano QueueTask con status PENDING
+/// 3. Un hook client-side processa i task (check file, upload, queue)
+/// 4. Stato e progresso sono salvati in DB
+/// 5. Se l'utente ricarica la pagina, il processo riprende
+/// 6. Task completati/errore vengono auto-eliminati dopo un certo tempo
+model QueueTask {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Batch ID per raggruppare task creati insieme
+  batchId String @db.Uuid
+
+  /// Stampante target
+  printerId     String  @db.Uuid
+  printer       Printer @relation("PrinterQueueTasks", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  printerName   String  @db.VarChar(255)
+  printerSerial String? @db.VarChar(255)
+
+  /// Assignment da accodare
+  assignmentId    String?            @db.Uuid
+  assignment      PrinterAssignment? @relation("AssignmentQueueTasks", fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productionJobId String?            @db.Uuid
+  productionJob   ProductionJob?     @relation("JobQueueTasks", fields: [productionJobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  fileId          String?            @db.Uuid
+  file            ProjectThreeMFFile? @relation("FileQueueTasks", fields: [fileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Stato del task
+  status QueueTaskStatus @default(PENDING)
+
+  /// Progress tracking
+  uploadProgress Int?
+  uploadId       String? @db.VarChar(255)
+  filePresence   String? @default("unknown") @db.VarChar(50) // 'unknown' | 'present' | 'missing'
+  foundFilename  String? @db.VarChar(255)
+
+  /// Info per UI
+  jobName          String? @db.VarChar(255)
+  fileName         String? @db.VarChar(255)
+  thumbnailUrl     String?
+  currentMaterial  String? @db.VarChar(100)
+  currentColor     String? @db.VarChar(100)
+  requiredMaterial String? @db.VarChar(100)
+  requiredColor    String? @db.VarChar(100)
+  requiredMaterials Json? // Array di { material: string, color: string | null }
+  amsSlots          Json? // Array di { amsUnit: number, slot: number, material: string | null, color: string | null }
+
+  /// Risultato
+  queuePosition Int?
+  printRunId    String?   @unique @db.Uuid
+  printRun      PrintRun? @relation("QueueTaskPrintRun", fields: [printRunId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  error         String?
+
+  /// Timing
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  startedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+
+  /// Auto-cleanup: task completati/errore possono essere eliminati dopo un certo tempo
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  @@index([batchId])
+  @@index([printerId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@index([expiresAt])
+  @@schema("print-farm")
+}
+
+/// Stato del task di accodamento
+enum QueueTaskStatus {
+  PENDING    // In attesa di essere processato
+  CHECKING   // Verifica file sulla stampante
+  UPLOADING  // Upload file sulla stampante
+  PROCESSING // Calcolo skip/mapping
+  QUEUING    // Accodamento in corso (chiamata API)
+  COMPLETED  // Completato con successo (assignment QUEUED)
+  SKIPPED    // Saltato (es. filamento mismatch)
+  ERROR      // Errore durante il processo
+  CANCELLED  // Annullato dall'utente
+
+  @@schema("print-farm")
+}
