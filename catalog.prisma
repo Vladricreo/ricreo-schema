@@ -176,7 +176,9 @@ model ProductPart {
 
   // Relazioni Print Farm
   projectParts   ProjectPart[]
+  projectFiles   ProjectThreeMFFile[] @relation("ProductPartFiles")
   productionJobs ProductionJob[]
+  printerAssignments PrinterAssignment[] @relation("ProductPartAssignments")
 
   @@index([productId])
   @@index([supplierId])

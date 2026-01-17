@@ -45,6 +45,10 @@ model ProjectThreeMFFile {
   printRuns      PrintRun[]
   productId      String?               @db.Uuid
   product        Product?              @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Parte principale associata al file (opzionale).
+  /// Nota: il dettaglio multi-parte rimane in `ProjectPart`, ma questo campo serve per risoluzioni rapide e affidabili.
+  productPartId  String?               @db.Uuid
+  productPart    ProductPart?          @relation("ProductPartFiles", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   materials      Item[] // Relazione legacy (per compatibilità)
   fileMaterials  ProjectFileMaterial[] // Nuova relazione con peso specifico del file
   productionJobs ProductionJob[]       @relation("JobsToFiles")
@@ -55,6 +59,7 @@ model ProjectThreeMFFile {
   queueTasks QueueTask[] @relation("FileQueueTasks")
 
   @@index([productId])
+  @@index([productPartId])
   @@index([status])
   @@index([previousVersionId])
   @@schema("print-farm")
@@ -635,6 +640,13 @@ model PrinterAssignment {
   productionJobId String?        @db.Uuid
   productionJob   ProductionJob? @relation(fields: [productionJobId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
+  /// Parte (ProductPart) collegata a questa assignment.
+  ///
+  /// Serve a selezionare sempre il file corretto (APPROVED > DRAFT) per la parte,
+  /// anche per stampe "unplanned" o quando startPayload.fileId è inattendibile.
+  productPartId String?      @db.Uuid
+  productPart   ProductPart? @relation("ProductPartAssignments", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   /// Stampante assegnata
   printerId String  @db.Uuid
   printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -704,6 +716,7 @@ model PrinterAssignment {
   /// possono esistere più assignment (in coda).
   @@index([productionJobId, printerId])
   @@index([productionJobId])
+  @@index([productPartId])
   @@index([printerId])
   @@index([status])
   @@index([queuePosition])
