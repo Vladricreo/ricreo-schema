@@ -455,24 +455,7 @@ model PrinterMacro {
   @@schema("print-farm")
 }
 
-enum ErrorSeverity {
-  WARNING
-  CRITICAL
 
-  @@schema("print-farm")
-}
-
-/// Categoria funzionale dell'errore.
-/// Determina come il backend/UI reagiscono all'errore (es. impostare operationalStatus).
-enum ErrorCategory {
-  WARNING // Avviso non bloccante, la stampa può continuare
-  RECOVERABLE // Errore risolvibile senza intervento urgente
-  BLOCKING // Errore bloccante, richiede intervento immediato
-  FILAMENT_RUNOUT // Filamento esaurito (runtime → FILAMENT_RUNOUT status)
-  IGNORE // Errore ignorato (non mostrare notifiche/badge)
-
-  @@schema("print-farm")
-}
 
 model ErrorCode {
   id            Int            @id @default(autoincrement())
@@ -497,7 +480,24 @@ model ErrorCode {
   @@index([category])
   @@schema("print-farm")
 }
+enum ErrorSeverity {
+  WARNING
+  CRITICAL
 
+  @@schema("print-farm")
+}
+
+/// Categoria funzionale dell'errore.
+/// Determina come il backend/UI reagiscono all'errore (es. impostare operationalStatus).
+enum ErrorCategory {
+  WARNING // Avviso non bloccante, la stampa può continuare
+  RECOVERABLE // Errore risolvibile senza intervento urgente
+  BLOCKING // Errore bloccante, richiede intervento immediato
+  FILAMENT_RUNOUT // Filamento esaurito (runtime → FILAMENT_RUNOUT status)
+  IGNORE // Errore ignorato (non mostrare notifiche/badge)
+
+  @@schema("print-farm")
+}
 enum ErrorType {
   HMS
   PRINTING
@@ -544,6 +544,7 @@ enum SettingsType {
   WORKDAYS
   USER
   GENERAL
+  SCHEDULER_PAUSED
 
   @@schema("print-farm")
 }
