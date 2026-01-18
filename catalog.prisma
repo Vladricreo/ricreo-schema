@@ -11,6 +11,12 @@ model Item {
   weight           Decimal? @db.Decimal(12, 2) /// prima: Float?
   /// Tipologia di articolo (es. MATERIALE, IMBALLAGGIO, COMPONENTE).
   type             ItemType
+
+  /// Specifica/famiglia logica a cui questo Item appartiene (per gestire alternative/fallback).
+  itemSpecId   String? @db.Uuid
+  /// Priorità del variant dentro la stessa spec (0 = default/preferito).
+  specPriority Int     @default(0)
+
   categoryId       String?  @db.Uuid
   colorId          String?  @db.Uuid
   brandId          String?  @db.Uuid
@@ -41,20 +47,17 @@ model Item {
   standardWeight StandardWeight?    @relation(fields: [standardWeightId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   supplier       Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   dimensions     Dimensions?        @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  itemSpec       ItemSpec?          @relation(fields: [itemSpecId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Allocazioni multi-location per questo Item (quantità per slot).
   warehouseItemAllocations WarehouseItemAllocation[]
 
   movements Movement[]
 
-  productComponents         ProductToComponent[]
-  productPackages           ProductToPackage[]
-  productTools              ProductToTool[]
-  productUtilities          ProductToUtility[]
+  /// Override (emergenze) che forzano questo Item come variant per una spec.
+  itemSpecOverrideEntries ItemSpecOverride[] @relation("ItemSpecOverrideItem")
+
   parts                     ProductPart[]         @relation("ItemToItemPart")
-  /// Distinta base (BOM) delle parti: materiali e grammi per singola parte.
-  /// Nota: è separata da `parts` perché serve una join con campi (peso, note, ecc.).
-  partMaterials             ProductPartMaterial[]
   ordersofitemforproduction ProductOrderItem[]
   purchaseOrderLines        PurchaseOrderLine[]
   product                   Product[]
@@ -76,6 +79,72 @@ model Item {
   @@index([brandId])
   @@index([supplierId])
   @@index([locationId])
+  @@index([itemSpecId, specPriority])
+  @@schema("inventory")
+}
+
+/// Specifica/famiglia logica di Item intercambiabili (per BOM e fallback).
+/// Esempi: "Scatola 20x10x30", "PLA Nero 1kg", "Vite M3x10".
+model ItemSpec {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+  type ItemType
+
+  /// Solo per spec di PACKAGING: collega un PackagingType (PRIMARY/SECONDARY/OTHERS).
+  packagingTypeId String?        @db.Uuid
+  packagingType   PackagingType? @relation(fields: [packagingTypeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  notes      String?
+  properties Json?
+
+  items     Item[]
+  overrides ItemSpecOverride[]
+
+  /// BOM: il prodotto richiede una spec (non un item specifico)
+  productComponents ProductToComponent[]
+  productPackages   ProductToPackage[]
+  productTools      ProductToTool[]
+  productUtilities  ProductToUtility[]
+  partMaterials     ProductPartMaterial[]
+
+  movements Movement[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([type])
+  @@index([name])
+  @@index([packagingTypeId])
+  @@schema("inventory")
+}
+
+/// Override temporaneo: forza un Item specifico come variant attivo per una spec.
+/// Usato per sostituzioni straordinarie con autorizzazione e motivo.
+model ItemSpecOverride {
+  id String @id @default(uuid()) @db.Uuid
+
+  specId String @unique @db.Uuid
+  spec   ItemSpec @relation(fields: [specId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  itemId String @db.Uuid
+  item   Item   @relation("ItemSpecOverrideItem", fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  isActive Boolean @default(true)
+  startsAt DateTime @default(now()) @db.Timestamptz(6)
+  endsAt   DateTime? @db.Timestamptz(6)
+
+  /// Motivo operatore/supervisor (audit).
+  reason String
+
+  approvedByUserId Int? @db.Integer
+  approvedByUser   User? @relation("ApprovedItemSpecOverrides", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([itemId])
+  @@index([isActive])
+  @@index([approvedByUserId])
   @@schema("inventory")
 }
 
@@ -193,8 +262,8 @@ model ProductPartMaterial {
   productPartId String      @db.Uuid
   productPart   ProductPart @relation(fields: [productPartId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  materialId String @db.Uuid
-  material   Item   @relation(fields: [materialId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  materialSpecId String  @db.Uuid
+  materialSpec   ItemSpec @relation(fields: [materialSpecId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   /// Grammi di questo materiale usati per UNA singola parte.
   usedWeight Decimal @default(0) @db.Decimal(12, 2)
@@ -204,9 +273,9 @@ model ProductPartMaterial {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
-  @@unique([productPartId, materialId])
+  @@unique([productPartId, materialSpecId])
   @@index([productPartId])
-  @@index([materialId])
+  @@index([materialSpecId])
   @@schema("inventory")
 }
 
@@ -430,6 +499,7 @@ model PackagingType {
   class              PackagingClass @default(PRIMARY)
   associatedItemType ItemType
   items              Item[]
+  itemSpecs          ItemSpec[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -506,25 +576,25 @@ model CompatibleMachine {
 /// Tabella di join per associare un 'ProductItem' con i suoi imballaggi ('Item' di tipo 'PACKAGING').
 model ProductToPackage {
   productId String  @db.Uuid
-  itemId    String  @db.Uuid
+  itemSpecId String @db.Uuid
   quantity  Int     @default(1)
-  item      Item    @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  itemSpec  ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   product   Product @relation("ProductPackages", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  @@id([productId, itemId])
-  @@index([itemId])
+  @@id([productId, itemSpecId])
+  @@index([itemSpecId])
   @@schema("inventory")
 }
 
 /// Tabella di join per associare un 'ProductItem' con gli attrezzi ('Item' di tipo 'TOOL') necessari.
 model ProductToTool {
   productId String  @db.Uuid
-  itemId    String  @db.Uuid
-  item      Item    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemSpecId String @db.Uuid
+  itemSpec  ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
   product   Product @relation("ProductTools", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  @@id([productId, itemId])
-  @@index([itemId])
+  @@id([productId, itemSpecId])
+  @@index([itemSpecId])
   @@schema("inventory")
 }
 
@@ -532,15 +602,15 @@ model ProductToTool {
 /// Le utility sono consumabili assegnati a una specifica fase di assemblaggio.
 model ProductToUtility {
   productId       String         @db.Uuid
-  itemId          String         @db.Uuid
+  itemSpecId      String         @db.Uuid
   quantity        Int            @default(1)
   assemblyStageId String?        @db.Uuid /// Fase di assemblaggio a cui è assegnata la utility
-  item            Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemSpec        ItemSpec       @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
   product         Product        @relation("ProductUtilities", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   assemblyStage   AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  @@id([productId, itemId])
-  @@index([itemId])
+  @@id([productId, itemSpecId])
+  @@index([itemSpecId])
   @@index([assemblyStageId])
   @@schema("inventory")
 }
@@ -548,13 +618,13 @@ model ProductToUtility {
 /// Tabella di join per associare un 'ProductItem' con i suoi componenti ('Item' di tipo 'COMPONENT').
 model ProductToComponent {
   productId String  @db.Uuid
-  itemId    String  @db.Uuid
+  itemSpecId String @db.Uuid
   quantity  Int     @default(1)
-  item      Item    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  itemSpec  ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
   product   Product @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  @@id([productId, itemId])
-  @@index([itemId])
+  @@id([productId, itemSpecId])
+  @@index([itemSpecId])
   @@schema("inventory")
 }
 

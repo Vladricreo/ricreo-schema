@@ -5,6 +5,8 @@ model Movement {
   /// ID univoco del movimento.
   id              String            @id @default(uuid()) @db.Uuid
   itemId          String?           @db.Uuid
+  /// Spec/famiglia logica che ha guidato la selezione dell'Item (audit per fallback).
+  itemSpecId      String?           @db.Uuid
   quantity        Int //sempre positivo
   type            MovementType
   date            DateTime          @default(now()) @db.Timestamptz(6)
@@ -33,6 +35,7 @@ model Movement {
   /// Perché: tracciare quando l'entrata è FBM o FBA; WIP resta NULL (condiviso).
   assemblyStage   AssemblyStage?    @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   item            Item?             @relation(fields: [itemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  itemSpec        ItemSpec?         @relation(fields: [itemSpecId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   productPart     ProductPart?      @relation(fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   product         Product?          @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   shipments       Shipment[]
@@ -41,6 +44,7 @@ model Movement {
   @@index([assemblyStageId])
   @@index([productId])
   @@index([itemId])
+  @@index([itemSpecId])
   @@index([channel])
   @@index([skuId])
   @@index([odetteId])
