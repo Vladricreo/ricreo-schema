@@ -483,6 +483,11 @@ model Category {
   /// Stampanti che preferiscono questa categoria materiale (solo per ItemType.MATERIAL)
   printerPreferences PrinterPreferredMaterialCategory[]
 
+  /// Profili consumo energia (override) che fanno riferimento a questa categoria (solo per materiali).
+  printerModelEnergyProfiles PrinterModelEnergyProfile[]
+  /// Slice giornaliere energia che fanno riferimento a questa categoria (tipicamente per PRINT_RUN).
+  printerEnergyDailySlices PrinterEnergyDailySlice[]
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 

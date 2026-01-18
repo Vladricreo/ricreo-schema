@@ -319,6 +319,8 @@ model Printer {
   nozzleType     String       @default("Hardened Steel")
   structure      String       @default("CoreXY")
   ams            Boolean?
+  /// Modello AMS collegato (se presente). Serve per stimare consumi AMS (standby/working/drying).
+  amsModel        AmsModel?
   pushAllTimeout Int?
 
   /// Stato runtime dalla stampante (WebSocket) - volatile
@@ -409,6 +411,9 @@ model Printer {
   /// Ogni slot può contenere una spool. Per stampanti senza AMS, usare currentSpoolId.
   amsSlots PrinterAmsSlot[] @relation("PrinterAmsSlots")
 
+  /// Consumi energia aggregati giornalieri (per dashboard, include standby).
+  energyDailySlices PrinterEnergyDailySlice[]
+
   /// Eventi di cambio stato per calcolo uptime/utilization
   stateEvents    PrinterStateEvent[]
   /// Eventi di downtime per KPI
@@ -438,6 +443,8 @@ model PrinterModel {
   buildPlateHeight Decimal? @db.Decimal(8, 2) // Altezza massima (Z) in mm
 
   printers      Printer[]
+  /// Profili consumo energia per questo modello (per tensione/fase/materiale).
+  energyProfiles PrinterModelEnergyProfile[]
   errorCodes    ErrorCode[]    @relation("PrinterModelErrorCode")
   /// Macro G-code compatibili con questo modello di stampante
   printerMacros PrinterMacro[] @relation("PrinterModelMacroCompatibility")
@@ -445,10 +452,130 @@ model PrinterModel {
   @@schema("print-farm")
 }
 
+// ============================================================================
+// ENERGIA (profili + aggregazione giornaliera)
+// ============================================================================
+
+/// Tensione di alimentazione (usa V110/V220 per evitare problemi con enum che iniziano con numeri).
+enum SupplyVoltage {
+  V110
+  V220
+
+  @@schema("print-farm")
+}
+
+/// Fasi logiche usate per stimare consumo energia.
+enum EnergyPhaseKey {
+  /// Standby senza connessione/rete (best-effort).
+  STANDBY_OFFLINE
+  /// Standby con connessione WiFi/rete (best-effort).
+  STANDBY_ONLINE
+  /// Fase di riscaldamento (piatto in heating).
+  PRINT_HEAT
+  /// Fase di stampa a regime.
+  PRINT_RUN
+
+  @@schema("print-farm")
+}
+
+/// Modello di AMS collegato alla stampante (Bambu).
+enum AmsModel {
+  AMS
+  AMS_LITE
+  AMS_2_PRO
+  AMS_HT
+
+  @@schema("print-farm")
+}
+
+/// Fasi consumo AMS.
+enum AmsPhaseKey {
+  STANDBY
+  WORKING
+  DRYING
+
+  @@schema("print-farm")
+}
+
+/// Profilo consumo energia per un modello stampante, con optional override per categoria materiale.
+/// - `powerW` è in Watt (W) per evitare ambiguità kW/W.
+model PrinterModelEnergyProfile {
+  id String @id @default(uuid()) @db.Uuid
+
+  printerModelId Int
+  printerModel   PrinterModel @relation(fields: [printerModelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  voltage SupplyVoltage
+  phase   EnergyPhaseKey
+
+  /// Override specifico per categoria materiale (solo per ItemType.MATERIAL). Se null, vale come default del modello/fase.
+  materialCategoryId String?  @db.Uuid
+  materialCategory   Category? @relation(fields: [materialCategoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  powerW Decimal @db.Decimal(12, 3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerModelId, voltage, phase, materialCategoryId])
+  @@index([printerModelId])
+  @@index([materialCategoryId])
+  @@index([voltage, phase])
+  @@schema("print-farm")
+}
+
+/// Profilo consumo energia per AMS.
+/// - `powerW` è in Watt (W).
+model AmsEnergyProfile {
+  id Int @id @default(autoincrement())
+
+  amsModel AmsModel
+  phase    AmsPhaseKey
+  powerW   Decimal @db.Decimal(12, 3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([amsModel, phase])
+  @@index([amsModel])
+  @@schema("print-farm")
+}
+
+/// Slice giornaliera di energia (kWh) per stampante/fase.
+/// Usata per grafici energia \"totale farm\" (include standby + stampa).
+model PrinterEnergyDailySlice {
+  id String @id @default(uuid()) @db.Uuid
+
+  day DateTime @db.Date
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  phase EnergyPhaseKey
+
+  /// Categoria materiale associata (opzionale; tipicamente valorizzata per PRINT_RUN).
+  materialCategoryId String?  @db.Uuid
+  materialCategory   Category? @relation(fields: [materialCategoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  kwh Decimal @db.Decimal(12, 6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([day, printerId, phase, materialCategoryId])
+  @@index([day])
+  @@index([printerId])
+  @@index([phase])
+  @@index([materialCategoryId])
+  @@schema("print-farm")
+}
+
 model PrinterMacro {
   id                   Int            @id @default(autoincrement())
   name                 String
   description          String
+  /// Categoria della macro (per filtri UI e organizzazione)
+  category             PrinterMacroCategory @default(GENERIC)
   gcode                Json
   printerCompatibility String[]
   printers             Printer[]      @relation("PrinterCompatibility")
@@ -456,6 +583,21 @@ model PrinterMacro {
   printerModels        PrinterModel[] @relation("PrinterModelMacroCompatibility")
   createdAt            DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([category])
+  @@schema("print-farm")
+}
+
+/// Categorie supportate per le macro G-code (organizzazione UI e flussi operativi).
+enum PrinterMacroCategory {
+  GENERIC
+  UNLOAD_FILAMENT
+  LOAD_FILAMENT
+  BRIGHT_COLOR_START
+  CLEANING
+  CALIBRATION
+  MAINTENANCE
+  TEST_GENERAL
 
   @@schema("print-farm")
 }
@@ -621,6 +763,7 @@ enum AssignmentStatus {
   COMPLETED // Scaricato, tutto fatto
   FAILED // Fallito
   CANCELLED // Annullato
+  ERROR // Errore
 
   @@schema("print-farm")
 }
