@@ -268,6 +268,9 @@ model ProductPartMaterial {
   /// Grammi di questo materiale usati per UNA singola parte.
   usedWeight Decimal @default(0) @db.Decimal(12, 2)
 
+  /// Ordine/precedenza nella BOM della parte (0 = prima scelta).
+  priority Int @default(0)
+
   notes String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -351,6 +354,8 @@ model Guide {
 
   /// Relazione many-to-many con AssemblyStage
   stages       GuideToAssemblyStage[]
+  /// Guida step-by-step (strutturata). Se vuota, la guida può essere solo PDF/URL (legacy).
+  steps        GuideStep[]
   /// Cache traduzioni (IT -> altre lingue) per mostrare le guide in base alla lingua utente.
   translations GuideTranslation[]
 
@@ -358,6 +363,109 @@ model Guide {
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([productId])
+  @@schema("inventory")
+}
+
+/// Step della guida (supporta sotto-step tramite `parentId`).
+/// Esempio: Step 2 (parentId = null), Step 2.2 (parentId = id dello step 2).
+model GuideStep {
+  id String @id @default(uuid()) @db.Uuid
+
+  guideId String @db.Uuid
+  guide   Guide  @relation(fields: [guideId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Relazione ricorsiva per sotto-step (2.1, 2.2, ...)
+  parentId String?    @db.Uuid
+  parent   GuideStep? @relation("GuideStepParent", fields: [parentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  children GuideStep[] @relation("GuideStepParent")
+
+  title       String
+  description String? @db.Text
+  order       Int     @default(0) /// Ordine tra i fratelli (stesso parentId)
+
+  /// Media allegati al singolo step (immagini, file, video link)
+  media        GuideStepMedia[]
+  translations GuideStepTranslation[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([guideId])
+  @@index([parentId])
+  @@schema("inventory")
+}
+
+/// Tipo di media per uno step guida.
+enum GuideStepMediaType {
+  IMAGE
+  FILE
+  VIDEO
+
+  @@schema("inventory")
+}
+
+/// Media per uno `GuideStep` (supporta più immagini e allegati con ordine).
+model GuideStepMedia {
+  id String @id @default(uuid()) @db.Uuid
+
+  stepId String    @db.Uuid
+  step   GuideStep @relation(fields: [stepId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  type    GuideStepMediaType @default(IMAGE)
+  url     String             @db.Text
+  caption String?            @db.Text
+  order   Int                @default(0)
+
+  translations GuideStepMediaTranslation[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([stepId])
+  @@schema("inventory")
+}
+
+/// Cache traduzione per un `GuideStep` in una determinata lingua.
+/// Nota: la sorgente è in italiano (`GuideStep.title` + `GuideStep.description`).
+model GuideStepTranslation {
+  id String @id @default(uuid()) @db.Uuid
+
+  stepId String    @db.Uuid
+  step   GuideStep @relation(fields: [stepId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  language   String @db.VarChar(10)
+  sourceHash String @db.VarChar(64)
+
+  translatedTitle       String  @db.Text
+  translatedDescription String? @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([stepId, language])
+  @@index([stepId])
+  @@index([language])
+  @@schema("inventory")
+}
+
+/// Cache traduzione per la caption di un `GuideStepMedia`.
+model GuideStepMediaTranslation {
+  id String @id @default(uuid()) @db.Uuid
+
+  mediaId String        @db.Uuid
+  media   GuideStepMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  language   String @db.VarChar(10)
+  sourceHash String @db.VarChar(64)
+
+  translatedCaption String? @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([mediaId, language])
+  @@index([mediaId])
+  @@index([language])
   @@schema("inventory")
 }
 
@@ -583,6 +691,8 @@ model ProductToPackage {
   productId String  @db.Uuid
   itemSpecId String @db.Uuid
   quantity  Int     @default(1)
+  /// Ordine/precedenza nel packaging del prodotto (0 = prima scelta).
+  priority  Int     @default(0)
   itemSpec  ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   product   Product @relation("ProductPackages", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
@@ -610,6 +720,8 @@ model ProductToUtility {
   itemSpecId      String         @db.Uuid
   quantity        Int            @default(1)
   assemblyStageId String?        @db.Uuid /// Fase di assemblaggio a cui è assegnata la utility
+  /// Ordine/precedenza nelle utility del prodotto (0 = prima scelta).
+  priority        Int            @default(0)
   itemSpec        ItemSpec       @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
   product         Product        @relation("ProductUtilities", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   assemblyStage   AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
@@ -625,6 +737,8 @@ model ProductToComponent {
   productId String  @db.Uuid
   itemSpecId String @db.Uuid
   quantity  Int     @default(1)
+  /// Ordine/precedenza nei componenti del prodotto (0 = prima scelta).
+  priority  Int     @default(0)
   itemSpec  ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
   product   Product @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
