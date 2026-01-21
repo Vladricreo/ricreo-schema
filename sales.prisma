@@ -44,6 +44,10 @@ model Sku {
   productOrders       ProductOrder[]
   projectFiles        ProjectThreeMFFile[] @relation("ProjectRelatedSku")
 
+  productPackages   ProductToPackage[]
+  productComponents ProductToComponent[]
+  productUtilities  ProductToUtility[]
+
   @@index([productId, channel, marketplace])
   @@index([locationId])
   @@schema("inventory")

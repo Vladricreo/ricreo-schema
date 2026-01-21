@@ -21,11 +21,11 @@ model QueueTask {
   printerSerial String? @db.VarChar(255)
 
   /// Assignment da accodare
-  assignmentId    String?            @db.Uuid
-  assignment      PrinterAssignment? @relation("AssignmentQueueTasks", fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  productionJobId String?            @db.Uuid
-  productionJob   ProductionJob?     @relation("JobQueueTasks", fields: [productionJobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  fileId          String?            @db.Uuid
+  assignmentId    String?             @db.Uuid
+  assignment      PrinterAssignment?  @relation("AssignmentQueueTasks", fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productionJobId String?             @db.Uuid
+  productionJob   ProductionJob?      @relation("JobQueueTasks", fields: [productionJobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  fileId          String?             @db.Uuid
   file            ProjectThreeMFFile? @relation("FileQueueTasks", fields: [fileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Stato del task
@@ -38,13 +38,13 @@ model QueueTask {
   foundFilename  String? @db.VarChar(255)
 
   /// Info per UI
-  jobName          String? @db.VarChar(255)
-  fileName         String? @db.VarChar(255)
-  thumbnailUrl     String?
-  currentMaterial  String? @db.VarChar(100)
-  currentColor     String? @db.VarChar(100)
-  requiredMaterial String? @db.VarChar(100)
-  requiredColor    String? @db.VarChar(100)
+  jobName           String? @db.VarChar(255)
+  fileName          String? @db.VarChar(255)
+  thumbnailUrl      String?
+  currentMaterial   String? @db.VarChar(100)
+  currentColor      String? @db.VarChar(100)
+  requiredMaterial  String? @db.VarChar(100)
+  requiredColor     String? @db.VarChar(100)
   requiredMaterials Json? // Array di { material: string, color: string | null }
   amsSlots          Json? // Array di { amsUnit: number, slot: number, material: string | null, color: string | null }
 
@@ -73,15 +73,15 @@ model QueueTask {
 
 /// Stato del task di accodamento
 enum QueueTaskStatus {
-  PENDING    // In attesa di essere processato
-  CHECKING   // Verifica file sulla stampante
-  UPLOADING  // Upload file sulla stampante
+  PENDING // In attesa di essere processato
+  CHECKING // Verifica file sulla stampante
+  UPLOADING // Upload file sulla stampante
   PROCESSING // Calcolo skip/mapping
-  QUEUING    // Accodamento in corso (chiamata API)
-  COMPLETED  // Completato con successo (assignment QUEUED)
-  SKIPPED    // Saltato (es. filamento mismatch)
-  ERROR      // Errore durante il processo
-  CANCELLED  // Annullato dall'utente
+  QUEUING // Accodamento in corso (chiamata API)
+  COMPLETED // Completato con successo (assignment QUEUED)
+  SKIPPED // Saltato (es. filamento mismatch)
+  ERROR // Errore durante il processo
+  CANCELLED // Annullato dall'utente
 
   @@schema("print-farm")
 }

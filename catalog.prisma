@@ -7,23 +7,23 @@ model Item {
   name     String
   sku      String  @unique
 
-  price            Decimal  @db.Decimal(12, 2) /// prima: Float
-  weight           Decimal? @db.Decimal(12, 2) /// prima: Float?
+  price  Decimal  @db.Decimal(12, 2) /// prima: Float
+  weight Decimal? @db.Decimal(12, 2) /// prima: Float?
   /// Tipologia di articolo (es. MATERIALE, IMBALLAGGIO, COMPONENTE).
-  type             ItemType
+  type   ItemType
 
   /// Specifica/famiglia logica a cui questo Item appartiene (per gestire alternative/fallback).
   itemSpecId   String? @db.Uuid
   /// Priorità del variant dentro la stessa spec (0 = default/preferito).
   specPriority Int     @default(0)
 
-  categoryId       String?  @db.Uuid
-  colorId          String?  @db.Uuid
-  brandId          String?  @db.Uuid
-  supplierId       String?  @db.Uuid
-  locationId       String?  @db.Uuid
-  standardWeightId String?  @db.Uuid
-  dimensionsId     String?  @db.Uuid
+  categoryId       String? @db.Uuid
+  colorId          String? @db.Uuid
+  brandId          String? @db.Uuid
+  supplierId       String? @db.Uuid
+  locationId       String? @db.Uuid
+  standardWeightId String? @db.Uuid
+  dimensionsId     String? @db.Uuid
 
   properties Json?
 
@@ -57,11 +57,11 @@ model Item {
   /// Override (emergenze) che forzano questo Item come variant per una spec.
   itemSpecOverrideEntries ItemSpecOverride[] @relation("ItemSpecOverrideItem")
 
-  parts                     ProductPart[]         @relation("ItemToItemPart")
+  parts                     ProductPart[]       @relation("ItemToItemPart")
   ordersofitemforproduction ProductOrderItem[]
   purchaseOrderLines        PurchaseOrderLine[]
   product                   Product[]
-  compatibleMachines        CompatibleMachine[]   @relation("SpareParts")
+  compatibleMachines        CompatibleMachine[] @relation("SpareParts")
   OdetteContent             OdetteContent[]
   lots                      InventoryLot[]
 
@@ -86,7 +86,7 @@ model Item {
 /// Specifica/famiglia logica di Item intercambiabili (per BOM e fallback).
 /// Esempi: "Scatola 20x10x30", "PLA Nero 1kg", "Vite M3x10".
 model ItemSpec {
-  id   String @id @default(uuid()) @db.Uuid
+  id   String   @id @default(uuid()) @db.Uuid
   name String
   type ItemType
 
@@ -123,20 +123,20 @@ model ItemSpec {
 model ItemSpecOverride {
   id String @id @default(uuid()) @db.Uuid
 
-  specId String @unique @db.Uuid
+  specId String   @unique @db.Uuid
   spec   ItemSpec @relation(fields: [specId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   itemId String @db.Uuid
   item   Item   @relation("ItemSpecOverrideItem", fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  isActive Boolean @default(true)
-  startsAt DateTime @default(now()) @db.Timestamptz(6)
+  isActive Boolean   @default(true)
+  startsAt DateTime  @default(now()) @db.Timestamptz(6)
   endsAt   DateTime? @db.Timestamptz(6)
 
   /// Motivo operatore/supervisor (audit).
   reason String
 
-  approvedByUserId Int? @db.Integer
+  approvedByUserId Int?  @db.Integer
   approvedByUser   User? @relation("ApprovedItemSpecOverrides", fields: [approvedByUserId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -244,10 +244,10 @@ model ProductPart {
   OdetteContent OdetteContent[]
 
   // Relazioni Print Farm
-  projectParts   ProjectPart[]
-  projectFiles   ProjectThreeMFFile[] @relation("ProductPartFiles")
-  productionJobs ProductionJob[]
-  printerAssignments PrinterAssignment[] @relation("ProductPartAssignments")
+  projectParts       ProjectPart[]
+  projectFiles       ProjectThreeMFFile[] @relation("ProductPartFiles")
+  productionJobs     ProductionJob[]
+  printerAssignments PrinterAssignment[]  @relation("ProductPartAssignments")
 
   @@index([productId])
   @@index([supplierId])
@@ -262,7 +262,7 @@ model ProductPartMaterial {
   productPartId String      @db.Uuid
   productPart   ProductPart @relation(fields: [productPartId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  materialSpecId String  @db.Uuid
+  materialSpecId String   @db.Uuid
   materialSpec   ItemSpec @relation(fields: [materialSpecId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   /// Grammi di questo materiale usati per UNA singola parte.
@@ -326,10 +326,14 @@ model AssemblyStage {
   /// Relazione con le utility assegnate a questa fase
   utilities ProductToUtility[]
 
+  /// Relazione con i packaging assegnati a questa fase
+  packages ProductToPackage[]
+
   odetteContents OdetteContent[]
 
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+  productToComponents ProductToComponent[]
 
   @@unique([productId, name])
   @@index([productId])
@@ -375,8 +379,8 @@ model GuideStep {
   guide   Guide  @relation(fields: [guideId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Relazione ricorsiva per sotto-step (2.1, 2.2, ...)
-  parentId String?    @db.Uuid
-  parent   GuideStep? @relation("GuideStepParent", fields: [parentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  parentId String?     @db.Uuid
+  parent   GuideStep?  @relation("GuideStepParent", fields: [parentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   children GuideStep[] @relation("GuideStepParent")
 
   title       String
@@ -452,7 +456,7 @@ model GuideStepTranslation {
 model GuideStepMediaTranslation {
   id String @id @default(uuid()) @db.Uuid
 
-  mediaId String        @db.Uuid
+  mediaId String         @db.Uuid
   media   GuideStepMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   language   String @db.VarChar(10)
@@ -594,7 +598,7 @@ model Category {
   /// Profili consumo energia (override) che fanno riferimento a questa categoria (solo per materiali).
   printerModelEnergyProfiles PrinterModelEnergyProfile[]
   /// Slice giornaliere energia che fanno riferimento a questa categoria (tipicamente per PRINT_RUN).
-  printerEnergyDailySlices PrinterEnergyDailySlice[]
+  printerEnergyDailySlices   PrinterEnergyDailySlice[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -688,25 +692,34 @@ model CompatibleMachine {
 
 /// Tabella di join per associare un 'ProductItem' con i suoi imballaggi ('Item' di tipo 'PACKAGING').
 model ProductToPackage {
-  productId String  @db.Uuid
-  itemSpecId String @db.Uuid
-  quantity  Int     @default(1)
-  /// Ordine/precedenza nel packaging del prodotto (0 = prima scelta).
-  priority  Int     @default(0)
-  itemSpec  ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  product   Product @relation("ProductPackages", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id String @id @default(uuid()) @db.Uuid
 
-  @@id([productId, itemSpecId])
+  productId       String  @db.Uuid
+  itemSpecId      String  @db.Uuid
+  skuId           String? @db.Uuid
+  assemblyStageId String? @db.Uuid
+
+  quantity Int @default(1)
+  /// Ordine/precedenza nel packaging del prodotto (0 = prima scelta).
+  priority Int @default(0)
+
+  itemSpec      ItemSpec       @relation(fields: [itemSpecId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product       Product        @relation("ProductPackages", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sku           Sku?           @relation(fields: [skuId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  assemblyStage AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   @@index([itemSpecId])
+  @@index([skuId])
+  @@index([assemblyStageId])
   @@schema("inventory")
 }
 
 /// Tabella di join per associare un 'ProductItem' con gli attrezzi ('Item' di tipo 'TOOL') necessari.
 model ProductToTool {
-  productId String  @db.Uuid
-  itemSpecId String @db.Uuid
-  itemSpec  ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
-  product   Product @relation("ProductTools", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  productId  String   @db.Uuid
+  itemSpecId String   @db.Uuid
+  itemSpec   ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
+  product    Product  @relation("ProductTools", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([productId, itemSpecId])
   @@index([itemSpecId])
@@ -716,34 +729,49 @@ model ProductToTool {
 /// Tabella di join per associare un 'ProductItem' con le utility ('Item' di tipo 'UTILITY') necessarie.
 /// Le utility sono consumabili assegnati a una specifica fase di assemblaggio.
 model ProductToUtility {
-  productId       String         @db.Uuid
-  itemSpecId      String         @db.Uuid
-  quantity        Int            @default(1)
-  assemblyStageId String?        @db.Uuid /// Fase di assemblaggio a cui è assegnata la utility
-  /// Ordine/precedenza nelle utility del prodotto (0 = prima scelta).
-  priority        Int            @default(0)
-  itemSpec        ItemSpec       @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
-  product         Product        @relation("ProductUtilities", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  assemblyStage   AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  id String @id @default(uuid()) @db.Uuid
 
-  @@id([productId, itemSpecId])
+  productId       String  @db.Uuid
+  itemSpecId      String  @db.Uuid
+  skuId           String? @db.Uuid
+  assemblyStageId String? @db.Uuid /// Fase di assemblaggio a cui è assegnata la utility
+
+  quantity Int @default(1)
+  /// Ordine/precedenza nelle utility del prodotto (0 = prima scelta).
+  priority Int @default(0)
+
+  itemSpec      ItemSpec       @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
+  product       Product        @relation("ProductUtilities", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  assemblyStage AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sku           Sku?           @relation(fields: [skuId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   @@index([itemSpecId])
   @@index([assemblyStageId])
+  @@index([skuId])
   @@schema("inventory")
 }
 
 /// Tabella di join per associare un 'ProductItem' con i suoi componenti ('Item' di tipo 'COMPONENT').
 model ProductToComponent {
-  productId String  @db.Uuid
-  itemSpecId String @db.Uuid
-  quantity  Int     @default(1)
-  /// Ordine/precedenza nei componenti del prodotto (0 = prima scelta).
-  priority  Int     @default(0)
-  itemSpec  ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
-  product   Product @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id String @id @default(uuid()) @db.Uuid
 
-  @@id([productId, itemSpecId])
+  productId       String  @db.Uuid
+  itemSpecId      String  @db.Uuid
+  skuId           String? @db.Uuid
+  assemblyStageId String? @db.Uuid
+
+  quantity Int @default(1)
+  /// Ordine/precedenza nei componenti del prodotto (0 = prima scelta).
+  priority Int @default(0)
+
+  itemSpec      ItemSpec       @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
+  product       Product        @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sku           Sku?           @relation(fields: [skuId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  assemblyStage AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   @@index([itemSpecId])
+  @@index([skuId])
+  @@index([assemblyStageId])
   @@schema("inventory")
 }
 
