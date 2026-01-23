@@ -804,6 +804,9 @@ model PrinterAssignment {
 
   // === Timing ===
   scheduledAt DateTime? @db.Timestamptz(6) // Quando è stato schedulato
+  /// Timestamp "claim" (lock) usato SOLO dallo scheduler backend per evitare doppio start.
+  /// Non rappresenta l'inizio stampa: serve solo come mutex soft recuperabile (stale) in caso di crash.
+  claimedAt   DateTime? @db.Timestamptz(6)
   startedAt   DateTime? @db.Timestamptz(6) // Inizio stampa effettivo
   completedAt DateTime? @db.Timestamptz(6) // Fine stampa
 
