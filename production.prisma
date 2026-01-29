@@ -106,13 +106,12 @@ model AssemblyOrder {
   assembledBy       User?               @relation(fields: [assembledByUserId], references: [id], onDelete: SetNull)
   productOrders     ProductOrder[]      @relation("AssemblyOrderToProductItemOrder")
   OdetteReservation OdetteReservation[]
+  /// Contenuti odette legati a questo ordine (quando valorizzato su OdetteContent).
+  odetteContents    OdetteContent[]
   lots              InventoryLot[]
   /// Movimenti inventario collegati a questo ordine di assemblaggio (audit).
   movements         Movement[]
   operations        AssemblyOperation[]
-
-  /// Assegnazioni odette per questo ordine (traccia quali odette sono in uso per ogni stage)
-  odetteAssignments OdetteAssemblyAssignment[]
 
   @@index([assembledByUserId])
   @@index([skuId])
@@ -226,9 +225,6 @@ model Odette {
   /// Prenotazioni (parziali) verso AssemblyOrder (per pezzi specifici)
   reservations OdetteReservation[]
 
-  /// Assegnazioni a ordini di assemblaggio (traccia uso per stage)
-  assemblyAssignments OdetteAssemblyAssignment[]
-
   /// Storico spostamenti dell'odette tra location
   moves OdetteMove[]
 
@@ -278,6 +274,11 @@ model OdetteContent {
   assemblyStageId String?        @db.Uuid
   assemblyStage   AssemblyStage? @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Ordine di assemblaggio a cui appartengono questi pezzi (quando il contenuto è legato a un task specifico).
+  /// Serve a evitare ambiguità quando la stessa odette contiene pezzi dello stesso SKU/stage per ordini diversi.
+  assemblyOrderId String?        @db.Uuid
+  assemblyOrder   AssemblyOrder? @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   /// Quantità disponibile fisicamente nella odette (non prenotata)
   quantity Int
 
@@ -300,8 +301,10 @@ model OdetteContent {
   @@index([itemId])
   @@index([PartId])
   @@index([assemblyStageId])
+  @@index([assemblyOrderId])
   @@index([inventoryLotId])
   @@index([skuId])
+  @@index([odetteId, skuId, assemblyStageId, assemblyOrderId])
   @@schema("inventory")
 }
 
@@ -429,41 +432,6 @@ model OdetteLocationPreference {
   @@schema("inventory")
 }
 
-/// Assegnazione di un'odette a un ordine di assemblaggio per un determinato stage.
-/// Permette di tracciare quali odette sono in uso durante l'assemblaggio e il loro ruolo.
-model OdetteAssemblyAssignment {
-  id String @id @default(uuid()) @db.Uuid
-
-  odetteId String @db.Uuid
-  odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-
-  assemblyOrderId String        @db.Uuid
-  assemblyOrder   AssemblyOrder @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-
-  /// Stage per cui è assegnata (ASSEMBLED, FIRST_STAGE, SECOND_STAGE)
-  stage AssemblyStageType
-
-  /// Ruolo dell'odette: SOURCE (prelevo da qui), DESTINATION (metto qui)
-  role OdetteAssignmentRole
-
-  /// Quantità allocata/pianificata in questa odette per questo ordine/stage (NON è la quantità reale: quella è in OdetteContent)
-  allocatedQuantity Int @default(0)
-
-  /// Note opzionali (es. "odette principale", "overflow")
-  notes String?
-
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
-
-  /// Un'odette può avere un solo ruolo per stage per ordine
-  @@unique([odetteId, assemblyOrderId, stage, role])
-  @@index([assemblyOrderId])
-  @@index([odetteId])
-  @@index([stage])
-  @@index([assemblyOrderId, stage])
-  @@schema("inventory")
-}
-
 enum AssemblyOperationType {
   PICKING // Collezione parti
   ASSEMBLY // Assemblaggio vero e proprio
@@ -524,14 +492,6 @@ enum OdetteLocationKind {
   PRINT_FARM_QUEUE
   ASSEMBLY_BUFFER
   FULL_STORAGE
-
-  @@schema("inventory")
-}
-
-/// Ruolo dell'odette in un'assegnazione di assemblaggio
-enum OdetteAssignmentRole {
-  SOURCE /// Odette da cui prelevo i pezzi (svuoto)
-  DESTINATION /// Odette in cui metto i pezzi (riempio)
 
   @@schema("inventory")
 }

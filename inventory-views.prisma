@@ -442,3 +442,27 @@ view VAssemblyOrderStageProgress {
   @@map("v_assembly_order_stage_progress")
   @@schema("inventory_views")
 }
+
+/// Bilancio per odette per AssemblyOrder + Stage (sostituisce OdetteAssemblyAssignment in UI)
+view VAssemblyOrderOdetteStageBalance {
+  assemblyOrderId   String  @map("assembly_order_id") @db.Uuid
+  skuId             String? @map("sku_id") @db.Uuid
+  assemblyStageId   String  @map("assembly_stage_id") @db.Uuid
+  assemblyStageType String? @map("assembly_stage_type")
+
+  odetteId     String  @map("odette_id") @db.Uuid
+  odetteCode   String? @map("odette_code")
+  odetteStatus String? @map("odette_status")
+
+  qtyStageIn  BigInt @map("qty_stage_in")
+  qtyStageOut BigInt @map("qty_stage_out")
+  qtyScrapped BigInt @map("qty_scrapped")
+  wipInOdette BigInt @map("wip_in_odette")
+
+  firstMovementAt DateTime @map("first_movement_at") @db.Timestamptz(6)
+  lastMovementAt  DateTime @map("last_movement_at") @db.Timestamptz(6)
+
+  @@unique([assemblyOrderId, skuId, assemblyStageId, odetteId])
+  @@map("v_assembly_order_odette_stage_balance")
+  @@schema("inventory_views")
+}

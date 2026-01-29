@@ -12,17 +12,14 @@ DROP INDEX "inventory"."ProductToUtility_productId_priority_idx";
 
 -- AlterTable
 ALTER TABLE "inventory"."ProductToComponent" ADD COLUMN     "assemblyStageId" UUID,
-ADD COLUMN     "skuId" UUID,
-ALTER COLUMN "id" DROP DEFAULT;
+ADD COLUMN     "skuId" UUID;
 
 -- AlterTable
 ALTER TABLE "inventory"."ProductToPackage" ADD COLUMN     "assemblyStageId" UUID,
-ADD COLUMN     "skuId" UUID,
-ALTER COLUMN "id" DROP DEFAULT;
+ADD COLUMN     "skuId" UUID;
 
 -- AlterTable
-ALTER TABLE "inventory"."ProductToUtility" ADD COLUMN     "skuId" UUID,
-ALTER COLUMN "id" DROP DEFAULT;
+ALTER TABLE "inventory"."ProductToUtility" ADD COLUMN     "skuId" UUID;
 
 -- CreateIndex
 CREATE INDEX "ProductToComponent_skuId_idx" ON "inventory"."ProductToComponent"("skuId");
