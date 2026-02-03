@@ -126,7 +126,36 @@ model InventoryLot {
   @@schema("inventory")
 }
 
-/// Rappresenta una fila/riga fisica di scaffale o area di magazzino (es. "A", "B", "PF-1").
+/// Gruppo/Fila fisica che contiene più scaffali (es. "A", "PF", "MAG-1").
+/// Perché: rendere persistente il concetto di "fila" (ordine, nome, descrizione) anche quando è vuota.
+model WarehouseShelfGroup {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Codice univoco leggibile (es. "A", "PF", "MAG-1").
+  code String @unique
+
+  /// Nome descrittivo mostrato in UI (es. "Fila A", "Print Farm").
+  name String
+
+  /// Descrizione opzionale.
+  description String?
+
+  /// Ordine globale del gruppo nella UI (1..N).
+  order Int
+
+  /// Scaffali appartenenti al gruppo.
+  shelves WarehouseShelf[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([order])
+  @@index([code])
+  @@index([order])
+  @@schema("inventory")
+}
+
+/// Rappresenta uno scaffale fisico (contenitore) che raggruppa più ripiani/righe.
 model WarehouseShelf {
   id          String  @id @default(uuid()) @db.Uuid
   /// Codice leggibile (es. "S-01", "MAG-A").
@@ -138,12 +167,12 @@ model WarehouseShelf {
   /// Immagine opzionale (usata dalla UI).
   imageUrl    String?
 
-  /// Codice della fila fisica (linea) su cui lo scaffale è posizionato (es. "A", "PF", "MAG-1").
-  /// Serve per raggruppare più scaffali che, fisicamente, stanno sulla stessa fila.
-  lineCode    String?
-  /// Indice/progressivo dello scaffale all'interno della stessa fila (1..N).
-  /// Utile per ordinare e calcolare "vicinanza" lungo la fila.
-  indexInLine Int?
+  /// Gruppo/Fila fisica di appartenenza (opzionale: equivale a "Senza fila").
+  groupId String?             @db.Uuid
+  group   WarehouseShelfGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Posizione progressiva dello scaffale all'interno del gruppo (1..N).
+  positionInGroup Int?
 
   /// Ripiani/righe fisiche appartenenti allo scaffale.
   rows WarehouseRow[]
@@ -153,7 +182,8 @@ model WarehouseShelf {
 
   @@index([code])
   @@index([name])
-  @@index([lineCode, indexInLine])
+  @@index([groupId, positionInGroup])
+  @@unique([groupId, positionInGroup])
   @@schema("inventory")
 }
 
