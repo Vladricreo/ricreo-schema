@@ -1,9 +1,8 @@
 -- Aggiunge un `id` UUID alle tabelle di join prodotto (componenti / packaging / utility)
 -- in modo compatibile con DB già popolati (produzione).
 --
--- Nota: Prisma non può aggiungere una colonna REQUIRED con default "prisma-level"
--- quando esistono righe. Qui usiamo un default DB-level (`gen_random_uuid()`)
--- e backfilliamo le righe esistenti prima di imporre NOT NULL / PK.
+-- Nota: Gli UUID vengono generati lato client da Prisma (@default(uuid())).
+-- Backfilliamo le righe esistenti prima di imporre NOT NULL / PK.
 
 -- ProductToComponent
 ALTER TABLE inventory."ProductToComponent"
@@ -14,7 +13,6 @@ SET "id" = gen_random_uuid()
 WHERE "id" IS NULL;
 
 ALTER TABLE inventory."ProductToComponent"
-  ALTER COLUMN "id" SET DEFAULT gen_random_uuid(),
   ALTER COLUMN "id" SET NOT NULL;
 
 ALTER TABLE inventory."ProductToComponent"
@@ -32,7 +30,6 @@ SET "id" = gen_random_uuid()
 WHERE "id" IS NULL;
 
 ALTER TABLE inventory."ProductToPackage"
-  ALTER COLUMN "id" SET DEFAULT gen_random_uuid(),
   ALTER COLUMN "id" SET NOT NULL;
 
 ALTER TABLE inventory."ProductToPackage"
@@ -50,7 +47,6 @@ SET "id" = gen_random_uuid()
 WHERE "id" IS NULL;
 
 ALTER TABLE inventory."ProductToUtility"
-  ALTER COLUMN "id" SET DEFAULT gen_random_uuid(),
   ALTER COLUMN "id" SET NOT NULL;
 
 ALTER TABLE inventory."ProductToUtility"
