@@ -755,6 +755,7 @@ enum PrinterManualOverrideStatus {
 
 /// Stato di un'assegnazione stampante per un ProductionJob.
 /// Flusso: SCHEDULED → QUEUED → PRINTING → TO_HARVEST → COMPLETED
+/// Flusso errore: QUEUED → START_FAILED (self-heal: → QUEUED quando stampante esce da ERROR)
 enum AssignmentStatus {
   SCHEDULED // Pianificato, NON parte automaticamente
   QUEUED // In coda attiva, lo scheduler lo avvia appena c'è budget kW
@@ -764,6 +765,7 @@ enum AssignmentStatus {
   FAILED // Fallito
   CANCELLED // Annullato
   ERROR // Errore
+  START_FAILED // Avvio fallito: stampante in errore, serve intervento. Self-heal quando la stampante si riprende.
 
   @@schema("print-farm")
 }
