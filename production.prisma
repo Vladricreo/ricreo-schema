@@ -476,10 +476,21 @@ enum OdetteStatus {
   @@schema("inventory")
 }
 
-/// Scopo/uso logico dell'odette (separazione "prodotti" vs "item").
+/// Scopo/uso logico dell'odette.
+/// Indica la destinazione d'uso preferita del tipo di odette:
+/// - PRODUCTS: uso generico prodotti (legacy, retrocompatibile)
+/// - ITEMS: item / magazzino materie prime
+/// - ASSEMBLY_PARTS: parti in area assemblaggio
+/// - PRODUCT_PARTS: parti prodotto (ItemPart stampate/semilavorati)
+/// - FINISHED_PRODUCTS: prodotti finiti
+/// - MIXED: uso misto / multiuso
 enum OdettePurpose {
   PRODUCTS
   ITEMS
+  ASSEMBLY_PARTS
+  PRODUCT_PARTS
+  FINISHED_PRODUCTS
+  MIXED
 
   @@schema("inventory")
 }
