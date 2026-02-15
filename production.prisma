@@ -472,7 +472,7 @@ enum OdetteStatus {
   RESERVED /// prenotata per essere riempita a breve
   EMPTY /// svuotata ma non ancora pulita e pronta per essere usata
   OUT_OF_SERVICE /// opzionale: rotta/manutenzione
-
+  FULL /// piena
   @@schema("inventory")
 }
 
