@@ -64,6 +64,7 @@ model Item {
   compatibleMachines        CompatibleMachine[] @relation("SpareParts")
   OdetteContent             OdetteContent[]
   lots                      InventoryLot[]
+  pickingLines              PickingLine[]
 
   // Relazioni Print Farm
   projectFiles      ProjectThreeMFFile[]
@@ -242,6 +243,7 @@ model ProductPart {
   materialBreakdown  ProductPartMaterial[]
 
   OdetteContent OdetteContent[]
+  pickingLines  PickingLine[]
 
   // Relazioni Print Farm
   projectParts       ProjectPart[]
