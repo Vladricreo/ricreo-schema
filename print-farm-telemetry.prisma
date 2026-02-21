@@ -118,6 +118,14 @@ model PrintRunMetrics {
   /// Filamento sprecato (purge, prime, supporti scartati, ecc.)
   wasteGrams Decimal? @db.Decimal(12, 2)
 
+  /// Consumo stimato dal file (grammi totali, non proporzionato a parti stampate)
+  expectedFilamentGrams Decimal? @db.Decimal(12, 2)
+
+  /// Snapshot progressivo (aggiornato periodicamente durante la stampa in base al progresso %)
+  lastSnapshotPercent Int?      @db.SmallInt
+  lastSnapshotGrams   Decimal?  @db.Decimal(12, 2)
+  lastSnapshotAt      DateTime? @db.Timestamptz(6)
+
   /// Note libere
   notes String?
 
