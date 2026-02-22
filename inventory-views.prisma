@@ -443,6 +443,41 @@ view VAssemblyOrderStageProgress {
   @@schema("inventory_views")
 }
 
+/// ============================================================================
+/// FBA INVENTORY VIEW - Metriche calcolate per pagina inventario Amazon
+/// View SQL: migrations/sql/fba_inventory_view.sql
+/// ============================================================================
+
+/// Inventario FBA con metriche pre-calcolate (sales velocity, stock days, EOQ, restock action)
+view VFbaInventory {
+  id                String    @unique @db.Uuid
+  skuCodes          String[]  @map("sku_codes")
+  asin              String
+  name              String
+  image             String?
+  type              String
+  quantityTotal     Int       @map("quantity_total")
+  quantityInbound   Int       @map("quantity_inbound")
+  quantityTransfer  Int       @map("quantity_transfer")
+  quantityAvailable Int       @map("quantity_available")
+  quantityReserved  Int       @map("quantity_reserved")
+  price             Decimal?  @db.Decimal(12, 2)
+  valoreStock       Decimal   @map("valore_stock") @db.Decimal(12, 2)
+  salesVelocity     Decimal   @map("sales_velocity") @db.Decimal(12, 2)
+  stockDays         Int       @map("stock_days")
+  restockTime       Int       @map("restock_time")
+  optimalLotSize    Int       @map("optimal_lot_size")
+  restockAction     String    @map("restock_action")
+  salesData         Json      @map("sales_data")
+  listingStatus     String    @map("listing_status")
+  inboundShipment   Boolean   @map("inbound_shipment")
+  orderStatus       String?   @map("order_status")
+  restockDate       DateTime? @map("restock_date") @db.Timestamptz(6)
+
+  @@map("v_fba_inventory")
+  @@schema("inventory_views")
+}
+
 /// Bilancio per odette per AssemblyOrder + Stage (sostituisce OdetteAssemblyAssignment in UI)
 view VAssemblyOrderOdetteStageBalance {
   assemblyOrderId   String  @map("assembly_order_id") @db.Uuid
