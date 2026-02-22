@@ -252,6 +252,8 @@ model PrintRun {
   quantitySuccess    Int            @default(0)
   quantityFailed     Int            @default(0)
   status             PrintRunStatus @default(PENDING)
+  /// Percentuale di completamento al termine della run (0-100). Salvato alla finalizzazione (COMPLETED/FAILED).
+  completionPercent  Int?           @db.SmallInt
   filaments          Item[]
   spoolId            String?        @db.Uuid // Bobina usata per questa run
   spool              FilamentSpool? @relation(fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
