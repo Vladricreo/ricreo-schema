@@ -241,6 +241,8 @@ enum WarehouseRowType {
   ODETTE_ASSEMBLED
   /// Odette per scarico stampanti.
   ODETTE_UNLOAD
+  /// Ripiano dedicato alle bobine parzialmente usate.
+  SPOOL_STORAGE
   /// Qualsiasi cosa (nessun filtro).
   MIXED
 
