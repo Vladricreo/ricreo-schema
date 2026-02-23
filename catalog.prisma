@@ -166,6 +166,7 @@ model Product {
   profitMargin   Decimal? @db.Decimal(5, 4) /// prima: Float? (0.1234 = 12.34%)
   laborCost      Decimal? @db.Decimal(12, 2) /// prima: Float?
   laborMinutes   Decimal? @db.Decimal(8, 2) /// prima: Float?
+  shippingCost   Decimal? @db.Decimal(12, 2)
   dimensionsId   String?  @db.Uuid
 
   itemId     String?  @db.Uuid
