@@ -350,6 +350,7 @@ enum ShipmentType {
   PRIME
   BUSINESS
   STANDARD
+  FBA
 
   @@schema("inventory")
 }
