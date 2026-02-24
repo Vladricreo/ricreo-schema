@@ -151,29 +151,3 @@ model PrinterAmsSlot {
   @@schema("print-farm")
 }
 
-/// Inventario temporaneo delle spool disponibili per materiale/colore.
-/// Usato dal generatore di assegnazioni per vincolare il numero di stampanti
-/// attive per ogni combinazione materiale/colore.
-/// Tabella temporanea: in futuro sarà integrata con il magazzino reale
-/// e le virtual spool effettive.
-model SpoolInventory {
-  id String @id @default(uuid()) @db.Uuid
-
-  /// Categoria materiale (es. "PLA", "PETG", "ABS") - uppercase normalizzata
-  materialCategory String
-
-  /// Colore hex normalizzato senza # (es. "ff0000"), null = qualsiasi colore
-  colorHex String?
-
-  /// Quantità di spool disponibili in inventario
-  quantity Int @default(0)
-
-  /// Note opzionali (es. "Lotto XYZ", "In arrivo 3 pezzi")
-  notes String?
-
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
-
-  @@unique([materialCategory, colorHex])
-  @@schema("print-farm")
-}

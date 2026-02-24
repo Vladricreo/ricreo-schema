@@ -307,6 +307,7 @@ model OdetteContent {
   @@index([PartId])
   @@index([assemblyStageId])
   @@index([assemblyOrderId])
+  @@index([lotId])
   @@index([inventoryLotId])
   @@index([skuId])
   @@index([odetteId, skuId, assemblyStageId, assemblyOrderId])
