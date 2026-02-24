@@ -383,6 +383,13 @@ model Printer {
   externalReportedTrayInfoIdx  String? // se disponibile (Bambu tray_info_idx)
   externalReportedLastSeenAt   DateTime? @db.Timestamptz(6)
 
+  /// Incongruenza fra filamento "reported" dalla stampante e spool tracciata nel DB.
+  /// Settato dal backend WSS quando rileva che il materiale/colore riportato dal firmware
+  /// non corrisponde alla spool associata (currentSpool o AMS slot).
+  hasFilamentMismatch        Boolean   @default(false)
+  filamentMismatchDetectedAt DateTime? @db.Timestamptz(6)
+  filamentMismatchDetails    Json?     @db.JsonB
+
   /// Categorie materiali preferite per questa stampante (relazione M2M con Category filtrate per ItemType.MATERIAL).
   /// Serve per suggerire automaticamente l'assegnazione dei job in base al materiale richiesto.
   preferredMaterialCategories PrinterPreferredMaterialCategory[]
