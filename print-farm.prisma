@@ -990,20 +990,49 @@ model PrinterFilamentLoad {
   /// Timestamp carico
   loadedAt DateTime @default(now()) @db.Timestamptz(6)
 
+  // === Contesto caricamento ===
+  /// Motivo del carico filamento
+  trigger FilamentLoadTrigger @default(MANUAL)
+
+  /// Target: 'external' per bobina esterna, 'ams' per slot AMS
+  targetKind String @default("external") @db.VarChar(10)
+  /// Unità AMS (0-3). Null se targetKind = 'external'.
+  amsUnit    Int?
+  /// Slot AMS (0-3). Null se targetKind = 'external'.
+  slot       Int?
+
   // === Dettagli materiale ===
   /// Bobina caricata
   spoolId          String?        @db.Uuid
   spool            FilamentSpool? @relation(fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Materiale precedente (per tracking cambio)
   previousMaterial String?
+  /// Colore precedente
+  previousColor    String?
   /// Materiale nuovo
   newMaterial      String?
   /// Colore nuovo
   newColor         String?
 
+  // === Vecchia spool ===
+  /// Spool che era montata prima del cambio
+  oldSpoolId     String?        @db.Uuid
+  /// Azione eseguita sulla vecchia spool
+  oldSpoolAction String?        @db.VarChar(20)
+
+  // === Tracking inventario (per undo) ===
+  /// Movement USO creato durante il prelievo (null se spool parziale/manual)
+  movementId String? @db.Uuid
+  /// Item prelevato da inventario (null se spool parziale)
+  itemId     String? @db.Uuid
+
   /// Conferma che il carico è stato completato correttamente
   confirmed   Boolean   @default(false)
   confirmedAt DateTime? @db.Timestamptz(6)
+
+  /// True se l'operazione è stata annullata (undo)
+  undone   Boolean   @default(false)
+  undoneAt DateTime? @db.Timestamptz(6)
 
   /// Note dell'operatore
   notes String?
@@ -1015,6 +1044,15 @@ model PrinterFilamentLoad {
   @@index([printerId])
   @@index([loadedByUserId])
   @@index([loadedAt])
+  @@schema("print-farm")
+}
+
+enum FilamentLoadTrigger {
+  MANUAL
+  RUNOUT
+  SWAP
+  MISMATCH
+
   @@schema("print-farm")
 }
 
