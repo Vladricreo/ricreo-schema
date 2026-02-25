@@ -126,6 +126,9 @@ model PrintRunMetrics {
   lastSnapshotGrams   Decimal?  @db.Decimal(12, 2)
   lastSnapshotAt      DateTime? @db.Timestamptz(6)
 
+  /// Grammi già dedotti dalla spool durante gli snapshot (per evitare doppia deduzione all'harvest)
+  snapshotDeductedGrams Decimal? @db.Decimal(12, 2)
+
   /// Note libere
   notes String?
 
