@@ -39,6 +39,8 @@ model ProductOrder {
   /// Job di stampa 3D generati da questo ordine (uno per parte)
   productionJobs ProductionJob[] @relation("ProductOrderJobs")
   movements      Movement[]
+  /// Contenuti odette collegati a questo ordine (scarico/stoccaggio WIP).
+  odetteContents OdetteContent[]
 
   @@index([skuId])
   @@index([assemblyOrderId])
@@ -284,6 +286,15 @@ model OdetteContent {
   assemblyOrderId String?        @db.Uuid
   assemblyOrder   AssemblyOrder? @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Ordine di produzione (ProductOrder) a cui appartengono questi pezzi (quando disponibile).
+  /// Utile per scarico: aggregare contenuti per ordine + lotto senza creare righe per ogni stampante.
+  productOrderId String?        @db.Uuid
+  productOrder   ProductOrder?  @relation(fields: [productOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Assignment di origine (opzionale). Serve soprattutto per stampe unplanned/manuali dove manca ProductOrder.
+  assignmentId String?            @db.Uuid
+  assignment   PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   /// Quantità disponibile fisicamente nella odette (non prenotata)
   quantity Int
 
@@ -307,6 +318,8 @@ model OdetteContent {
   @@index([PartId])
   @@index([assemblyStageId])
   @@index([assemblyOrderId])
+  @@index([productOrderId])
+  @@index([assignmentId])
   @@index([lotId])
   @@index([inventoryLotId])
   @@index([skuId])
