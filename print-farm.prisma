@@ -341,6 +341,16 @@ model Printer {
   /// Viene aggiornato dal backend in base a `bedTemp` e `bedTargetTemp` con isteresi (evita toggle rapido).
   isBedHeating Boolean @default(false)
 
+  /// --- ULTIMO JOB (PERSISTENZA "REPRINT") ---
+  /// Questi campi vengono aggiornati dal backend quando parte una stampa, per permettere
+  /// la funzione di reprint anche dopo un riavvio del backend.
+  lastPrintFilename    String?
+  lastPrintPlateNumber Int?
+  lastPrintUseAms      Boolean?
+  /// Mapping AMS dell'ultimo job (5 elementi, best-effort). Può essere NULL se non determinabile.
+  lastPrintAmsMapping Int[]
+  lastPrintAt         DateTime? @db.Timestamptz(6)
+
   /// --- HEALTH / TELEMETRIA ---
   /// Ultimo aggiornamento ricevuto dalla stampante via WebSocket.
   lastWssAt  DateTime? @db.Timestamptz(6)
