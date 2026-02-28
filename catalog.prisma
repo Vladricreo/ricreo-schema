@@ -58,6 +58,8 @@ model Item {
   itemSpecOverrideEntries ItemSpecOverride[] @relation("ItemSpecOverrideItem")
 
   parts                     ProductPart[]       @relation("ItemToItemPart")
+  /// Righe BOM (ProductPartMaterial) che puntano a questo Item (variant specifico).
+  partMaterialBreakdowns    ProductPartMaterial[] @relation("ProductPartMaterialItem")
   ordersofitemforproduction ProductOrderItem[]
   purchaseOrderLines        PurchaseOrderLine[]
   product                   Product[]
@@ -265,6 +267,11 @@ model ProductPartMaterial {
   productPartId String      @db.Uuid
   productPart   ProductPart @relation(fields: [productPartId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
+  /// Variante specifica (Item) usata nella BOM.
+  /// Serve per distinguere materiali diversi anche se raggruppati sotto la stessa ItemSpec.
+  materialItemId String? @db.Uuid
+  materialItem   Item?   @relation("ProductPartMaterialItem", fields: [materialItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
   materialSpecId String   @db.Uuid
   materialSpec   ItemSpec @relation(fields: [materialSpecId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
@@ -279,9 +286,11 @@ model ProductPartMaterial {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
-  @@unique([productPartId, materialSpecId])
+  // Unicità per-variant (Item): permette più righe per la stessa spec se i materiali sono diversi.
+  @@unique([productPartId, materialItemId])
   @@index([productPartId])
   @@index([materialSpecId])
+  @@index([materialItemId])
   @@schema("inventory")
 }
 
