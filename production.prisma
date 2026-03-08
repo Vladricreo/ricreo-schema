@@ -408,6 +408,8 @@ model OdetteType {
   name              String        @unique
   code              String?       @unique
   imageUrl          String?
+  /// Colore dedicato del tipo odette espresso in HEX (#RRGGBB)
+  colorHex          String?       @db.VarChar(7)
   /// Scopo/uso del tipo di odette (es. "PRODOTTI" vs "ITEM").
   /// Serve a impedire l'utilizzo improprio: un tipo "PRODOTTI" non dovrebbe accettare contenuti item e viceversa.
   purpose           OdettePurpose @default(PRODUCTS)
