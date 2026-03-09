@@ -309,6 +309,19 @@ view VSkuStock {
 }
 
 /// ============================================================================
+/// RESERVED VIEWS - Calcolo dinamico quantità riservate
+/// ============================================================================
+
+/// Reserved Stock Item calcolato dagli ordini di produzione attivi
+view VItemReservedStock {
+  itemId           String @unique @map("item_id") @db.Uuid
+  reservedQuantity Int    @map("reserved_quantity")
+
+  @@map("v_item_reserved_stock")
+  @@schema("inventory_views")
+}
+
+/// ============================================================================
 /// LOT VIEWS - Tracciabilità ISO 9001
 /// ============================================================================
 
