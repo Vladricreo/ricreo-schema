@@ -131,12 +131,14 @@ view VPfEnergyDaily30d {
   @@schema("print_farm_views")
 }
 
-/// Consumo filamento stimato per colore (30 giorni).
+/// Consumo filamento stimato per categoria e colore (30 giorni).
 view VPfFilamentConsumption30d {
-  color          String  @unique
+  category       String
+  color          String
   estimatedGrams Decimal @map("estimatedGrams") @db.Decimal(12, 2)
   runsCount      Int     @map("runsCount")
 
+  @@unique([category, color])
   @@map("v_pf_filament_consumption_30d")
   @@schema("print_farm_views")
 }
