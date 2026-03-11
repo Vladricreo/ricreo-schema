@@ -190,6 +190,9 @@ model ProductionJob {
 
   failureLogs PrintFailureLog[]
 
+  /// Task Gantt che coinvolgono questo job
+  ganttTasks GanttTask[]
+
   @@index([productOrderId])
   @@index([assemblyOrderId])
   @@index([productId])
@@ -440,6 +443,9 @@ model Printer {
 
   /// Task di accodamento persistenti (flusso "send to print")
   queueTasks QueueTask[] @relation("PrinterQueueTasks")
+
+  /// Task Gantt pianificati su questa stampante
+  ganttTasks GanttTask[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -1085,5 +1091,115 @@ model PrinterPreferredMaterialCategory {
   @@id([printerId, categoryId])
   @@index([printerId])
   @@index([categoryId])
+  @@schema("print-farm")
+}
+
+// ============================================================================
+// GANTT SCHEDULER (Reactive Gantt – pianificazione a orizzonte temporale)
+// ============================================================================
+
+/// Stato del piano Gantt generato dal solver.
+enum GanttPlanStatus {
+  ACTIVE
+  SUPERSEDED
+  FAILED
+
+  @@schema("print-farm")
+}
+
+/// Stato di un singolo task nel piano Gantt.
+enum GanttTaskStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  DELAYED
+
+  @@schema("print-farm")
+}
+
+/// Rappresenta un'esecuzione del Gantt Scheduler (snapshot pianificazione).
+/// Ogni volta che il cron o l'operatore ricalcola il piano, viene creato un nuovo GanttPlan
+/// e il precedente viene marcato come SUPERSEDED.
+model GanttPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  status    GanttPlanStatus @default(ACTIVE)
+  /// Orizzonte di pianificazione: inizio e fine dell'intervallo calcolato.
+  horizonStart DateTime @db.Timestamptz(6)
+  horizonEnd   DateTime @db.Timestamptz(6)
+
+  /// Statistiche solver
+  solverStatus      String?
+  solverObjective   Decimal? @db.Decimal(16, 2)
+  solverDurationMs  Int?
+  jobsEvaluated     Int      @default(0)
+  printersEvaluated Int      @default(0)
+
+  /// Task (blocchi temporali) del piano
+  tasks GanttTask[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([createdAt])
+  @@schema("print-farm")
+}
+
+/// Singolo blocco temporale nel diagramma Gantt: un job pianificato su una stampante
+/// con inizio/fine stimati. Può anche rappresentare un "setup" (cambio filamento).
+model GanttTask {
+  id String @id @default(uuid()) @db.Uuid
+
+  ganttPlanId String    @db.Uuid
+  ganttPlan   GanttPlan @relation(fields: [ganttPlanId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Stampante assegnata
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Job di produzione (null se il task è un setup/filament change)
+  productionJobId String?        @db.Uuid
+  productionJob   ProductionJob? @relation(fields: [productionJobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Ordine di produzione (denormalizzato per query rapide nella UI)
+  productOrderId String? @db.Uuid
+
+  /// Tempi pianificati
+  plannedStart DateTime @db.Timestamptz(6)
+  plannedEnd   DateTime @db.Timestamptz(6)
+
+  /// Durata in minuti (ridondante ma comodo per query/visualizzazione)
+  durationMinutes Int
+
+  /// Posizione nella sequenza per questa stampante (0 = primo, 1 = secondo, ...)
+  sequenceIndex Int @default(0)
+
+  /// Tipo di blocco: false = stampa effettiva, true = setup/cambio filamento
+  isSetup Boolean @default(false)
+
+  /// Dettagli materiale (per visualizzazione e validazione)
+  materialCategory String?
+  colorHex         String?
+
+  /// Parti attese da questa stampa
+  partsExpected Int @default(0)
+
+  /// Stato runtime del task
+  taskStatus GanttTaskStatus @default(PLANNED)
+
+  /// Note/label per la UI
+  label String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([ganttPlanId])
+  @@index([printerId])
+  @@index([productionJobId])
+  @@index([productOrderId])
+  @@index([taskStatus])
+  @@index([plannedStart])
   @@schema("print-farm")
 }
