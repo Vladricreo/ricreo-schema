@@ -12,6 +12,7 @@ model ProjectThreeMFFile {
   compatiblePrinters       String[] // nomi stampanti compatibili
   zHeight                  Decimal  @db.Decimal(12, 2) // altezza modello in mm
   nozzleDiameter           Decimal  @db.Decimal(4, 2) // diametro ugello in mm
+  nozzleType               String   @default("Standard") // tipo ugello richiesto dal file
   partCount                Int // numero di parti nel plate
   totalLayers              Int // numero di strati
   totalFilamentWeight      Decimal? @db.Decimal(12, 2) // peso totale filamento usato in grammi
@@ -1201,5 +1202,122 @@ model GanttTask {
   @@index([productOrderId])
   @@index([taskStatus])
   @@index([plannedStart])
+  @@schema("print-farm")
+}
+
+// ============================================================================
+// SCHEDULER CONFIG & SCENARIO ANALYSIS
+// ============================================================================
+
+/// Profilo di configurazione dello scheduler: un set versionato di pesi, penalità e flag.
+/// Un solo profilo alla volta può essere ACTIVE; gli altri restano DRAFT o ARCHIVED.
+model SchedulerConfigProfile {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+
+  status SchedulerConfigProfileStatus @default(DRAFT)
+  notes  String?
+
+  values       SchedulerConfigValue[]
+  scenarioRuns SchedulerScenarioRun[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([status])
+  @@schema("print-farm")
+}
+
+enum SchedulerConfigProfileStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+
+  @@schema("print-farm")
+}
+
+/// Singolo parametro chiave/valore di un profilo di configurazione scheduler.
+/// Supporta valori numerici, booleani e di testo. La categoria raggruppa i parametri nella UI.
+model SchedulerConfigValue {
+  id        String @id @default(uuid()) @db.Uuid
+  profileId String @db.Uuid
+  profile   SchedulerConfigProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  key         String
+  valueNum    Decimal? @db.Decimal(16, 4)
+  valueBool   Boolean?
+  valueText   String?
+  category    String   @default("general")
+  description String?
+  editable    Boolean  @default(true)
+
+  @@unique([profileId, key])
+  @@index([profileId])
+  @@schema("print-farm")
+}
+
+/// Esecuzione (reale o simulata) dello scheduler con uno specifico profilo.
+/// Salva snapshot della configurazione, outcome del solver e metadata input.
+model SchedulerScenarioRun {
+  id        String @id @default(uuid()) @db.Uuid
+  profileId String? @db.Uuid
+  profile   SchedulerConfigProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+
+  runType        SchedulerRunType @default(REAL)
+  label          String?
+  configSnapshot Json?
+
+  solverStatus    String?
+  solverObjective Decimal? @db.Decimal(16, 2)
+  solverDurationMs Int?
+  jobsEvaluated    Int     @default(0)
+  printersEvaluated Int    @default(0)
+
+  assignmentsCreated Int @default(0)
+  assignmentsKept    Int @default(0)
+
+  inputMetadata Json?
+
+  candidates SchedulerScenarioCandidate[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([runType])
+  @@index([createdAt])
+  @@schema("print-farm")
+}
+
+enum SchedulerRunType {
+  REAL
+  SIMULATION
+
+  @@schema("print-farm")
+}
+
+/// Matrice candidato job-printer di uno scenario: contiene score, penalty, fattibilità e breakdown.
+model SchedulerScenarioCandidate {
+  id    String @id @default(uuid()) @db.Uuid
+  runId String @db.Uuid
+  run   SchedulerScenarioRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  jobId       String  @db.Uuid
+  jobNumber   String?
+  printerId   String  @db.Uuid
+  printerName String?
+
+  feasible       Boolean @default(true)
+  hardFailReason String?
+
+  score   Int @default(0)
+  penalty Int @default(0)
+  net     Int @default(0)
+
+  selected  Boolean @default(false)
+
+  breakdown Json?
+
+  @@index([runId])
+  @@index([runId, jobId])
+  @@index([runId, printerId])
   @@schema("print-farm")
 }
