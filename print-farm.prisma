@@ -199,6 +199,7 @@ model ProductionJob {
   @@index([productId])
   @@index([productPartId])
   @@index([status])
+  @@unique([productOrderId, productPartId])
   @@schema("print-farm")
 }
 
