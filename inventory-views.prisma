@@ -474,6 +474,7 @@ view VFbaInventory {
   quantityTransfer  Int       @map("quantity_transfer")
   quantityAvailable Int       @map("quantity_available")
   quantityReserved  Int       @map("quantity_reserved")
+  inTransitQty      Int       @map("in_transit_qty")
   price             Decimal?  @db.Decimal(12, 2)
   valoreStock       Decimal   @map("valore_stock") @db.Decimal(12, 2)
   salesVelocity     Decimal   @map("sales_velocity") @db.Decimal(12, 2)
