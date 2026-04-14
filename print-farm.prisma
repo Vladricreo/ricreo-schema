@@ -194,12 +194,12 @@ model ProductionJob {
   /// Task Gantt che coinvolgono questo job
   ganttTasks GanttTask[]
 
+  @@unique([productOrderId, productPartId])
   @@index([productOrderId])
   @@index([assemblyOrderId])
   @@index([productId])
   @@index([productPartId])
   @@index([status])
-  @@unique([productOrderId, productPartId])
   @@schema("print-farm")
 }
 
@@ -353,8 +353,8 @@ model Printer {
   lastPrintPlateNumber Int?
   lastPrintUseAms      Boolean?
   /// Mapping AMS dell'ultimo job (5 elementi, best-effort). Può essere NULL se non determinabile.
-  lastPrintAmsMapping Int[]
-  lastPrintAt         DateTime? @db.Timestamptz(6)
+  lastPrintAmsMapping  Int[]
+  lastPrintAt          DateTime? @db.Timestamptz(6)
 
   /// --- HEALTH / TELEMETRIA ---
   /// Ultimo aggiornamento ricevuto dalla stampante via WebSocket.
@@ -1037,9 +1037,9 @@ model PrinterFilamentLoad {
 
   // === Vecchia spool ===
   /// Spool che era montata prima del cambio
-  oldSpoolId     String?        @db.Uuid
+  oldSpoolId     String? @db.Uuid
   /// Azione eseguita sulla vecchia spool
-  oldSpoolAction String?        @db.VarChar(20)
+  oldSpoolAction String? @db.VarChar(20)
 
   // === Tracking inventario (per undo) ===
   /// Movement USO creato durante il prelievo (null se spool parziale/manual)
@@ -1126,10 +1126,10 @@ enum GanttTaskStatus {
 model GanttPlan {
   id String @id @default(uuid()) @db.Uuid
 
-  status    GanttPlanStatus @default(ACTIVE)
+  status       GanttPlanStatus @default(ACTIVE)
   /// Orizzonte di pianificazione: inizio e fine dell'intervallo calcolato.
-  horizonStart DateTime @db.Timestamptz(6)
-  horizonEnd   DateTime @db.Timestamptz(6)
+  horizonStart DateTime        @db.Timestamptz(6)
+  horizonEnd   DateTime        @db.Timestamptz(6)
 
   /// Statistiche solver
   solverStatus      String?
@@ -1240,8 +1240,8 @@ enum SchedulerConfigProfileStatus {
 /// Singolo parametro chiave/valore di un profilo di configurazione scheduler.
 /// Supporta valori numerici, booleani e di testo. La categoria raggruppa i parametri nella UI.
 model SchedulerConfigValue {
-  id        String @id @default(uuid()) @db.Uuid
-  profileId String @db.Uuid
+  id        String                 @id @default(uuid()) @db.Uuid
+  profileId String                 @db.Uuid
   profile   SchedulerConfigProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   key         String
@@ -1260,19 +1260,19 @@ model SchedulerConfigValue {
 /// Esecuzione (reale o simulata) dello scheduler con uno specifico profilo.
 /// Salva snapshot della configurazione, outcome del solver e metadata input.
 model SchedulerScenarioRun {
-  id        String @id @default(uuid()) @db.Uuid
-  profileId String? @db.Uuid
+  id        String                  @id @default(uuid()) @db.Uuid
+  profileId String?                 @db.Uuid
   profile   SchedulerConfigProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
 
   runType        SchedulerRunType @default(REAL)
   label          String?
   configSnapshot Json?
 
-  solverStatus    String?
-  solverObjective Decimal? @db.Decimal(16, 2)
-  solverDurationMs Int?
-  jobsEvaluated    Int     @default(0)
-  printersEvaluated Int    @default(0)
+  solverStatus      String?
+  solverObjective   Decimal? @db.Decimal(16, 2)
+  solverDurationMs  Int?
+  jobsEvaluated     Int      @default(0)
+  printersEvaluated Int      @default(0)
 
   assignmentsCreated Int @default(0)
   assignmentsKept    Int @default(0)
@@ -1297,8 +1297,8 @@ enum SchedulerRunType {
 
 /// Matrice candidato job-printer di uno scenario: contiene score, penalty, fattibilità e breakdown.
 model SchedulerScenarioCandidate {
-  id    String @id @default(uuid()) @db.Uuid
-  runId String @db.Uuid
+  id    String               @id @default(uuid()) @db.Uuid
+  runId String               @db.Uuid
   run   SchedulerScenarioRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   jobId       String  @db.Uuid
@@ -1313,7 +1313,7 @@ model SchedulerScenarioCandidate {
   penalty Int @default(0)
   net     Int @default(0)
 
-  selected  Boolean @default(false)
+  selected Boolean @default(false)
 
   breakdown Json?
 

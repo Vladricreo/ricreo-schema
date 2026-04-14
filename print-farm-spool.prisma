@@ -1,3 +1,65 @@
+/// Tag fisico riutilizzabile (es. clip stampata 3D con NFC + QR code).
+/// Codice univoco stampato sulla tag (es. "S001", "S002").
+/// Flusso:
+/// 1. Si stampano N tag con codice progressivo e si registrano nel DB.
+/// 2. Quando una bobina parziale va a magazzino, si attacca una tag LIBERA.
+/// 3. Scansionando QR o NFC si identifica immediatamente la spool associata.
+/// 4. Quando la bobina finisce o viene rimontata, si stacca la tag → torna LIBERA.
+model SpoolTag {
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique /// Codice stampato sulla tag: "S001", "S002", ecc.
+
+  nfcUid String? @unique /// UID fisico del chip NFC (opzionale, letto dal reader)
+
+  status SpoolTagStatus @default(FREE)
+
+  /// Spool attualmente associata (null = tag libera)
+  currentSpoolId String?        @unique @db.Uuid
+  currentSpool   FilamentSpool? @relation("TaggedSpool", fields: [currentSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Storico di tutte le associazioni passate e presente
+  assignments SpoolTagAssignment[]
+
+  /// Posizione "casa" della tag sullo spool rack (dove sta quando è libera)
+  locationId String?            @db.Uuid
+  location   WarehouseLocation? @relation("TagLocation", fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  notes String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([locationId])
+  @@schema("print-farm")
+}
+
+enum SpoolTagStatus {
+  FREE /// Disponibile, non associata a nessuna spool
+  ASSIGNED /// Attualmente associata a una spool
+  RETIRED /// Ritirata/rotta, non più utilizzabile
+
+  @@schema("print-farm")
+}
+
+/// Storico delle associazioni tag ↔ spool.
+/// Ogni volta che si attacca o stacca una tag, si crea/chiude un record.
+model SpoolTagAssignment {
+  id String @id @default(uuid()) @db.Uuid
+
+  tagId String   @db.Uuid
+  tag   SpoolTag @relation(fields: [tagId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  spoolId String        @db.Uuid
+  spool   FilamentSpool @relation("TagAssignments", fields: [spoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  assignedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  unassignedAt DateTime? @db.Timestamptz(6)
+
+  @@index([tagId])
+  @@index([spoolId])
+  @@schema("print-farm")
+}
+
 /// Profilo tecnico di un filamento (collegato a Item di tipo MATERIAL).
 /// Contiene tutte le specifiche per la stampa: temperature, codici BambuLab, etc.
 model FilamentProfile {
@@ -64,14 +126,9 @@ model FilamentSpool {
   inventoryLotId String?       @db.Uuid
   inventoryLot   InventoryLot? @relation("InventoryLotFilamentSpools", fields: [inventoryLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  /// ID del gettone RFID/NFC fisico associato temporaneamente.
-  /// FLUSSO "GETTONE RIUTILIZZABILE":
-  /// 1. Si usa un set di gettoni fisici (es. clip stampate con tag NFC).
-  /// 2. Quando una bobina parziale viene messa a magazzino, si attacca un gettone libero.
-  /// 3. Si associa l'ID del gettone a questa FilamentSpool (nfcTagId = "TOKEN-123").
-  /// 4. Quando la bobina viene rimontata o finisce, si stacca il gettone (nfcTagId = null).
-  /// 5. Il gettone torna nel cesto pronto per un'altra bobina.
-  nfcTagId String? @unique
+  /// Tag fisica riutilizzabile associata (relazione inversa da SpoolTag)
+  tag            SpoolTag?            @relation("TaggedSpool")
+  tagAssignments SpoolTagAssignment[] @relation("TagAssignments")
 
   openedAt   DateTime  @default(now()) @db.Timestamptz(6) // Per scadenza/umidità
   finishedAt DateTime? @db.Timestamptz(6)
@@ -150,4 +207,3 @@ model PrinterAmsSlot {
   @@index([spoolId])
   @@schema("print-farm")
 }
-

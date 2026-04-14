@@ -168,7 +168,7 @@ model WarehouseShelf {
   imageUrl    String?
 
   /// Gruppo/Fila fisica di appartenenza (opzionale: equivale a "Senza fila").
-  groupId String?             @db.Uuid
+  groupId String?              @db.Uuid
   group   WarehouseShelfGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Posizione progressiva dello scaffale all'interno del gruppo (1..N).
@@ -180,10 +180,10 @@ model WarehouseShelf {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
+  @@unique([groupId, positionInGroup])
   @@index([code])
   @@index([name])
   @@index([groupId, positionInGroup])
-  @@unique([groupId, positionInGroup])
   @@schema("inventory")
 }
 
@@ -283,6 +283,9 @@ model WarehouseLocation {
 
   /// Bobine filamento stoccate in questa posizione
   filamentSpools FilamentSpool[] @relation("SpoolLocation")
+
+  /// Tag fisiche assegnate a questa posizione (casa)
+  spoolTags SpoolTag[] @relation("TagLocation")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

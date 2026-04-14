@@ -57,13 +57,13 @@ model Item {
   /// Override (emergenze) che forzano questo Item come variant per una spec.
   itemSpecOverrideEntries ItemSpecOverride[] @relation("ItemSpecOverrideItem")
 
-  parts                     ProductPart[]       @relation("ItemToItemPart")
+  parts                     ProductPart[]         @relation("ItemToItemPart")
   /// Righe BOM (ProductPartMaterial) che puntano a questo Item (variant specifico).
   partMaterialBreakdowns    ProductPartMaterial[] @relation("ProductPartMaterialItem")
   ordersofitemforproduction ProductOrderItem[]
   purchaseOrderLines        PurchaseOrderLine[]
   product                   Product[]
-  compatibleMachines        CompatibleMachine[] @relation("SpareParts")
+  compatibleMachines        CompatibleMachine[]   @relation("SpareParts")
   OdetteContent             OdetteContent[]
   lots                      InventoryLot[]
   pickingLines              PickingLine[]
