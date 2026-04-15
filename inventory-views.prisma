@@ -321,6 +321,42 @@ view VItemReservedStock {
   @@schema("inventory_views")
 }
 
+/// Consumo ponderato, domanda produzione/assemblaggio e stagionalità per Item
+view VItemConsumptionDemand {
+  itemId                     String   @unique @map("item_id") @db.Uuid
+  dailyConsumptionWeighted   Decimal  @map("daily_consumption_weighted") @db.Decimal(14, 6)
+  dailyConsumptionSimple     Decimal  @map("daily_consumption_simple") @db.Decimal(14, 6)
+  isReliable                 Boolean  @map("is_reliable")
+  movementCount              Int      @map("movement_count")
+  effectiveDays              Int      @map("effective_days")
+  totalConsumption           BigInt   @map("total_consumption")
+  demandFromProduction       Int      @map("demand_from_production")
+  demandFromAssembly         Int      @map("demand_from_assembly")
+  seasonalFactor             Decimal  @map("seasonal_factor") @db.Decimal(8, 4)
+  adjustedDailyConsumption   Decimal  @map("adjusted_daily_consumption") @db.Decimal(14, 6)
+
+  @@map("v_item_consumption_demand")
+  @@schema("inventory_views")
+}
+
+/// Consumo ponderato e stagionalità per ProductPart BUY
+view VProductPartConsumptionDemand {
+  productPartId              String   @unique @map("product_part_id") @db.Uuid
+  dailyConsumptionWeighted   Decimal  @map("daily_consumption_weighted") @db.Decimal(14, 6)
+  dailyConsumptionSimple     Decimal  @map("daily_consumption_simple") @db.Decimal(14, 6)
+  isReliable                 Boolean  @map("is_reliable")
+  movementCount              Int      @map("movement_count")
+  effectiveDays              Int      @map("effective_days")
+  totalConsumption           BigInt   @map("total_consumption")
+  demandFromProduction       Int      @map("demand_from_production")
+  demandFromAssembly         Int      @map("demand_from_assembly")
+  seasonalFactor             Decimal  @map("seasonal_factor") @db.Decimal(8, 4)
+  adjustedDailyConsumption   Decimal  @map("adjusted_daily_consumption") @db.Decimal(14, 6)
+
+  @@map("v_product_part_consumption_demand")
+  @@schema("inventory_views")
+}
+
 /// ============================================================================
 /// LOT VIEWS - Tracciabilità ISO 9001
 /// ============================================================================
@@ -506,6 +542,8 @@ view VFbmInventory {
   image                  String?
   asin                   String
   currentStock           Int      @map("current_stock")
+  pendingShipmentsQty    Int      @map("pending_shipments_qty")
+  effectiveStock         Int      @map("effective_stock")
   valoreStock            Decimal  @map("valore_stock") @db.Decimal(12, 2)
   price                  Decimal? @db.Decimal(12, 2)
   salesVelocity          Decimal  @map("sales_velocity") @db.Decimal(12, 2)
@@ -554,18 +592,43 @@ view VAssemblyOrderOdetteStageBalance {
 /// ============================================================================
 
 /// Statistiche tempi di lavoro per prodotto (mediana, media totale, media mensile)
+/// Sorgente: sessioni tab correlate a qty stage; IQR + min 10s + cap 6h; winsor P5–P95 (code basse/alte).
+/// recent_* = ultimi 90gg (NULL se <3 campioni nel periodo recente pulito).
 view VProductLaborTimeStats {
-  productId                String  @unique @map("product_id") @db.Uuid
-  medianSecondsPerUnit     Decimal @map("median_seconds_per_unit") @db.Decimal(12, 2)
-  avgSecondsPerUnitTotal   Decimal @map("avg_seconds_per_unit_total") @db.Decimal(12, 2)
-  avgSecondsPerUnitMonthly Decimal @map("avg_seconds_per_unit_monthly") @db.Decimal(12, 2)
-  medianMinutesPerUnit     Decimal @map("median_minutes_per_unit") @db.Decimal(10, 2)
-  avgMinutesPerUnitTotal   Decimal @map("avg_minutes_per_unit_total") @db.Decimal(10, 2)
-  avgMinutesPerUnitMonthly Decimal @map("avg_minutes_per_unit_monthly") @db.Decimal(10, 2)
-  sampleSizeTotal          Int     @map("sample_size_total")
-  monthsWithData           Int     @map("months_with_data")
+  productId                String   @unique @map("product_id") @db.Uuid
+  medianSecondsPerUnit     Decimal  @map("median_seconds_per_unit") @db.Decimal(12, 2)
+  avgSecondsPerUnitTotal   Decimal  @map("avg_seconds_per_unit_total") @db.Decimal(12, 2)
+  avgSecondsPerUnitMonthly Decimal  @map("avg_seconds_per_unit_monthly") @db.Decimal(12, 2)
+  medianMinutesPerUnit     Decimal  @map("median_minutes_per_unit") @db.Decimal(10, 2)
+  avgMinutesPerUnitTotal   Decimal  @map("avg_minutes_per_unit_total") @db.Decimal(10, 2)
+  avgMinutesPerUnitMonthly Decimal  @map("avg_minutes_per_unit_monthly") @db.Decimal(10, 2)
+  sampleSizeTotal          Int      @map("sample_size_total")
+  monthsWithData           Int      @map("months_with_data")
+  recentMedianSecondsPerUnit Decimal? @map("recent_median_seconds_per_unit") @db.Decimal(12, 2)
+  recentAvgSecondsPerUnit    Decimal? @map("recent_avg_seconds_per_unit") @db.Decimal(12, 2)
+  recentMedianMinutesPerUnit Decimal? @map("recent_median_minutes_per_unit") @db.Decimal(10, 2)
+  recentAvgMinutesPerUnit    Decimal? @map("recent_avg_minutes_per_unit") @db.Decimal(10, 2)
+  recentSampleSize           Int      @map("recent_sample_size")
 
   @@map("v_product_labor_time_stats")
+  @@schema("inventory_views")
+}
+
+/// Breakdown tempi/costi lavoro per prodotto e operatore (audit; stessa logica sessione-tab)
+view VProductLaborByOperator {
+  productId              String   @map("product_id") @db.Uuid
+  operatorId             Int      @map("operator_id")
+  operatorName           String?  @map("operator_name")
+  medianSecondsPerUnit   Decimal  @map("median_seconds_per_unit") @db.Decimal(12, 2)
+  avgSecondsPerUnit      Decimal  @map("avg_seconds_per_unit") @db.Decimal(12, 2)
+  medianMinutesPerUnit   Decimal  @map("median_minutes_per_unit") @db.Decimal(10, 2)
+  avgMinutesPerUnit      Decimal  @map("avg_minutes_per_unit") @db.Decimal(10, 2)
+  totalUnitsProduced     BigInt   @map("total_units_produced")
+  totalOperations        Int      @map("total_operations")
+  lastAssemblyAt         DateTime @map("last_assembly_at") @db.Timestamptz(6)
+
+  @@unique([productId, operatorId])
+  @@map("v_product_labor_by_operator")
   @@schema("inventory_views")
 }
 
@@ -583,7 +646,7 @@ view VProductCostBreakdown {
   @@schema("inventory_views")
 }
 
-/// Riepilogo pricing per prodotto (costi + prezzo suggerito)
+/// Riepilogo pricing per prodotto (costi + prezzo suggerito; manodopera effettiva = mix graduale recente/storico)
 view VProductPricingSummary {
   productId   String @unique @map("product_id") @db.Uuid
   productName String @map("product_name")
@@ -595,18 +658,28 @@ view VProductPricingSummary {
   utilitiesCost   Decimal @map("utilities_cost") @db.Decimal(12, 4)
   rawMaterialCost Decimal @map("raw_material_cost") @db.Decimal(12, 4)
 
-  medianSecondsPerUnit     Decimal @map("median_seconds_per_unit") @db.Decimal(12, 2)
-  avgSecondsPerUnitTotal   Decimal @map("avg_seconds_per_unit_total") @db.Decimal(12, 2)
-  avgSecondsPerUnitMonthly Decimal @map("avg_seconds_per_unit_monthly") @db.Decimal(12, 2)
-  medianMinutesPerUnit     Decimal @map("median_minutes_per_unit") @db.Decimal(10, 2)
-  avgMinutesPerUnitTotal   Decimal @map("avg_minutes_per_unit_total") @db.Decimal(10, 2)
-  avgMinutesPerUnitMonthly Decimal @map("avg_minutes_per_unit_monthly") @db.Decimal(10, 2)
-  sampleSizeTotal          Int     @map("sample_size_total")
-  monthsWithData           Int     @map("months_with_data")
+  medianSecondsPerUnit     Decimal  @map("median_seconds_per_unit") @db.Decimal(12, 2)
+  avgSecondsPerUnitTotal   Decimal  @map("avg_seconds_per_unit_total") @db.Decimal(12, 2)
+  avgSecondsPerUnitMonthly Decimal  @map("avg_seconds_per_unit_monthly") @db.Decimal(12, 2)
+  medianMinutesPerUnit     Decimal  @map("median_minutes_per_unit") @db.Decimal(10, 2)
+  avgMinutesPerUnitTotal   Decimal  @map("avg_minutes_per_unit_total") @db.Decimal(10, 2)
+  avgMinutesPerUnitMonthly Decimal  @map("avg_minutes_per_unit_monthly") @db.Decimal(10, 2)
+  sampleSizeTotal          Int      @map("sample_size_total")
+  monthsWithData           Int      @map("months_with_data")
 
-  operationalCost Decimal @map("operational_cost") @db.Decimal(12, 4)
-  shippingCost    Decimal @map("shipping_cost") @db.Decimal(12, 2)
-  totalCost       Decimal @map("total_cost") @db.Decimal(12, 4)
+  recentMedianSecondsPerUnit Decimal? @map("recent_median_seconds_per_unit") @db.Decimal(12, 2)
+  recentAvgSecondsPerUnit    Decimal? @map("recent_avg_seconds_per_unit") @db.Decimal(12, 2)
+  recentMedianMinutesPerUnit Decimal? @map("recent_median_minutes_per_unit") @db.Decimal(10, 2)
+  recentAvgMinutesPerUnit    Decimal? @map("recent_avg_minutes_per_unit") @db.Decimal(10, 2)
+  recentSampleSize           Int      @map("recent_sample_size")
+  effectiveLaborSecondsPerUnit Decimal @map("effective_labor_seconds_per_unit") @db.Decimal(12, 2)
+
+  operationalCost            Decimal  @map("operational_cost") @db.Decimal(12, 4)
+  historicalOperationalCost  Decimal  @map("historical_operational_cost") @db.Decimal(12, 4)
+  recentOperationalCost      Decimal? @map("recent_operational_cost") @db.Decimal(12, 4)
+  productionCost             Decimal  @map("production_cost") @db.Decimal(12, 4)
+  shippingCost               Decimal  @map("shipping_cost") @db.Decimal(12, 2)
+  totalCost                  Decimal  @map("total_cost") @db.Decimal(12, 4)
   suggestedPrice  Decimal @map("suggested_price") @db.Decimal(12, 2)
 
   sellingPrice          Decimal? @db.Decimal(12, 2)

@@ -143,6 +143,9 @@ model WarehouseShelfGroup {
   /// Ordine globale del gruppo nella UI (1..N).
   order Int
 
+  /// Codice corridoio condiviso con altre file/scaffali accessibili dallo stesso passaggio (es. "C1", "NORD").
+  aisleCode String?
+
   /// Scaffali appartenenti al gruppo.
   shelves WarehouseShelf[]
 
@@ -152,6 +155,7 @@ model WarehouseShelfGroup {
   @@unique([order])
   @@index([code])
   @@index([order])
+  @@index([aisleCode])
   @@schema("inventory")
 }
 
@@ -174,6 +178,9 @@ model WarehouseShelf {
   /// Posizione progressiva dello scaffale all'interno del gruppo (1..N).
   positionInGroup Int?
 
+  /// Codice corridoio per scaffali senza fila (se in fila, prevale `group.aisleCode`).
+  aisleCode String?
+
   /// Ripiani/righe fisiche appartenenti allo scaffale.
   rows WarehouseRow[]
 
@@ -184,6 +191,7 @@ model WarehouseShelf {
   @@index([code])
   @@index([name])
   @@index([groupId, positionInGroup])
+  @@index([aisleCode])
   @@schema("inventory")
 }
 
