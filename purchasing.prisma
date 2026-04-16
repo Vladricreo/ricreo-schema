@@ -73,9 +73,43 @@ model Supplier {
   productParts        ProductPart[]   @relation("SupplierProductParts")
   purchaseOrders      PurchaseOrder[]
   lots                InventoryLot[]
+  /// Mappature apprese da import documenti (PDF/fatture) per collegare descrizioni fornitore → Item/Part.
+  supplierDocumentMappings SupplierDocumentMapping[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
+  @@schema("inventory")
+}
+
+/// Mappa descrizioni testuali da documenti fornitore a Item o ProductPart (memoria per import AI).
+model SupplierDocumentMapping {
+  id      String @id @default(uuid()) @db.Uuid
+  /// Fornitore canonico (opzionale, utile per query); la chiave “umana” resta supplierNamePattern.
+  supplierId String?   @db.Uuid
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Nome fornitore come compare sul documento (normalizzato in app, es. trim + case).
+  supplierNamePattern String
+  /// Descrizione riga dal documento (testo estratto / come letto dall’AI).
+  documentDescription String
+
+  matchedItemId String? @db.Uuid
+  matchedItem   Item?   @relation(fields: [matchedItemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  matchedProductPartId String?      @db.Uuid
+  matchedProductPart   ProductPart? @relation(fields: [matchedProductPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Suggerimenti di parsing (es. etichette spedizione, valuta) aggregati per fornitore.
+  fieldHints Json?
+
+  timesUsed  Int      @default(1)
+  lastUsedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([supplierNamePattern, documentDescription])
+  @@index([supplierId])
   @@schema("inventory")
 }
