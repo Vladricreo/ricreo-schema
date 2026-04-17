@@ -57,6 +57,9 @@ model User {
   /// Righe picking effettuate da questo utente.
   pickingLines PickingLine[]
 
+  /// Resi creati da questo utente (audit).
+  customerReturns CustomerReturn[]
+
   @@index([isActive]) /// Indice pratico per filtri frequenti
   @@schema("public") ///  la tabella degli utenti
 }

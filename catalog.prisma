@@ -214,6 +214,8 @@ model Product {
   projectParts   ProjectPart[]
   productionJobs ProductionJob[]
 
+  customerReturnLines CustomerReturnLine[]
+
   @@index([itemId])
   @@schema("inventory")
 }
