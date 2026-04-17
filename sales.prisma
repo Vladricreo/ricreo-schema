@@ -43,6 +43,7 @@ model Sku {
   assemblyOrders      AssemblyOrder[]
   productOrders       ProductOrder[]
   projectFiles        ProjectThreeMFFile[] @relation("ProjectRelatedSku")
+  customerReturnLines CustomerReturnLine[]
 
   productPackages   ProductToPackage[]
   productComponents ProductToComponent[]
@@ -265,6 +266,8 @@ model Shipment {
   fullAddress      String?
   notes            String?
 
+  customerReturns CustomerReturn[]
+
   @@index([productId])
   @@index([movementId])
   @@schema("inventory")
@@ -295,6 +298,7 @@ model ShipmentLine {
   @@index([shipmentId])
   @@index([skuId])
   @@index([lotId])
+  customerReturnLines CustomerReturnLine[]
   @@schema("inventory")
 }
 
@@ -363,5 +367,93 @@ enum Marketplace {
   EBAY
   ETSY
 
+  @@schema("inventory")
+}
+
+/// Origine del reso (ritorno corriere vs reso cliente vs inserimento manuale).
+enum CustomerReturnOrigin {
+  DELIVERY_FAILURE
+  CUSTOMER_RETURN
+  MANUAL
+
+  @@schema("inventory")
+}
+
+/// Stato workflow reso in magazzino.
+enum CustomerReturnStatus {
+  PENDING_INBOUND
+  RECEIVED
+  IN_INSPECTION
+  COMPLETED
+  SCRAPPED
+  CANCELLED
+
+  @@schema("inventory")
+}
+
+/// Esito ispezione per riga reso.
+enum CustomerReturnLineCondition {
+  TO_INSPECT
+  REUSABLE
+  RECOVERABLE_PARTS
+  SCRAP
+
+  @@schema("inventory")
+}
+
+/// Testata reso cliente / ritorno spedizione (non confondere con keyword SQL `RETURN`).
+model CustomerReturn {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  number                 BigInt                 @unique @default(autoincrement()) @db.BigInt
+  origin                 CustomerReturnOrigin
+  status                 CustomerReturnStatus   @default(PENDING_INBOUND)
+  shipmentId             String?                @db.Uuid
+  shipment               Shipment?              @relation(fields: [shipmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Snapshot ordine / tracking per resi senza shipment collegato o dedup sync provider.
+  orderNumberSnapshot    String?
+  trackingNumberSnapshot String?
+  clientNameSnapshot     String?
+  countrySnapshot        String?
+  labelUrl               String?
+  receivedAt             DateTime?              @db.Timestamptz(6)
+  completedAt            DateTime?              @db.Timestamptz(6)
+  notes                  String?
+  createdByUserId        Int?                   @db.Integer
+  createdByUser          User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Chiave idempotente sync ShippyPro `GetReturns` (se disponibile).
+  shippyProReturnId      String?                @unique
+  lines                  CustomerReturnLine[]
+  createdAt              DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime               @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([shipmentId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@schema("inventory")
+}
+
+/// Riga reso: quantità per SKU/prodotto, eventualmente collegata alla riga spedizione originale.
+model CustomerReturnLine {
+  id               String                       @id @default(uuid()) @db.Uuid
+  customerReturnId String                       @db.Uuid
+  customerReturn   CustomerReturn               @relation(fields: [customerReturnId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  skuId            String?                      @db.Uuid
+  sku              Sku?                         @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productId        String?                      @db.Uuid
+  product          Product?                     @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  shipmentLineId   String?                      @db.Uuid
+  shipmentLine     ShipmentLine?                @relation(fields: [shipmentLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  quantity         Int                          @default(1)
+  lineCondition    CustomerReturnLineCondition  @default(TO_INSPECT)
+  notes            String?
+  /// Quando è stato registrato l’ingresso a magazzino (RESO_IN) per prodotto riutilizzabile.
+  inventoryReceivedAt DateTime?                 @db.Timestamptz(6)
+  movements        Movement[]
+  createdAt        DateTime                     @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime                     @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([customerReturnId])
+  @@index([skuId])
+  @@index([productId])
   @@schema("inventory")
 }

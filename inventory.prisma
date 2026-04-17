@@ -39,6 +39,9 @@ model Movement {
   productPart     ProductPart?      @relation(fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   product         Product?          @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   shipments       Shipment[]
+  /// Audit: movimento legato a una riga reso (recupero / RESO_IN).
+  returnLineId    String?           @db.Uuid
+  returnLine      CustomerReturnLine? @relation(fields: [returnLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([productPartId])
   @@index([assemblyStageId])
@@ -55,6 +58,7 @@ model Movement {
   @@index([assemblyOrderId, assemblyStageId, type])
   @@index([assemblyOrderId, date(sort: Desc)])
   @@index([date(sort: Desc)])
+  @@index([returnLineId])
   @@schema("inventory")
 }
 
@@ -452,6 +456,8 @@ enum MovementType {
   TRASH // uscita per scarto/rottura
   CORRECTION_UP // entrata per correzione quantità (aumento)
   CORRECTION_DOWN // uscita per correzione quantità (diminuzione)
+  /// Entrata magazzino da reso cliente / ritorno (prodotto finito SKU).
+  RESO_IN
 
   @@schema("inventory")
 }
