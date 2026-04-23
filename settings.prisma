@@ -32,6 +32,8 @@ enum SettingsName {
   AMAZON_STORAGE_FEE_HIGH
   /// Credenziali SP-API/LWA (cifrate a DB) usate per import Amazon (solo admin).
   AMAZON_SP_API_CREDENTIALS
+  /// Token API ZonWizard (cifrato a DB) usato per sincronizzare costi prodotti (solo admin).
+  ZONWIZARD_API_CREDENTIALS
 
   @@schema("inventory")
 }

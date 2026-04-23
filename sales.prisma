@@ -257,7 +257,12 @@ model Shipment {
   courier          String?
   labelUrl         String?
   isShipped        Boolean             @default(false)
+  /// Identificativo interno dell'ordine sul provider (es. ShippyPro `ordine_id`).
+  /// Usato come chiave di sincronizzazione e mostrato come "Ordine".
   orderNumber      String?
+  /// Numero d'ordine del marketplace originale (Amazon, Etsy, eBay, Shopify, ...),
+  /// es. ShippyPro `transaction_id`. È l'ID che il cliente vede sul suo account.
+  marketplaceOrderId String?
   recipientCountry String?
   recipientName    String?
   trackingNumber   String?
@@ -273,6 +278,7 @@ model Shipment {
 
   @@index([productId])
   @@index([movementId])
+  @@index([marketplaceOrderId])
   @@schema("inventory")
 }
 
@@ -457,6 +463,8 @@ model CustomerReturnLine {
   targetOdetteId   String?                      @db.Uuid
   targetOdette     Odette?                      @relation("CustomerReturnLineTargetOdette", fields: [targetOdetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   movements        Movement[]
+  /// Ordini di produzione critici collegati a questa riga (parti mancanti dopo recupero).
+  productionOrders ProductOrder[]               @relation("CustomerReturnLineProductionOrders")
   createdAt        DateTime                     @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime                     @default(now()) @updatedAt @db.Timestamptz(6)
 

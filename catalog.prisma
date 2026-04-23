@@ -69,6 +69,8 @@ model Item {
   OdetteContent             OdetteContent[]
   lots                      InventoryLot[]
   pickingLines              PickingLine[]
+  /// Scatole FBA "Base" che usano questo item come packaging terziario.
+  assemblyBoxPackages       AssemblyBox[]         @relation("AssemblyBoxPackagingItem")
 
   // Relazioni Print Farm
   projectFiles      ProjectThreeMFFile[]
@@ -820,10 +822,11 @@ enum AssemblyStageType {
   @@schema("inventory")
 }
 
-/// Tipi di imballaggio: primario (a contatto col prodotto), secondario (scatola esterna), altro.
+/// Tipi di imballaggio: primario (a contatto col prodotto), secondario (scatola esterna), terziario (pallet/wrapping per spedizione), altro.
 enum PackagingClass {
   PRIMARY
   SECONDARY
+  TERTIARY
   OTHERS
 
   @@schema("inventory")

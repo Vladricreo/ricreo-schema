@@ -44,11 +44,16 @@ model ProductOrder {
   /// Contenuti odette collegati a questo ordine (scarico/stoccaggio WIP).
   odetteContents OdetteContent[]
 
+  /// Riga reso che ha generato questo ordine (solo parti mancanti / recupero).
+  customerReturnLineId String?             @db.Uuid
+  customerReturnLine   CustomerReturnLine? @relation("CustomerReturnLineProductionOrders", fields: [customerReturnLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   @@index([skuId])
   @@index([assemblyOrderId])
   @@index([producedByUserId])
   @@index([productionStatus])
   @@index([priority])
+  @@index([customerReturnLineId])
   @@schema("inventory")
 }
 

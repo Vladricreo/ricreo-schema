@@ -6,12 +6,13 @@ model AssemblyBox {
   /// Progressivo numerico per generare `code`.
   number    BigInt @unique @default(autoincrement()) @db.BigInt
 
-  assemblyOrderId  String        @db.Uuid
-  assemblyOrder    AssemblyOrder @relation(fields: [assemblyOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  inventoryLotId   String        @db.Uuid
-  inventoryLot     InventoryLot  @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  skuId            String        @db.Uuid
-  sku              Sku           @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// Opzionale: per scatole "manuali" create senza ordine di assemblaggio (es. picking diretto da magazzino).
+  assemblyOrderId  String?        @db.Uuid
+  assemblyOrder    AssemblyOrder? @relation(fields: [assemblyOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  inventoryLotId   String         @db.Uuid
+  inventoryLot     InventoryLot   @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  skuId            String         @db.Uuid
+  sku              Sku            @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   quantity     Int
   weightGrams  Int?
@@ -23,9 +24,22 @@ model AssemblyBox {
   /// Payload QR stampato (es. sku|lot).
   qrPayload    String?
 
+  /// True se la scatola è stata creata manualmente (picking diretto, FIFO sui lotti).
+  isManual Boolean @default(false)
+  /// Identificativo del "carton fisico" quando la scatola contiene più SKU/lotti:
+  /// più righe AssemblyBox con lo stesso `manualGroupId` = un solo collo verso Amazon.
+  manualGroupId String? @db.Uuid
+
   /// Piano FBA a cui la scatola è riservata (bozza o in lavorazione).
   fbaShipmentPlanId String?          @db.Uuid
   fbaShipmentPlan   FbaShipmentPlan? @relation(fields: [fbaShipmentPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Item di packaging terziario (scatola "Base") consumato alla stampa dell'etichetta.
+  /// Null se la scatola è riciclata (dimensioni inserite manualmente).
+  packagingItemId String? @db.Uuid
+  packagingItem   Item?   @relation("AssemblyBoxPackagingItem", fields: [packagingItemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// True = scatola riciclata (no consumo packaging, dimensioni manuali in cm).
+  isRecycled      Boolean @default(false)
 
   shipmentBoxes FbaShipmentBox[]
   movements       Movement[]
@@ -38,6 +52,8 @@ model AssemblyBox {
   @@index([skuId])
   @@index([status])
   @@index([fbaShipmentPlanId])
+  @@index([manualGroupId])
+  @@index([packagingItemId])
   @@schema("inventory")
 }
 
@@ -115,7 +131,15 @@ model FbaShipment {
   /// Risposta Amazon aggregata (tracking, cost, ecc.).
   amazonPayload Json?
 
-  boxes FbaShipmentBox[]
+  /// Ultimo sync ricevuto Amazon (SP-API v0 getShipmentItems).
+  lastReceiptSyncAt DateTime? @db.Timestamptz(6)
+  /// Somma cache `quantityShipped` dalle righe receipt (per UI senza join).
+  totalShipped      Int?
+  /// Somma cache `quantityReceived` dalle righe receipt.
+  totalReceived     Int?
+
+  boxes        FbaShipmentBox[]
+  receiptItems FbaShipmentReceiptItem[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -129,9 +153,37 @@ enum FbaShipmentStatus {
   PENDING
   WORKING
   SHIPPED
+  /// In transito verso il FC (SP-API v0).
+  IN_TRANSIT
+  /// Consegnato dal corriere al FC.
+  DELIVERED
+  /// Check-in al dock ricezione.
+  CHECKED_IN
+  /// In ricezione (parziale).
+  RECEIVING
+  /// Ricezione completata (tutti gli item marcati ricevuti).
+  CLOSED
   CANCELLED
   ERROR
 
+  @@schema("inventory")
+}
+
+/// Quantità spedite vs ricevute per MSKU (sync SP-API Fulfillment Inbound v0).
+model FbaShipmentReceiptItem {
+  id         String @id @default(uuid()) @db.Uuid
+  shipmentId String @db.Uuid
+  shipment   FbaShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  msku               String
+  fnsku              String?
+  quantityShipped    Int @default(0)
+  quantityReceived   Int @default(0)
+
+  syncedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([shipmentId, msku])
+  @@index([shipmentId])
   @@schema("inventory")
 }
 
