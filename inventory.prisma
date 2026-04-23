@@ -48,6 +48,9 @@ model Movement {
   fbaShipmentPlan   FbaShipmentPlan? @relation(fields: [fbaShipmentPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   assemblyBoxId     String?          @db.Uuid
   assemblyBox       AssemblyBox?     @relation(fields: [assemblyBoxId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Audit: movimento legato a un intervento di manutenzione stampante (USO ricambi).
+  maintenanceLogId  String?          @db.Uuid
+  maintenanceLog    PrinterMaintenanceLog? @relation(fields: [maintenanceLogId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([productPartId])
   @@index([assemblyStageId])
@@ -67,6 +70,7 @@ model Movement {
   @@index([returnLineId])
   @@index([fbaShipmentPlanId])
   @@index([assemblyBoxId])
+  @@index([maintenanceLogId])
   @@schema("inventory")
 }
 

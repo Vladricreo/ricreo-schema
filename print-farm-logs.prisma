@@ -7,7 +7,7 @@ model PrinterMaintenanceLog {
   printerId String  @db.Uuid
   printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  type        MaintenanceType @default(ROUTINE)
+  type        MaintenanceType @default(ORDINARY)
   description String
 
   performedAt DateTime @default(now()) @db.Timestamptz(6)
@@ -28,6 +28,8 @@ model PrinterMaintenanceLog {
   pdfUrl              String?
 
   chatMessages MaintenanceChatMessage[]
+  /// Movimenti inventario (es. USO ricambi) collegati a questo log.
+  movements Movement[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -166,11 +168,10 @@ model FarmFeedback {
 }
 
 enum MaintenanceType {
-  ROUTINE // Pulizia, ingrassaggio
-  REPAIR // Sostituzione pezzi rotti
-  UPGRADE // Miglioria hardware
-  CALIBRATION
-  OTHER
+  ORDINARY // Manutenzione ordinaria (pulizia, lubrificazione, controlli periodici, calibrazioni)
+  EXTRAORDINARY // Manutenzione straordinaria (riparazioni, sostituzione componenti rotti/usurati)
+  UPGRADE // Upgrade/migliorie hardware o software
+  OTHER // Altro tipo di intervento
 
   @@schema("print-farm")
 }
@@ -179,6 +180,7 @@ enum MaintenanceType {
 enum MaintenanceSessionStatus {
   PENDING
   IN_PROGRESS
+  PAUSED
   COMPLETED
   CANCELLED
 
