@@ -1,0 +1,187 @@
+/// Scatola fisica assemblata (etichetta QR lotto + qty) pronta per inbound FBA.
+model AssemblyBox {
+  id        String @id @default(uuid()) @db.Uuid
+  /// Codice leggibile univoco (es. BOX-000042).
+  code      String @unique
+  /// Progressivo numerico per generare `code`.
+  number    BigInt @unique @default(autoincrement()) @db.BigInt
+
+  assemblyOrderId  String        @db.Uuid
+  assemblyOrder    AssemblyOrder @relation(fields: [assemblyOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  inventoryLotId   String        @db.Uuid
+  inventoryLot     InventoryLot  @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  skuId            String        @db.Uuid
+  sku              Sku           @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantity     Int
+  weightGrams  Int?
+  widthMm      Int?
+  heightMm     Int?
+  depthMm      Int?
+  status       AssemblyBoxStatus @default(ASSEMBLED)
+  printedAt    DateTime?         @db.Timestamptz(6)
+  /// Payload QR stampato (es. sku|lot).
+  qrPayload    String?
+
+  /// Piano FBA a cui la scatola è riservata (bozza o in lavorazione).
+  fbaShipmentPlanId String?          @db.Uuid
+  fbaShipmentPlan   FbaShipmentPlan? @relation(fields: [fbaShipmentPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  shipmentBoxes FbaShipmentBox[]
+  movements       Movement[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([assemblyOrderId])
+  @@index([inventoryLotId])
+  @@index([skuId])
+  @@index([status])
+  @@index([fbaShipmentPlanId])
+  @@schema("inventory")
+}
+
+enum AssemblyBoxStatus {
+  ASSEMBLED
+  RESERVED
+  SHIPPED
+  CANCELLED
+
+  @@schema("inventory")
+}
+
+/// Piano di spedizione inbound verso Amazon (SP-API Fulfillment Inbound v2024-03-20).
+model FbaShipmentPlan {
+  id     String @id @default(uuid()) @db.Uuid
+  number BigInt @unique @default(autoincrement()) @db.BigInt
+
+  marketplaceId String
+  status          FbaShipmentPlanStatus @default(DRAFT)
+
+  amazonInboundPlanId String? @unique
+
+  /// Indirizzo mittente (JSON: name, addressLine1, city, postalCode, countryCode, stateOrProvinceCode?).
+  sourceAddress Json?
+  notes         String?
+
+  /// Opzione placement confermata (id Amazon).
+  placementOptionId String?
+
+  /// Stato raw Amazon utile per debug (placement/transport ids).
+  amazonMetadata Json?
+
+  assemblyBoxes AssemblyBox[]
+  shipments     FbaShipment[]
+  operations    FbaInboundOperation[]
+  movements     Movement[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([marketplaceId])
+  @@schema("inventory")
+}
+
+enum FbaShipmentPlanStatus {
+  DRAFT
+  PACKING
+  PLACEMENT_PENDING
+  PLACEMENT_CONFIRMED
+  TRANSPORT_PENDING
+  TRANSPORT_CONFIRMED
+  LABELS_READY
+  SHIPPED
+  CANCELLED
+  ERROR
+
+  @@schema("inventory")
+}
+
+/// Singola spedizione (shipment) verso un FC Amazon, figlia del piano.
+model FbaShipment {
+  id     String @id @default(uuid()) @db.Uuid
+  planId String @db.Uuid
+  plan   FbaShipmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  amazonShipmentId            String?
+  destinationFulfillmentCenter String?
+  carrier                     String?
+  trackingNumber              String?
+  bolUrl                      String?
+  labelDownloadUrl            String?
+  status                      FbaShipmentStatus @default(PENDING)
+
+  /// Risposta Amazon aggregata (tracking, cost, ecc.).
+  amazonPayload Json?
+
+  boxes FbaShipmentBox[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([planId])
+  @@index([amazonShipmentId])
+  @@schema("inventory")
+}
+
+enum FbaShipmentStatus {
+  PENDING
+  WORKING
+  SHIPPED
+  CANCELLED
+  ERROR
+
+  @@schema("inventory")
+}
+
+/// Collega una `AssemblyBox` a una `FbaShipment` Amazon (post-placement).
+model FbaShipmentBox {
+  id String @id @default(uuid()) @db.Uuid
+
+  shipmentId String @db.Uuid
+  shipment   FbaShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  assemblyBoxId String      @db.Uuid
+  assemblyBox   AssemblyBox @relation(fields: [assemblyBoxId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  boxIndex    Int
+  amazonBoxId String?
+  weightGrams Int?
+  dimensionsMm Json?
+
+  @@unique([shipmentId, assemblyBoxId])
+  @@index([assemblyBoxId])
+  @@schema("inventory")
+}
+
+/// Log operazioni async SP-API (polling `getInboundOperationStatus`).
+model FbaInboundOperation {
+  id String @id @default(uuid()) @db.Uuid
+
+  planId String?          @db.Uuid
+  plan   FbaShipmentPlan? @relation(fields: [planId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  operationId   String
+  operationType String
+  status        FbaInboundOperationStatus @default(PENDING)
+
+  requestPayload  Json?
+  responsePayload Json?
+  errorMessage    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([planId])
+  @@index([operationId])
+  @@schema("inventory")
+}
+
+enum FbaInboundOperationStatus {
+  PENDING
+  SUCCESS
+  FAILED
+
+  @@schema("inventory")
+}

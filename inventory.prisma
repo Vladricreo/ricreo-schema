@@ -43,6 +43,12 @@ model Movement {
   returnLineId    String?           @db.Uuid
   returnLine      CustomerReturnLine? @relation(fields: [returnLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Audit: movimento legato a spedizione inbound FBA (uscita stock locale verso Amazon).
+  fbaShipmentPlanId String?          @db.Uuid
+  fbaShipmentPlan   FbaShipmentPlan? @relation(fields: [fbaShipmentPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assemblyBoxId     String?          @db.Uuid
+  assemblyBox       AssemblyBox?     @relation(fields: [assemblyBoxId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   @@index([productPartId])
   @@index([assemblyStageId])
   @@index([productId])
@@ -59,6 +65,8 @@ model Movement {
   @@index([assemblyOrderId, date(sort: Desc)])
   @@index([date(sort: Desc)])
   @@index([returnLineId])
+  @@index([fbaShipmentPlanId])
+  @@index([assemblyBoxId])
   @@schema("inventory")
 }
 
@@ -109,6 +117,7 @@ model InventoryLot {
 
   shipmentLines      ShipmentLine[]
   assemblyOperations AssemblyOperation[]
+  assemblyBoxes      AssemblyBox[]
 
   /// Bobine di filamento associate a questo lotto di inventario.
   filamentSpools FilamentSpool[] @relation("InventoryLotFilamentSpools")

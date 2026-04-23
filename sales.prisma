@@ -15,6 +15,8 @@ model Sku {
   /// Effetto: la generazione automatica di `ProductOrder` deve ignorarlo.
   doNotStock               Boolean            @default(false)
   minStock                 Int                @default(0)
+  /// Stock massimo per SKU. 0 = nessun limite (default).
+  maxStock                 Int                @default(0)
   currentStock             Int                @default(0)
   dimensionsId             String?            @db.Uuid
   dimensions               Dimensions?        @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
@@ -44,6 +46,7 @@ model Sku {
   productOrders       ProductOrder[]
   projectFiles        ProjectThreeMFFile[] @relation("ProjectRelatedSku")
   customerReturnLines CustomerReturnLine[]
+  assemblyBoxes       AssemblyBox[]
 
   productPackages   ProductToPackage[]
   productComponents ProductToComponent[]
@@ -448,6 +451,11 @@ model CustomerReturnLine {
   notes            String?
   /// Quando è stato registrato l’ingresso a magazzino (RESO_IN) per prodotto riutilizzabile.
   inventoryReceivedAt DateTime?                 @db.Timestamptz(6)
+  /// Odette di destinazione pianificata in fase di ricezione (solo REUSABLE).
+  /// Verrà usata dal flusso di Riassemblaggio per registrare il movimento RESO_IN
+  /// nell'odette corretta e creare/aggiornare l'OdetteContent.
+  targetOdetteId   String?                      @db.Uuid
+  targetOdette     Odette?                      @relation("CustomerReturnLineTargetOdette", fields: [targetOdetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   movements        Movement[]
   createdAt        DateTime                     @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime                     @default(now()) @updatedAt @db.Timestamptz(6)
@@ -455,5 +463,6 @@ model CustomerReturnLine {
   @@index([customerReturnId])
   @@index([skuId])
   @@index([productId])
+  @@index([targetOdetteId])
   @@schema("inventory")
 }

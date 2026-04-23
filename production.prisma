@@ -120,6 +120,7 @@ model AssemblyOrder {
   operations        AssemblyOperation[]
   /// Righe picking per questo ordine di assemblaggio.
   pickingLines      PickingLine[]
+  assemblyBoxes     AssemblyBox[]
 
   @@index([assembledByUserId])
   @@index([skuId])
@@ -256,6 +257,9 @@ model Odette {
 
   /// Righe picking in cui questa odette è coinvolta.
   pickingLines PickingLine[]
+
+  /// Righe reso che hanno pianificato questa odette come destinazione (REUSABLE).
+  customerReturnLineTargets CustomerReturnLine[] @relation("CustomerReturnLineTargetOdette")
 
   @@index([status])
   @@index([lockedStage])
