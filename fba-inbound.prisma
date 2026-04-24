@@ -121,6 +121,11 @@ model FbaShipment {
   plan   FbaShipmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   amazonShipmentId            String?
+  /// `ShipmentId` legacy v0 (es. `FBA15LQ4CBB1`), equivalente al
+  /// `shipmentConfirmationId` v2024-03-20. La v0 (`getShipments`,
+  /// `getShipmentItemsByShipmentId`, `getLabels`) NON accetta gli
+  /// `sh...` ID v2024 e va alimentata sempre con questo campo.
+  shipmentConfirmationId       String?
   destinationFulfillmentCenter String?
   carrier                     String?
   trackingNumber              String?
@@ -146,6 +151,7 @@ model FbaShipment {
 
   @@index([planId])
   @@index([amazonShipmentId])
+  @@index([shipmentConfirmationId])
   @@schema("inventory")
 }
 

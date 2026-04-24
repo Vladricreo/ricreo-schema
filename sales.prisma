@@ -26,6 +26,21 @@ model Sku {
   location                 WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   ean                      String?
   asin                     String?
+
+  /// Proprietario etichetta FBA inbound per questo SKU.
+  /// - SELLER (default): il venditore stampa e applica FNSKU. Default conservativo:
+  ///   un nuovo SKU non avrà il listing Amazon ancora configurato in "Manufacturer Barcode",
+  ///   quindi servirà FNSKU finché non viene esplicitamente abilitato.
+  /// - NONE: lo SKU usa il codice a barre del produttore (manufacturer barcode / EAN registrato),
+  ///   nessuna FNSKU richiesta. Da impostare quando il listing è in modalità "Manufacturer Barcode".
+  /// - AMAZON: Amazon applica l'etichetta (servizio a pagamento "FBA Label Service").
+  fbaLabelOwner            FbaLabelOwner      @default(SELLER)
+  /// Proprietario delle operazioni di prep FBA per questo SKU.
+  /// - SELLER (default): il venditore esegue la prep.
+  /// - NONE: nessuna prep richiesta.
+  /// - AMAZON: prep gestita da Amazon (servizio a pagamento).
+  fbaPrepOwner             FbaPrepOwner       @default(SELLER)
+
   createdAt                DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt                DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -364,6 +379,26 @@ enum ShipmentType {
   BUSINESS
   STANDARD
   FBA
+
+  @@schema("inventory")
+}
+
+/// Proprietario delle etichette FBA inbound per uno SKU.
+/// Riflette i valori accettati da SP-API Fulfillment Inbound v2024-03-20 (`labelOwner`).
+enum FbaLabelOwner {
+  AMAZON
+  SELLER
+  NONE
+
+  @@schema("inventory")
+}
+
+/// Proprietario delle operazioni di prep FBA per uno SKU.
+/// Riflette i valori accettati da SP-API Fulfillment Inbound v2024-03-20 (`prepOwner`).
+enum FbaPrepOwner {
+  AMAZON
+  SELLER
+  NONE
 
   @@schema("inventory")
 }

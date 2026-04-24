@@ -34,6 +34,9 @@ enum SettingsName {
   AMAZON_SP_API_CREDENTIALS
   /// Token API ZonWizard (cifrato a DB) usato per sincronizzare costi prodotti (solo admin).
   ZONWIZARD_API_CREDENTIALS
+  /// Indirizzo mittente di default per le spedizioni inbound FBA (Amazon SP-API).
+  /// Valore JSON con shape AddressInput: { name, phoneNumber, addressLine1, addressLine2?, city, postalCode, countryCode, stateOrProvinceCode? }.
+  FBA_INBOUND_SOURCE_ADDRESS
 
   @@schema("inventory")
 }
