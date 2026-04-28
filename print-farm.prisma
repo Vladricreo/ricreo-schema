@@ -1,3 +1,12 @@
+/// Tipo di superficie piatto richiesta dal file / montata sulla stampante (Bambu Studio / firmware).
+enum PlateType {
+  TEXTURED
+  SMOOTH
+  SMOOTH_PA
+
+  @@schema("print-farm")
+}
+
 /// File di progetto 3MF per la stampa 3D.
 /// Include informazioni sul file, parametri di stampa, materiali usati e versionamento.
 model ProjectThreeMFFile {
@@ -17,6 +26,9 @@ model ProjectThreeMFFile {
   totalLayers              Int // numero di strati
   totalFilamentWeight      Decimal? @db.Decimal(12, 2) // peso totale filamento usato in grammi
   plateNumber              Int      @default(1) // Numero del plate (index) per il comando di stampa
+
+  /// Tipo piatto richiesto per questa stampa (filtraggio stampanti + `bed_type` su comando Bambu).
+  requiredPlateType PlateType @default(TEXTURED)
 
   /// Metadati estratti da `Metadata/slice_info.config` (Bambu Studio)
   printerModelId String? // es. "C12"
@@ -324,6 +336,8 @@ model Printer {
   runPower       Decimal?     @db.Decimal(12, 2)
   nozzleDiameter Decimal      @default(0.4) @db.Decimal(4, 2)
   nozzleType     String       @default("Hardened Steel")
+  /// Tipo piatto attualmente montato (aggiornamento manuale operatore; usato per compatibilità con i file).
+  currentPlateType PlateType @default(TEXTURED)
   structure      String       @default("CoreXY")
   ams            Boolean?
   /// Modello AMS collegato (se presente). Serve per stimare consumi AMS (standby/working/drying).
