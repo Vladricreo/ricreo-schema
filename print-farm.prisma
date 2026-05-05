@@ -423,9 +423,11 @@ model Printer {
   /// Serve per suggerire automaticamente l'assegnazione dei job in base al materiale richiesto.
   preferredMaterialCategories PrinterPreferredMaterialCategory[]
 
-  logs            PrinterLogs[]
-  maintenanceLogs PrinterMaintenanceLog[]
-  feedbacks       FarmFeedback[]
+  logs             PrinterLogs[]
+  maintenanceLogs  PrinterMaintenanceLog[]
+  /// Piani di manutenzione ricorrente associati alla stampante (template ISO).
+  maintenancePlans PrinterMaintenancePlan[]
+  feedbacks        FarmFeedback[]
   /// Issue operative/tecniche aperte o risolte (derivate da MQTT/WSS o inserite manualmente).
   issues          PrinterIssue[]
 

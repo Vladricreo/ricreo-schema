@@ -27,6 +27,27 @@ model PrinterMaintenanceLog {
   status              MaintenanceSessionStatus?
   pdfUrl              String?
 
+  /// --- PIANIFICAZIONE / ISO ---
+  /// Data/ora prevista per l'esecuzione (presente per log generati da pianificazione o programmati ad-hoc).
+  /// NULL per interventi straordinari avviati al momento.
+  scheduledFor DateTime? @db.Timestamptz(6)
+
+  /// Pianificazione ricorrente che ha generato/governa questo log (se presente).
+  planId String?                 @db.Uuid
+  plan   PrinterMaintenancePlan? @relation(fields: [planId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Snapshot della checklist al momento della creazione/esecuzione (lista step + esito per step).
+  /// Formato: [{ id, label, required, done?, note? }, ...]
+  checklist Json?
+
+  /// Esito complessivo dell'intervento (compilato a chiusura, ISO 9001/14224).
+  outcome      MaintenanceOutcome?
+  outcomeNotes String?             @db.Text
+
+  /// Verifica/approvazione (firma) di un secondo operatore - opzionale ma raccomandato ISO.
+  verifiedBy String? // User ID o nome
+  verifiedAt DateTime? @db.Timestamptz(6)
+
   chatMessages MaintenanceChatMessage[]
   /// Movimenti inventario (es. USO ricambi) collegati a questo log.
   movements Movement[]
@@ -34,6 +55,76 @@ model PrinterMaintenanceLog {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
+  @@index([printerId, scheduledFor])
+  @@index([status, scheduledFor])
+  @@index([planId])
+  @@schema("print-farm")
+}
+
+/// Pianificazione manutenzione ricorrente o programmata (template ISO).
+/// Una `PrinterMaintenancePlan` genera occorrenze concrete come `PrinterMaintenanceLog`
+/// con `status=PENDING` e `scheduledFor` valorizzato. Solo all'avvio reale dell'intervento
+/// la stampante viene messa in `manualOverrideStatus=MAINTENANCE`.
+model PrinterMaintenancePlan {
+  id     String @id @default(uuid()) @db.Uuid
+  /// Progressivo leggibile per riferimenti umani (es. "Piano #42").
+  number BigInt @unique @default(autoincrement()) @db.BigInt
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Tipo intervento pianificato. In pratica ORDINARY o UPGRADE; gli altri tipi
+  /// non si pianificano ma il vincolo è applicativo (non DB) per flessibilità futura.
+  type MaintenanceType @default(ORDINARY)
+
+  /// Titolo breve (es. "Pulizia hotend e calibrazione piatto").
+  title String
+  /// Procedura/descrizione dettagliata (rich text/markdown supportato lato UI).
+  description String? @db.Text
+
+  /// Checklist procedura (template ISO). Formato: [{ id, label, required }].
+  /// All'esecuzione viene clonata sul log e popolata con lo stato `done`.
+  checklistTemplate Json?
+
+  /// Stima durata intervento (minuti) - per capacity planning e UI.
+  estimatedDurationMin Int?
+
+  /// Ricambi tipicamente usati (suggerimento operatore). Formato: [{ itemId, quantity }].
+  suggestedParts Json?
+
+  /// --- RICORRENZA ---
+  recurrenceMode MaintenanceRecurrenceMode @default(NONE)
+  /// Numero di unità tra un'occorrenza e la successiva (giorni / settimane / mesi / anni).
+  /// Esempio: recurrenceMode=MONTHLY, intervalValue=1 → ogni mese.
+  intervalValue  Int?
+  /// Tolleranza in giorni prima di considerare la pianificazione "in ritardo" (highlight rosso UI).
+  graceDays      Int?                      @default(7)
+  /// Data di riferimento (es. installazione macchina) per calcolare la prossima scadenza.
+  anchorDate     DateTime?                 @db.Timestamptz(6)
+
+  /// Prossima scadenza prevista. Aggiornata automaticamente al completamento dell'occorrenza.
+  /// Per piani NONE (una tantum) coincide con la data di esecuzione singola.
+  nextDueAt       DateTime? @db.Timestamptz(6)
+  /// Ultimo trigger eseguito (=performedAt dell'ultimo log COMPLETED collegato).
+  lastTriggeredAt DateTime? @db.Timestamptz(6)
+
+  /// Giorni prima della scadenza in cui inviare il reminder/notifica.
+  remindBeforeDays Int @default(3)
+
+  /// Pianificazione attiva (se false, non genera nuove occorrenze ma resta visibile).
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  /// Utente (User ID) che ha creato/modificato l'ultima volta il piano (audit ISO).
+  createdBy String?
+  updatedBy String?
+
+  /// Occorrenze (log) generate da questo piano.
+  logs PrinterMaintenanceLog[]
+
+  @@index([printerId, active])
+  @@index([nextDueAt])
   @@schema("print-farm")
 }
 
@@ -191,6 +282,36 @@ enum MaintenanceChatRole {
   USER
   ASSISTANT
   SYSTEM
+
+  @@schema("print-farm")
+}
+
+/// Modalità di ricorrenza per la pianificazione manutenzioni.
+enum MaintenanceRecurrenceMode {
+  /// Pianificazione una tantum (no ricorrenza): genera una sola occorrenza.
+  NONE
+  /// Ogni N giorni (intervalValue = N).
+  DAILY
+  /// Ogni N settimane.
+  WEEKLY
+  /// Ogni N mesi (es. mensile = 1).
+  MONTHLY
+  /// Ogni N anni.
+  YEARLY
+
+  @@schema("print-farm")
+}
+
+/// Esito conclusivo dell'intervento di manutenzione (campo ISO 9001).
+enum MaintenanceOutcome {
+  /// Intervento eseguito con esito positivo, nessuna anomalia.
+  OK
+  /// Esito positivo ma con note/raccomandazioni (es. "valutare sostituzione cinghia al prossimo intervento").
+  OK_WITH_NOTES
+  /// Problema non risolto, richiede intervento successivo (apertura nuova manutenzione consigliata).
+  NOT_RESOLVED
+  /// Rimandato (es. ricambio non disponibile, da rischedulare).
+  POSTPONED
 
   @@schema("print-farm")
 }
