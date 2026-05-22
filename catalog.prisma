@@ -277,6 +277,12 @@ model ProductPartMaterial {
 
   /// Variante specifica (Item) usata nella BOM.
   /// Serve per distinguere materiali diversi anche se raggruppati sotto la stessa ItemSpec.
+  ///
+  /// Convenzione applicativa (gestita dalle API in `app/api/parts-materials`):
+  /// le nuove righe ricevono SEMPRE come default il primo variant della spec
+  /// (per `Item.specPriority`), cosi cost/consumo materiale possono leggere
+  /// direttamente l'`Item` senza dover risolvere via fallback. Resta `nullable`
+  /// per retrocompatibilita con righe legacy o spec senza variant.
   materialItemId String? @db.Uuid
   materialItem   Item?   @relation("ProductPartMaterialItem", fields: [materialItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
