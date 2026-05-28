@@ -153,6 +153,10 @@ model FilamentSpool {
   /// Se presente, indica che la spool è in uno slot AMS specifico.
   amsSlot PrinterAmsSlot? @relation("AmsSlotSpool")
 
+  /// Spool esterna (`vt_tray`) montata su un nozzle. Per single-nozzle è il `currentSpool` legacy.
+  /// Per dual-nozzle, distingue Right (extruderId=0) e Left (extruderId=1).
+  externalSpool PrinterExternalSpool? @relation("ExternalSpool")
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -190,6 +194,11 @@ model PrinterAmsSlot {
   spoolId String?        @unique @db.Uuid
   spool   FilamentSpool? @relation("AmsSlotSpool", fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// FK opzionale al nuovo `PrinterAmsUnit` (popolata durante la migrazione di backfill).
+  /// Resta nullable per back-compat: i consumer legacy possono ancora navigare via (printerId, amsUnit).
+  amsUnitId  String?         @db.Uuid
+  amsUnitRel PrinterAmsUnit? @relation("AmsUnitSlots", fields: [amsUnitId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   /// Snapshot "reported" dalla stampante (NON tracciamento spool).
   /// Serve per salvare materiale/colore anche quando non abbiamo una FilamentSpool assegnata.
   /// Non deve sovrascrivere la spool "reale" (spoolId) scelta dal frontend.
@@ -205,5 +214,6 @@ model PrinterAmsSlot {
   @@unique([printerId, amsUnit, slot])
   @@index([printerId])
   @@index([spoolId])
+  @@index([amsUnitId])
   @@schema("print-farm")
 }

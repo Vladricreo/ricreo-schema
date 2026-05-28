@@ -96,6 +96,9 @@ model ProjectFileMaterial {
   trayInfoIdx       String?
   /// Tipo filamento nel file (PLA/ABS/...)
   filamentType      String?
+  /// Extruder dichiarato dal file Bambu Studio (0 = right/main, 1 = left/auxiliary).
+  /// Estratto da `Metadata/slice_info.config` (`filament_maps`). Null se single-nozzle o non specificato.
+  extruderId        Int?
 
   /// Materiale inventario associato (opzionale, può essere mappato successivamente)
   materialId String? @db.Uuid
@@ -336,6 +339,16 @@ model Printer {
   runPower       Decimal?     @db.Decimal(12, 2)
   nozzleDiameter Decimal      @default(0.4) @db.Decimal(4, 2)
   nozzleType     String       @default("Hardened Steel")
+  /// Numero di nozzle/extruder della stampante (1 = single, 2 = dual H2D/X2D).
+  /// Autodetect dal firmware; fallback a 1 per back-compat.
+  nozzleCount    Int          @default(1)
+  /// True se la stampante ha il Filament Track Switch installato (solo dual-nozzle).
+  /// Quando true, ogni AMS può alimentare entrambi i nozzle (routing dinamico).
+  filaTrackSwitchInstalled Boolean @default(false)
+  /// Snapshot dell'ultimo stato `fila_switch` riportato dal firmware (per debug + UI).
+  filaTrackSwitchState Json?
+  /// Ultimo extruder attivo riportato dalla stampante (0 = right/main, 1 = left/auxiliary).
+  activeExtruder Int          @default(0)
   /// Tipo piatto attualmente montato (aggiornamento manuale operatore; usato per compatibilità con i file).
   currentPlateType PlateType @default(TEXTURED)
   structure      String       @default("CoreXY")
@@ -368,6 +381,8 @@ model Printer {
   lastPrintUseAms      Boolean?
   /// Mapping AMS dell'ultimo job (5 elementi, best-effort). Può essere NULL se non determinabile.
   lastPrintAmsMapping  Int[]
+  /// Mapping per-filamento → extruderId dell'ultimo job (solo dual-nozzle). Parallelo a `lastPrintAmsMapping`.
+  lastPrintFilamentMap Int[]
   lastPrintAt          DateTime? @db.Timestamptz(6)
 
   /// --- HEALTH / TELEMETRIA ---
@@ -451,6 +466,18 @@ model Printer {
   /// Ogni slot può contenere una spool. Per stampanti senza AMS, usare currentSpoolId.
   amsSlots PrinterAmsSlot[] @relation("PrinterAmsSlots")
 
+  /// Nozzle/extruder fisici della stampante (1 record per single-nozzle, 2 per dual H2D/X2D).
+  /// Sostituisce `nozzleDiameter`/`nozzleType` su dual-nozzle (i campi legacy restano scrivibili per back-compat).
+  nozzles PrinterNozzle[] @relation("PrinterNozzles")
+
+  /// Unità AMS collegate alla stampante. Su X2D possono essere fino a 12 (4× AMS 2 Pro + 8× AMS HT).
+  /// Sostituisce `amsModel` (singolo) su multi-AMS.
+  amsUnits PrinterAmsUnit[] @relation("PrinterAmsUnits")
+
+  /// Spool esterne (`vt_tray`) per nozzle. Su single-nozzle è 1 (extruderId=0); su dual-nozzle fino a 2.
+  /// Sostituisce `currentSpoolId`/`externalReported*` su dual-nozzle.
+  externalSpools PrinterExternalSpool[] @relation("PrinterExternalSpools")
+
   /// Consumi energia aggregati giornalieri (per dashboard, include standby).
   energyDailySlices PrinterEnergyDailySlice[]
 
@@ -472,6 +499,109 @@ model Printer {
   @@index([manualOverrideStatus])
   @@index([hasCompletedPrintOnBed])
   @@index([locationId])
+  @@schema("print-farm")
+}
+
+/// Nozzle/extruder fisico di una stampante.
+/// 1 record per single-nozzle, 2 record per dual H2D/X2D (extruderId = 0 right, 1 left).
+/// Sostituisce `Printer.nozzleDiameter`/`Printer.nozzleType` su dual-nozzle (legacy resta scrivibile per 1-2 release).
+model PrinterNozzle {
+  id        String  @id @default(uuid()) @db.Uuid
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterNozzles", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// 0 = right/main, 1 = left/auxiliary (Bambu convention).
+  extruderId Int
+
+  /// Diametro nozzle in mm (es. 0.4, 0.6).
+  diameter   Decimal @default(0.4) @db.Decimal(4, 2)
+  /// Tipo nozzle (es. "Hardened Steel", "Stainless Steel").
+  nozzleType String  @default("Hardened Steel")
+
+  /// Usura % (0..100), best-effort dal firmware.
+  wear         Int?
+  /// Serial number nozzle (se disponibile dal firmware).
+  serialNumber String?
+  /// Temperatura massima °C dichiarata dal nozzle (es. 300).
+  maxTempC     Int?
+
+  /// Snapshot ultimo colore/tipo filamento "reported" dal nozzle (non spool tracking).
+  lastReportedFilamentColor String?
+  lastReportedFilamentType  String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerId, extruderId])
+  @@index([printerId])
+  @@schema("print-farm")
+}
+
+/// Unità AMS collegata a una stampante (Bambu).
+/// Su X1/P1/A1: 1 record (amsId=0). Su H2D: fino a 2. Su X2D: fino a 12 (4× AMS 2 Pro + 8× AMS HT).
+/// Sostituisce `Printer.amsModel` (singleton) su multi-AMS.
+model PrinterAmsUnit {
+  id        String  @id @default(uuid()) @db.Uuid
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterAmsUnits", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// id MQTT (0..n). Su X2D può salire molto (fino a 12).
+  amsId           Int
+  amsModel        AmsModel
+  serialNumber    String?
+  firmwareVersion String?
+
+  /// Extruder a cui l'AMS è agganciata (0 = right, 1 = left).
+  /// null = routing dinamico via FTS (Filament Track Switch).
+  extruderId Int?
+
+  /// Telemetria: snapshot dell'ultimo MQTT.
+  humidity     Int?
+  tempC        Decimal? @db.Decimal(4, 1)
+  /// 0=Off, 1=Checking, 2=Drying, 3=Cooling, 4=Stopping, 5=Error.
+  dryStatus    Int?
+  /// 0=Off, 1=Heating, 2=Dehumidify.
+  drySubStatus Int?
+  /// Minuti rimanenti del ciclo di drying.
+  dryTimeMin   Int?
+
+  /// Slot AMS appartenenti a questa unità (relazione 1:N opzionale verso `PrinterAmsSlot.amsUnitId`).
+  slots PrinterAmsSlot[] @relation("AmsUnitSlots")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerId, amsId])
+  @@index([printerId])
+  @@schema("print-farm")
+}
+
+/// Spool esterna (Bambu `vt_tray`) montata su un nozzle specifico.
+/// Su single-nozzle: 1 record (extruderId=0). Su dual-nozzle: fino a 2 (Right su extruderId=0, Left su extruderId=1).
+/// Sostituisce `Printer.currentSpoolId` + `Printer.externalReported*` su dual-nozzle.
+model PrinterExternalSpool {
+  id        String  @id @default(uuid()) @db.Uuid
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterExternalSpools", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// 0 = right/main, 1 = left/auxiliary.
+  extruderId Int
+
+  /// Spool tracciata associata (può essere null = solo "reported" dal firmware).
+  spoolId String?        @unique @db.Uuid
+  spool   FilamentSpool? @relation("ExternalSpool", fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Snapshot "reported" dal firmware (non spool tracking) — mirror dei campi attuali su Printer.
+  reportedMaterialType String?
+  reportedColor        String?
+  reportedTrayInfoIdx  String?
+  reportedLastSeenAt   DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerId, extruderId])
+  @@index([printerId])
   @@schema("print-farm")
 }
 
