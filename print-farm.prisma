@@ -610,6 +610,11 @@ model PrinterModel {
   name        String @unique
   deviceModel String
 
+  /// Numero di nozzle/extruder che il modello supporta a livello hardware.
+  /// 1 = single (X1/P1/A1), 2 = dual (H2D/X2D). Source-of-truth per la UI.
+  /// `Printer.nozzleCount` resta come mirror per back-compat con i consumer esistenti.
+  nozzleCount Int @default(1)
+
   /// Dimensioni piano di stampa (mm)
   buildPlateWidth  Decimal? @db.Decimal(8, 2) // Larghezza piano (X) in mm
   buildPlateDepth  Decimal? @db.Decimal(8, 2) // Profondità piano (Y) in mm
