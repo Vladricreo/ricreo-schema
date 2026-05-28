@@ -1,0 +1,283 @@
+// ============================================================================
+// OrcaSlicer integration
+// Profili (printer/process/filament), progetti sorgente multi-piatto e job di
+// slicing eseguiti tramite il servizio AFKFelix `orca-slicer-api`.
+// ============================================================================
+
+/// Categoria del profilo OrcaSlicer.
+/// Mappa 1:1 alle cartelle del servizio AFKFelix (`/profiles/printers|presets|filaments`).
+/// - PRINTER  -> printer profile (machine)
+/// - PROCESS  -> preset (process / quality)
+/// - FILAMENT -> filament profile (material)
+enum SlicerProfileCategory {
+  PRINTER
+  PROCESS
+  FILAMENT
+
+  @@schema("print-farm")
+}
+
+/// Profilo OrcaSlicer salvato nel bucket e sincronizzato sul servizio di slicing.
+/// Convenzioni:
+/// - `orcaName` deve essere alfanumerico (`^[A-Za-z0-9]+$`) perché il servizio AFKFelix
+///   rifiuta nomi con caratteri speciali. È il nome usato nelle chiamate `/slice-async`.
+/// - `name` è il titolo umano mostrato in UI (può contenere spazi/punteggiatura).
+/// - `bucketPath` è la chiave Supabase Storage (es. `slicer-profiles/printers/<orcaName>.json`).
+/// - `version` cresce ad ogni replace; `syncedVersion` è l'ultima caricata su Orca.
+model SlicerProfile {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Categoria del profilo (printer/process/filament).
+  category SlicerProfileCategory
+
+  /// Nome umano del profilo (es. "Bambu Lab X1C 0.4mm").
+  name String
+
+  /// Nome usato sul servizio OrcaSlicer (`^[A-Za-z0-9]+$`).
+  /// Convenzione: PascalCase senza spazi (es. "BambuX1C04").
+  orcaName String
+
+  /// Chiave Supabase Storage del file JSON OrcaSlicer.
+  bucketPath String
+
+  /// Dimensione del file JSON in byte (per UI/diagnostica).
+  filesize Decimal? @db.Decimal(12, 0)
+
+  /// Hash SHA-256 del contenuto JSON. Usato per evitare re-upload identici.
+  checksum String?
+
+  /// Versione DB del profilo: cresce ad ogni replace via UI.
+  version Int @default(1)
+
+  /// Versione effettivamente caricata sul servizio Orca (null se mai sincronizzata).
+  syncedVersion Int?
+
+  /// Timestamp ultimo sync riuscito col servizio Orca.
+  syncedToOrcaAt DateTime? @db.Timestamptz(6)
+
+  /// Ultimo errore di sync (best-effort, troncato in UI).
+  syncError String?
+
+  /// Note libere (es. "0.4mm hardened nozzle").
+  description String?
+
+  /// FK opzionale al modello stampante (solo PRINTER/PROCESS).
+  /// Permette di mostrare i preset corretti quando si seleziona un PrinterModel.
+  printerModelId Int?
+  printerModel   PrinterModel? @relation("PrinterModelSlicerProfiles", fields: [printerModelId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// FK opzionale all'item materiale (solo FILAMENT).
+  /// Permette di associare un profilo filamento Orca a un materiale di inventario.
+  itemId String? @db.Uuid
+  item   Item?   @relation("ItemSlicerProfiles", fields: [itemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Diametro nozzle a cui il profilo PROCESS è ancorato (informativo, mm). Null = qualsiasi.
+  nozzleDiameter Decimal? @db.Decimal(4, 2)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  /// Slice job che usano questo profilo come PRINTER.
+  printerSliceJobs SliceJob[] @relation("SliceJobPrinterProfile")
+
+  /// Slice job che usano questo profilo come PROCESS.
+  processSliceJobs SliceJob[] @relation("SliceJobProcessProfile")
+
+  /// Slice job che usano questo profilo come FILAMENT.
+  filamentSliceJobs SliceJob[] @relation("SliceJobFilamentProfile")
+
+  /// Unicità: una sola riga per (categoria, orcaName).
+  @@unique([category, orcaName])
+  @@index([category])
+  @@index([printerModelId])
+  @@index([itemId])
+  @@schema("print-farm")
+}
+
+/// Stato di un progetto sorgente (file `.3mf` originale prima dello slicing).
+enum SourceProjectStatus {
+  /// Progetto attivo, può essere usato per slicing.
+  ACTIVE
+  /// Sostituito da una versione successiva, mantenuto per storico.
+  ARCHIVED
+
+  @@schema("print-farm")
+}
+
+/// Progetto sorgente caricato dall'utente: `.3mf` multi-piatto Orca/Bambu Studio.
+/// Ogni piatto contiene esattamente UNA parte (mappata su `SourceProjectPlate.productPartId`).
+/// Quando l'utente carica una versione aggiornata dello stesso progetto, la nuova SourceProject
+/// punta alla precedente via `previousVersionId` e la precedente passa a ARCHIVED.
+model SourceProject {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Nome umano del progetto (default: nome file senza estensione).
+  name String
+
+  /// Descrizione/note opzionali (es. revisione cliente).
+  description String?
+
+  /// Prodotto associato (collegamento ai ProductPart per il mapping piatto->parte).
+  productId String?  @db.Uuid
+  product   Product? @relation("ProductSourceProjects", fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Chiave Supabase Storage del file `.3mf` originale.
+  bucketPath String
+
+  /// Nome file originale (es. "GoblinPack.3mf").
+  originalFilename String
+
+  /// Dimensione file in byte.
+  filesize Decimal @db.Decimal(12, 0)
+
+  /// Numero di piatti (plate) trovati nel `.3mf` (di base = numero di parti).
+  plateCount Int @default(0)
+
+  /// Versionamento: cresce ad ogni "Aggiorna file" della UI.
+  version Int @default(1)
+
+  /// Stato corrente del progetto sorgente.
+  status SourceProjectStatus @default(ACTIVE)
+
+  /// Self-relation per storico versioni (vN -> vN-1).
+  previousVersionId String?        @unique @db.Uuid
+  previousVersion   SourceProject? @relation("SourceProjectHistory", fields: [previousVersionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  nextVersion       SourceProject? @relation("SourceProjectHistory")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  /// Piatti del progetto (1 piatto = 1 parte).
+  plates SourceProjectPlate[]
+
+  /// Job di slicing originati da questo progetto.
+  sliceJobs SliceJob[]
+
+  @@index([productId])
+  @@index([status])
+  @@index([previousVersionId])
+  @@schema("print-farm")
+}
+
+/// Singolo piatto di un `SourceProject`. Per convenzione contiene UNA sola parte stampata,
+/// così che lo slicing per-piatto produca un `ProjectThreeMFFile` legato a una `ProductPart`.
+model SourceProjectPlate {
+  id String @id @default(uuid()) @db.Uuid
+
+  sourceProjectId String        @db.Uuid
+  sourceProject   SourceProject @relation(fields: [sourceProjectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Numero piatto (1-based, come Bambu Studio / Orca).
+  plateNumber Int
+
+  /// Parte di prodotto a cui questo piatto corrisponde (può essere nullo finché non mappato).
+  productPartId String?      @db.Uuid
+  productPart   ProductPart? @relation("ProductPartSourcePlates", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Nome leggibile del piatto (es. "Plate 1") o nome oggetto principale estratto dal 3MF.
+  label String?
+
+  /// Note libere sul mapping piatto-parte.
+  notes String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  /// Job di slicing originati da questo piatto.
+  sliceJobs SliceJob[] @relation("SourceProjectPlateSliceJobs")
+
+  @@unique([sourceProjectId, plateNumber])
+  @@index([productPartId])
+  @@schema("print-farm")
+}
+
+/// Stato di un job di slicing.
+enum SliceJobStatus {
+  /// Creato in DB, non ancora inviato al servizio Orca.
+  PENDING
+  /// Inviato al servizio Orca; in attesa di completamento (polling).
+  RUNNING
+  /// Slicing completato; output scaricato e `ProjectThreeMFFile` creato (`resultFileId`).
+  COMPLETED
+  /// Slicing fallito (`errorMessage` valorizzato).
+  FAILED
+  /// Cancellato dall'utente prima del completamento.
+  CANCELLED
+
+  @@schema("print-farm")
+}
+
+/// Job di slicing: rappresenta UN `slice-async` su un piatto di un `SourceProject`,
+/// per uno specifico modello di stampante (e relativi profili PRINTER/PROCESS/FILAMENT).
+/// Al completamento, il file `.3mf` esportato viene rinominato `.gcode.3mf` e ingestito come
+/// `ProjectThreeMFFile` collegato alla `ProductPart` del piatto.
+model SliceJob {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Progetto sorgente.
+  sourceProjectId String        @db.Uuid
+  sourceProject   SourceProject @relation(fields: [sourceProjectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Piatto del progetto sorgente (FK forte per integrità mapping piatto->parte).
+  sourcePlateId String             @db.Uuid
+  sourcePlate   SourceProjectPlate @relation("SourceProjectPlateSliceJobs", fields: [sourcePlateId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Numero piatto (denormalizzato per filtri rapidi).
+  plateNumber Int
+
+  /// Parte associata (denormalizzata da `sourcePlate.productPartId`).
+  productPartId String?      @db.Uuid
+  productPart   ProductPart? @relation("ProductPartSliceJobs", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Modello stampante target dello slicing.
+  printerModelId Int
+  printerModel   PrinterModel @relation("PrinterModelSliceJobs", fields: [printerModelId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// Profilo PRINTER usato (FK forte).
+  printerProfileId String        @db.Uuid
+  printerProfile   SlicerProfile @relation("SliceJobPrinterProfile", fields: [printerProfileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// Profilo PROCESS (preset) usato (FK forte).
+  processProfileId String        @db.Uuid
+  processProfile   SlicerProfile @relation("SliceJobProcessProfile", fields: [processProfileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// Profilo FILAMENT usato (opzionale: il servizio Orca consente di omettere il filamento).
+  filamentProfileId String?        @db.Uuid
+  filamentProfile   SlicerProfile? @relation("SliceJobFilamentProfile", fields: [filamentProfileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Tipo piatto Orca/Bambu da passare a `--curr-bed-type` (es. "Textured PEI Plate").
+  bedType String?
+
+  /// Stato corrente del job.
+  status SliceJobStatus @default(PENDING)
+
+  /// `requestId` restituito da `POST /slice-async` (null finché non inviato).
+  orcaRequestId String?
+
+  /// File `ProjectThreeMFFile` creato al completamento (target del flusso `.gcode.3mf`).
+  resultFileId String?             @unique @db.Uuid
+  resultFile   ProjectThreeMFFile? @relation("SliceJobResultFile", fields: [resultFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Messaggio di errore dal servizio Orca o dal finalize (best-effort).
+  errorMessage String?
+
+  /// Tempo stampa stimato dal servizio Orca (secondi).
+  printTimeSec Int?
+
+  /// Filamento totale usato (grammi) stimato dal servizio Orca.
+  filamentUsedG Decimal? @db.Decimal(12, 2)
+
+  startedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([sourceProjectId])
+  @@index([sourcePlateId])
+  @@index([productPartId])
+  @@index([printerModelId])
+  @@index([status])
+  @@index([orcaRequestId])
+  @@schema("print-farm")
+}

@@ -1,31 +1,31 @@
 /// Scatola fisica assemblata (etichetta QR lotto + qty) pronta per inbound FBA.
 model AssemblyBox {
-  id        String @id @default(uuid()) @db.Uuid
+  id     String @id @default(uuid()) @db.Uuid
   /// Codice leggibile univoco (es. BOX-000042).
-  code      String @unique
+  code   String @unique
   /// Progressivo numerico per generare `code`.
-  number    BigInt @unique @default(autoincrement()) @db.BigInt
+  number BigInt @unique @default(autoincrement()) @db.BigInt
 
   /// Opzionale: per scatole "manuali" create senza ordine di assemblaggio (es. picking diretto da magazzino).
-  assemblyOrderId  String?        @db.Uuid
-  assemblyOrder    AssemblyOrder? @relation(fields: [assemblyOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  inventoryLotId   String         @db.Uuid
-  inventoryLot     InventoryLot   @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  skuId            String         @db.Uuid
-  sku              Sku            @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assemblyOrderId String?        @db.Uuid
+  assemblyOrder   AssemblyOrder? @relation(fields: [assemblyOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  inventoryLotId  String         @db.Uuid
+  inventoryLot    InventoryLot   @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  skuId           String         @db.Uuid
+  sku             Sku            @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  quantity     Int
-  weightGrams  Int?
-  widthMm      Int?
-  heightMm     Int?
-  depthMm      Int?
-  status       AssemblyBoxStatus @default(ASSEMBLED)
-  printedAt    DateTime?         @db.Timestamptz(6)
+  quantity    Int
+  weightGrams Int?
+  widthMm     Int?
+  heightMm    Int?
+  depthMm     Int?
+  status      AssemblyBoxStatus @default(ASSEMBLED)
+  printedAt   DateTime?         @db.Timestamptz(6)
   /// Payload QR stampato (es. sku|lot).
-  qrPayload    String?
+  qrPayload   String?
 
   /// True se la scatola è stata creata manualmente (picking diretto, FIFO sui lotti).
-  isManual Boolean @default(false)
+  isManual      Boolean @default(false)
   /// Identificativo del "carton fisico" quando la scatola contiene più SKU/lotti:
   /// più righe AssemblyBox con lo stesso `manualGroupId` = un solo collo verso Amazon.
   manualGroupId String? @db.Uuid
@@ -42,7 +42,7 @@ model AssemblyBox {
   isRecycled      Boolean @default(false)
 
   shipmentBoxes FbaShipmentBox[]
-  movements       Movement[]
+  movements     Movement[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -72,7 +72,7 @@ model FbaShipmentPlan {
   number BigInt @unique @default(autoincrement()) @db.BigInt
 
   marketplaceId String
-  status          FbaShipmentPlanStatus @default(DRAFT)
+  status        FbaShipmentPlanStatus @default(DRAFT)
 
   amazonInboundPlanId String? @unique
 
@@ -116,22 +116,22 @@ enum FbaShipmentPlanStatus {
 
 /// Singola spedizione (shipment) verso un FC Amazon, figlia del piano.
 model FbaShipment {
-  id     String @id @default(uuid()) @db.Uuid
-  planId String @db.Uuid
+  id     String          @id @default(uuid()) @db.Uuid
+  planId String          @db.Uuid
   plan   FbaShipmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  amazonShipmentId            String?
+  amazonShipmentId             String?
   /// `ShipmentId` legacy v0 (es. `FBA15LQ4CBB1`), equivalente al
   /// `shipmentConfirmationId` v2024-03-20. La v0 (`getShipments`,
   /// `getShipmentItemsByShipmentId`, `getLabels`) NON accetta gli
   /// `sh...` ID v2024 e va alimentata sempre con questo campo.
   shipmentConfirmationId       String?
   destinationFulfillmentCenter String?
-  carrier                     String?
-  trackingNumber              String?
-  bolUrl                      String?
-  labelDownloadUrl            String?
-  status                      FbaShipmentStatus @default(PENDING)
+  carrier                      String?
+  trackingNumber               String?
+  bolUrl                       String?
+  labelDownloadUrl             String?
+  status                       FbaShipmentStatus @default(PENDING)
 
   /// Risposta Amazon aggregata (tracking, cost, ecc.).
   amazonPayload Json?
@@ -177,14 +177,14 @@ enum FbaShipmentStatus {
 
 /// Quantità spedite vs ricevute per MSKU (sync SP-API Fulfillment Inbound v0).
 model FbaShipmentReceiptItem {
-  id         String @id @default(uuid()) @db.Uuid
-  shipmentId String @db.Uuid
+  id         String      @id @default(uuid()) @db.Uuid
+  shipmentId String      @db.Uuid
   shipment   FbaShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  msku               String
-  fnsku              String?
-  quantityShipped    Int @default(0)
-  quantityReceived   Int @default(0)
+  msku             String
+  fnsku            String?
+  quantityShipped  Int     @default(0)
+  quantityReceived Int     @default(0)
 
   syncedAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -197,15 +197,15 @@ model FbaShipmentReceiptItem {
 model FbaShipmentBox {
   id String @id @default(uuid()) @db.Uuid
 
-  shipmentId String @db.Uuid
+  shipmentId String      @db.Uuid
   shipment   FbaShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   assemblyBoxId String      @db.Uuid
   assemblyBox   AssemblyBox @relation(fields: [assemblyBoxId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  boxIndex    Int
-  amazonBoxId String?
-  weightGrams Int?
+  boxIndex     Int
+  amazonBoxId  String?
+  weightGrams  Int?
   dimensionsMm Json?
 
   @@unique([shipmentId, assemblyBoxId])

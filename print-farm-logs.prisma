@@ -17,15 +17,15 @@ model PrinterMaintenanceLog {
   durationMin Int? // Durata intervento in minuti
 
   /// Workflow ISO: motivazione al toggle manutenzione, foto, errore, AI, sessione, PDF
-  reason              String?
-  photos              String[]                  @default([])
-  lastErrorSnapshot   Json?
-  aiAdvice            String?                   @db.Text
-  aiAdviceModel       String?
-  startedAt           DateTime?                 @db.Timestamptz(6)
-  endedAt             DateTime?                 @db.Timestamptz(6)
-  status              MaintenanceSessionStatus?
-  pdfUrl              String?
+  reason            String?
+  photos            String[]                  @default([])
+  lastErrorSnapshot Json?
+  aiAdvice          String?                   @db.Text
+  aiAdviceModel     String?
+  startedAt         DateTime?                 @db.Timestamptz(6)
+  endedAt           DateTime?                 @db.Timestamptz(6)
+  status            MaintenanceSessionStatus?
+  pdfUrl            String?
 
   /// --- PIANIFICAZIONE / ISO ---
   /// Data/ora prevista per l'esecuzione (presente per log generati da pianificazione o programmati ad-hoc).
@@ -50,7 +50,7 @@ model PrinterMaintenanceLog {
 
   chatMessages MaintenanceChatMessage[]
   /// Movimenti inventario (es. USO ricambi) collegati a questo log.
-  movements Movement[]
+  movements    Movement[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -78,7 +78,7 @@ model PrinterMaintenancePlan {
   type MaintenanceType @default(ORDINARY)
 
   /// Titolo breve (es. "Pulizia hotend e calibrazione piatto").
-  title String
+  title       String
   /// Procedura/descrizione dettagliata (rich text/markdown supportato lato UI).
   description String? @db.Text
 

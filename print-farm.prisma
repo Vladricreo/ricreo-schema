@@ -71,6 +71,9 @@ model ProjectThreeMFFile {
   /// Task di accodamento persistenti (flusso "send to print")
   queueTasks QueueTask[] @relation("FileQueueTasks")
 
+  /// Job di slicing che hanno prodotto questo file (inverso di `SliceJob.resultFile`).
+  sliceJob SliceJob? @relation("SliceJobResultFile")
+
   @@index([productId])
   @@index([productPartId])
   @@index([status])
@@ -330,32 +333,32 @@ model Printer {
   model   PrinterModel @relation(fields: [modelId], references: [id])
   modelId Int
 
-  imageUrl       String?
-  ipAddress      String?
-  softwareType   SoftwareType @default(BAMBU_STUDIO)
-  accessCode     String?
-  apiKey         String?
-  peakPower      Decimal?     @db.Decimal(12, 2)
-  runPower       Decimal?     @db.Decimal(12, 2)
-  nozzleDiameter Decimal      @default(0.4) @db.Decimal(4, 2)
-  nozzleType     String       @default("Hardened Steel")
+  imageUrl                 String?
+  ipAddress                String?
+  softwareType             SoftwareType @default(BAMBU_STUDIO)
+  accessCode               String?
+  apiKey                   String?
+  peakPower                Decimal?     @db.Decimal(12, 2)
+  runPower                 Decimal?     @db.Decimal(12, 2)
+  nozzleDiameter           Decimal      @default(0.4) @db.Decimal(4, 2)
+  nozzleType               String       @default("Hardened Steel")
   /// Numero di nozzle/extruder della stampante (1 = single, 2 = dual H2D/X2D).
   /// Autodetect dal firmware; fallback a 1 per back-compat.
-  nozzleCount    Int          @default(1)
+  nozzleCount              Int          @default(1)
   /// True se la stampante ha il Filament Track Switch installato (solo dual-nozzle).
   /// Quando true, ogni AMS può alimentare entrambi i nozzle (routing dinamico).
-  filaTrackSwitchInstalled Boolean @default(false)
+  filaTrackSwitchInstalled Boolean      @default(false)
   /// Snapshot dell'ultimo stato `fila_switch` riportato dal firmware (per debug + UI).
-  filaTrackSwitchState Json?
+  filaTrackSwitchState     Json?
   /// Ultimo extruder attivo riportato dalla stampante (0 = right/main, 1 = left/auxiliary).
-  activeExtruder Int          @default(0)
+  activeExtruder           Int          @default(0)
   /// Tipo piatto attualmente montato (aggiornamento manuale operatore; usato per compatibilità con i file).
-  currentPlateType PlateType @default(TEXTURED)
-  structure      String       @default("CoreXY")
-  ams            Boolean?
+  currentPlateType         PlateType    @default(TEXTURED)
+  structure                String       @default("CoreXY")
+  ams                      Boolean?
   /// Modello AMS collegato (se presente). Serve per stimare consumi AMS (standby/working/drying).
-  amsModel       AmsModel?
-  pushAllTimeout Int?
+  amsModel                 AmsModel?
+  pushAllTimeout           Int?
 
   /// Stato runtime dalla stampante (WebSocket) - volatile
   status PrinterStatus @default(OFFLINE)
@@ -444,7 +447,7 @@ model Printer {
   maintenancePlans PrinterMaintenancePlan[]
   feedbacks        FarmFeedback[]
   /// Issue operative/tecniche aperte o risolte (derivate da MQTT/WSS o inserite manualmente).
-  issues          PrinterIssue[]
+  issues           PrinterIssue[]
 
   printerMacros PrinterMacro[]    @relation("PrinterCompatibility")
   failureLogs   PrintFailureLog[]
@@ -626,6 +629,10 @@ model PrinterModel {
   errorCodes     ErrorCode[]                 @relation("PrinterModelErrorCode")
   /// Macro G-code compatibili con questo modello di stampante
   printerMacros  PrinterMacro[]              @relation("PrinterModelMacroCompatibility")
+  /// Profili OrcaSlicer (printer/process) associati a questo modello.
+  slicerProfiles SlicerProfile[]             @relation("PrinterModelSlicerProfiles")
+  /// Job di slicing eseguiti per questo modello.
+  sliceJobs      SliceJob[]                  @relation("PrinterModelSliceJobs")
 
   @@schema("print-farm")
 }

@@ -34,15 +34,15 @@ model Sku {
   /// - NONE: lo SKU usa il codice a barre del produttore (manufacturer barcode / EAN registrato),
   ///   nessuna FNSKU richiesta. Da impostare quando il listing è in modalità "Manufacturer Barcode".
   /// - AMAZON: Amazon applica l'etichetta (servizio a pagamento "FBA Label Service").
-  fbaLabelOwner            FbaLabelOwner      @default(SELLER)
+  fbaLabelOwner FbaLabelOwner @default(SELLER)
   /// Proprietario delle operazioni di prep FBA per questo SKU.
   /// - SELLER (default): il venditore esegue la prep.
   /// - NONE: nessuna prep richiesta.
   /// - AMAZON: prep gestita da Amazon (servizio a pagamento).
-  fbaPrepOwner             FbaPrepOwner       @default(SELLER)
+  fbaPrepOwner  FbaPrepOwner  @default(SELLER)
 
-  createdAt                DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt                DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   /// Allocazioni multi-location per questo SKU (quantità per slot).
   warehouseSkuAllocations WarehouseSkuAllocation[]
@@ -254,40 +254,40 @@ model AmazonIgnoredAsin {
 /// Modello per una spedizione, che può contenere un 'ProductItem' o essere legata a un 'Movement'.
 /// Traccia informazioni come corriere, tracking e stato dell'etichetta.
 model Shipment {
-  id               String              @id @default(uuid()) @db.Uuid
+  id                 String              @id @default(uuid()) @db.Uuid
   /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
-  number           BigInt              @unique @default(autoincrement()) @db.BigInt
-  movementId       String?             @db.Uuid
+  number             BigInt              @unique @default(autoincrement()) @db.BigInt
+  movementId         String?             @db.Uuid
   /// Relazione al movimento.
-  movement         Movement?           @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  productId        String?             @db.Uuid
-  product          Product?            @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  lines            ShipmentLine[]
-  orderedAt        DateTime            @db.Timestamptz(6)
-  shippedAt        DateTime?           @db.Timestamptz(6)
+  movement           Movement?           @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productId          String?             @db.Uuid
+  product            Product?            @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  lines              ShipmentLine[]
+  orderedAt          DateTime            @db.Timestamptz(6)
+  shippedAt          DateTime?           @db.Timestamptz(6)
   /// Timestamp interno: quando l'etichetta è stata stampata dalla nostra app (CUPS).
   /// Serve per distinguere "stampato lato corriere" vs "stampato da noi".
-  printedAt        DateTime?           @db.Timestamptz(6)
-  courier          String?
-  labelUrl         String?
-  isShipped        Boolean             @default(false)
+  printedAt          DateTime?           @db.Timestamptz(6)
+  courier            String?
+  labelUrl           String?
+  isShipped          Boolean             @default(false)
   /// Identificativo interno dell'ordine sul provider (es. ShippyPro `ordine_id`).
   /// Usato come chiave di sincronizzazione e mostrato come "Ordine".
-  orderNumber      String?
+  orderNumber        String?
   /// Numero d'ordine del marketplace originale (Amazon, Etsy, eBay, Shopify, ...),
   /// es. ShippyPro `transaction_id`. È l'ID che il cliente vede sul suo account.
   marketplaceOrderId String?
-  recipientCountry String?
-  recipientName    String?
-  trackingNumber   String?
-  trackingUrl      String?
-  labelStatus      ShipmentLabelStatus @default(PENDING)
-  shipmentType     ShipmentType        @default(STANDARD)
-  createdAt        DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
-  fullAddress      String?
-  notes            String?
+  recipientCountry   String?
+  recipientName      String?
+  trackingNumber     String?
+  trackingUrl        String?
+  labelStatus        ShipmentLabelStatus @default(PENDING)
+  shipmentType       ShipmentType        @default(STANDARD)
+  createdAt          DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+  fullAddress        String?
+  notes              String?
 
   customerReturns CustomerReturn[]
 
@@ -316,13 +316,13 @@ model ShipmentLine {
   shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   sku      Sku?     @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+  customerReturnLines CustomerReturnLine[]
 
   @@index([shipmentId])
   @@index([skuId])
   @@index([lotId])
-  customerReturnLines CustomerReturnLine[]
   @@schema("inventory")
 }
 
@@ -447,28 +447,28 @@ enum CustomerReturnLineCondition {
 
 /// Testata reso cliente / ritorno spedizione (non confondere con keyword SQL `RETURN`).
 model CustomerReturn {
-  id                     String                 @id @default(uuid()) @db.Uuid
-  number                 BigInt                 @unique @default(autoincrement()) @db.BigInt
+  id                     String               @id @default(uuid()) @db.Uuid
+  number                 BigInt               @unique @default(autoincrement()) @db.BigInt
   origin                 CustomerReturnOrigin
-  status                 CustomerReturnStatus   @default(PENDING_INBOUND)
-  shipmentId             String?                @db.Uuid
-  shipment               Shipment?              @relation(fields: [shipmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  status                 CustomerReturnStatus @default(PENDING_INBOUND)
+  shipmentId             String?              @db.Uuid
+  shipment               Shipment?            @relation(fields: [shipmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Snapshot ordine / tracking per resi senza shipment collegato o dedup sync provider.
   orderNumberSnapshot    String?
   trackingNumberSnapshot String?
   clientNameSnapshot     String?
   countrySnapshot        String?
   labelUrl               String?
-  receivedAt             DateTime?              @db.Timestamptz(6)
-  completedAt            DateTime?              @db.Timestamptz(6)
+  receivedAt             DateTime?            @db.Timestamptz(6)
+  completedAt            DateTime?            @db.Timestamptz(6)
   notes                  String?
-  createdByUserId        Int?                   @db.Integer
-  createdByUser          User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdByUserId        Int?                 @db.Integer
+  createdByUser          User?                @relation(fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Chiave idempotente sync ShippyPro `GetReturns` (se disponibile).
-  shippyProReturnId      String?                @unique
+  shippyProReturnId      String?              @unique
   lines                  CustomerReturnLine[]
-  createdAt              DateTime               @default(now()) @db.Timestamptz(6)
-  updatedAt              DateTime               @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt              DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([shipmentId])
   @@index([status])
@@ -478,30 +478,30 @@ model CustomerReturn {
 
 /// Riga reso: quantità per SKU/prodotto, eventualmente collegata alla riga spedizione originale.
 model CustomerReturnLine {
-  id               String                       @id @default(uuid()) @db.Uuid
-  customerReturnId String                       @db.Uuid
-  customerReturn   CustomerReturn               @relation(fields: [customerReturnId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  skuId            String?                      @db.Uuid
-  sku              Sku?                         @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  productId        String?                      @db.Uuid
-  product          Product?                     @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  shipmentLineId   String?                      @db.Uuid
-  shipmentLine     ShipmentLine?                @relation(fields: [shipmentLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  quantity         Int                          @default(1)
-  lineCondition    CustomerReturnLineCondition  @default(TO_INSPECT)
-  notes            String?
+  id                  String                      @id @default(uuid()) @db.Uuid
+  customerReturnId    String                      @db.Uuid
+  customerReturn      CustomerReturn              @relation(fields: [customerReturnId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  skuId               String?                     @db.Uuid
+  sku                 Sku?                        @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productId           String?                     @db.Uuid
+  product             Product?                    @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  shipmentLineId      String?                     @db.Uuid
+  shipmentLine        ShipmentLine?               @relation(fields: [shipmentLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  quantity            Int                         @default(1)
+  lineCondition       CustomerReturnLineCondition @default(TO_INSPECT)
+  notes               String?
   /// Quando è stato registrato l’ingresso a magazzino (RESO_IN) per prodotto riutilizzabile.
-  inventoryReceivedAt DateTime?                 @db.Timestamptz(6)
+  inventoryReceivedAt DateTime?                   @db.Timestamptz(6)
   /// Odette di destinazione pianificata in fase di ricezione (solo REUSABLE).
   /// Verrà usata dal flusso di Riassemblaggio per registrare il movimento RESO_IN
   /// nell'odette corretta e creare/aggiornare l'OdetteContent.
-  targetOdetteId   String?                      @db.Uuid
-  targetOdette     Odette?                      @relation("CustomerReturnLineTargetOdette", fields: [targetOdetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  movements        Movement[]
+  targetOdetteId      String?                     @db.Uuid
+  targetOdette        Odette?                     @relation("CustomerReturnLineTargetOdette", fields: [targetOdetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  movements           Movement[]
   /// Ordini di produzione critici collegati a questa riga (parti mancanti dopo recupero).
-  productionOrders ProductOrder[]               @relation("CustomerReturnLineProductionOrders")
-  createdAt        DateTime                     @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime                     @default(now()) @updatedAt @db.Timestamptz(6)
+  productionOrders    ProductOrder[]              @relation("CustomerReturnLineProductionOrders")
+  createdAt           DateTime                    @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                    @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([customerReturnId])
   @@index([skuId])
