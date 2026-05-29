@@ -83,8 +83,11 @@ model SlicerProfile {
   /// Slice job che usano questo profilo come PROCESS.
   processSliceJobs SliceJob[] @relation("SliceJobProcessProfile")
 
-  /// Slice job che usano questo profilo come FILAMENT.
+  /// Slice job che usano questo profilo come FILAMENT (primo nozzle).
   filamentSliceJobs SliceJob[] @relation("SliceJobFilamentProfile")
+
+  /// Slice job che usano questo profilo come FILAMENT del secondo nozzle (dual-nozzle).
+  filament2SliceJobs SliceJob[] @relation("SliceJobFilamentProfile2")
 
   /// Unicità: una sola riga per (categoria, orcaName).
   @@unique([category, orcaName])
@@ -242,8 +245,18 @@ model SliceJob {
   processProfile   SlicerProfile @relation("SliceJobProcessProfile", fields: [processProfileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   /// Profilo FILAMENT usato (opzionale: il servizio Orca consente di omettere il filamento).
+  /// Multi-nozzle: è il filamento del PRIMO nozzle (`filament_map = 1`).
   filamentProfileId String?        @db.Uuid
   filamentProfile   SlicerProfile? @relation("SliceJobFilamentProfile", fields: [filamentProfileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Profilo FILAMENT del SECONDO nozzle (solo stampanti dual-nozzle H2D/X2D, sperimentale).
+  /// Passato a Orca come secondo `filaments` con `filament_map = 2`. Null = single-nozzle.
+  filamentProfile2Id String?        @db.Uuid
+  filamentProfile2   SlicerProfile? @relation("SliceJobFilamentProfile2", fields: [filamentProfile2Id], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Modalità raggruppamento filamenti Orca (`filament_map_mode`), es. "Manual",
+  /// "Auto For Flush", "Auto For Quality". Rilevante solo per slicing multi-nozzle.
+  filamentMapMode String?
 
   /// Tipo piatto Orca/Bambu da passare a `--curr-bed-type` (es. "Textured PEI Plate").
   bedType String?
@@ -277,6 +290,7 @@ model SliceJob {
   @@index([sourcePlateId])
   @@index([productPartId])
   @@index([printerModelId])
+  @@index([filamentProfile2Id])
   @@index([status])
   @@index([orcaRequestId])
   @@schema("print-farm")
