@@ -312,7 +312,10 @@ view VSkuStock {
 /// RESERVED VIEWS - Calcolo dinamico quantità riservate
 /// ============================================================================
 
-/// Reserved Stock Item calcolato dagli ordini di produzione attivi
+/// Reserved Stock Item calcolato dagli ordini di produzione attivi.
+/// DEPRECATO: la quantità riservata è deprecata e NON va usata. Non viene più
+/// considerata nei calcoli di disponibilità/priorità né nella generazione ordini,
+/// e non è mostrata nelle tabelle. View mantenuta solo per compatibilità/diagnostica.
 view VItemReservedStock {
   itemId           String @unique @map("item_id") @db.Uuid
   reservedQuantity Int    @map("reserved_quantity")
