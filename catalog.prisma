@@ -220,7 +220,46 @@ model Product {
 
   customerReturnLines CustomerReturnLine[]
 
+  /// Piani parti (revisioni della composizione): uno ACTIVE, gli altri DEPLETED/DRAFT.
+  partPlans ProductPartPlan[]
+
   @@index([itemId])
+  @@schema("inventory")
+}
+
+/// Revisione datata della composizione in parti di un `Product` ("piano parti").
+/// Quando la composizione cambia (es. da multi-parte a mono-parte, o MAKE→BUY) si crea un nuovo
+/// piano ACTIVE e il precedente passa a DEPLETED: gli ordini esistenti restano legati al loro piano,
+/// i nuovi ordini usano il piano attivo. Append-only per preservare la tracciabilità.
+model ProductPartPlan {
+  id        String @id @default(uuid()) @db.Uuid
+  productId String @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Nome leggibile del piano (es. "Revisione 2 - mono parte").
+  name           String?
+  /// Progressivo della revisione per prodotto (1 = piano iniziale).
+  revisionNumber Int             @default(1)
+  /// Stato del piano: bozza, attivo (uno solo per prodotto) o esaurito (storico).
+  status         ProductPartPlanStatus @default(ACTIVE)
+
+  /// Data da cui il piano è valido: gli ordini creati da questo istante usano il piano attivo.
+  effectiveFrom DateTime  @default(now()) @db.Timestamptz(6)
+  /// Data in cui il piano è stato marcato come esaurito (sostituito da uno nuovo).
+  depletedAt    DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  /// Parti appartenenti a questa revisione del piano.
+  parts          ProductPart[]
+  /// Ordini di produzione che hanno congelato questo piano.
+  productOrders  ProductOrder[]
+  /// Ordini di assemblaggio che hanno congelato questo piano.
+  assemblyOrders AssemblyOrder[]
+
+  @@index([productId, status, effectiveFrom])
+  @@index([productId])
   @@schema("inventory")
 }
 
@@ -236,6 +275,10 @@ model ProductPart {
   /// Fornitore preferenziale per parti acquistate (BUY). Opzionale.
   supplierId               String?                   @db.Uuid
   productId                String                    @db.Uuid
+  /// Piano parti (revisione) a cui appartiene questa parte. Nullable solo per righe legacy
+  /// prima del backfill; l'applicazione assegna sempre il piano attivo alle nuove parti.
+  planId                   String?                   @db.Uuid
+  plan                     ProductPartPlan?          @relation(fields: [planId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   quantityNeeded           Int                       @default(0)
   dimensionsId             String?                   @db.Uuid
   dimensions               Dimensions?               @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
@@ -270,6 +313,7 @@ model ProductPart {
 
   @@index([productId])
   @@index([supplierId])
+  @@index([planId])
   @@schema("inventory")
 }
 
@@ -871,6 +915,18 @@ enum WarningSeverity {
 enum PartSourceType {
   MAKE
   BUY
+
+  @@schema("inventory")
+}
+
+/// Stato di un `ProductPartPlan` (revisione composizione parti):
+/// - DRAFT: bozza non ancora attiva (non usata dagli ordini)
+/// - ACTIVE: piano attivo corrente (uno solo per prodotto)
+/// - DEPLETED: piano storico sostituito da uno nuovo (resta per gli ordini già creati)
+enum ProductPartPlanStatus {
+  DRAFT
+  ACTIVE
+  DEPLETED
 
   @@schema("inventory")
 }

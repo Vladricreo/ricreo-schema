@@ -10,6 +10,9 @@ model ProductOrder {
   productId String @db.Uuid
 
   skuId             String?          @db.Uuid /// SKU di destinazione - determina il canale (FBA/FBM)
+  /// Piano parti (revisione composizione) congelato alla creazione dell'ordine.
+  /// Gli ordini storici restano legati al loro piano anche se il prodotto cambia composizione.
+  productPartPlanId String?          @db.Uuid
   quantityToProduce Int /// Quantità totale di prodotti finiti da produrre
   quantityProduced  Int              @default(0) /// Quantità di prodotti finiti completati
   eta               DateTime?        @db.Timestamptz(6)
@@ -25,6 +28,8 @@ model ProductOrder {
 
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   sku     Sku?    @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Piano parti congelato per questo ordine (vedi `productPartPlanId`).
+  productPartPlan ProductPartPlan? @relation(fields: [productPartPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   producedByUserId Int?
   producedBy       User? @relation(fields: [producedByUserId], references: [id], onDelete: SetNull)
@@ -54,6 +59,7 @@ model ProductOrder {
   @@index([productionStatus])
   @@index([priority])
   @@index([customerReturnLineId])
+  @@index([productPartPlanId])
   @@schema("inventory")
 }
 
@@ -98,6 +104,9 @@ model AssemblyOrder {
   number             BigInt @unique @default(autoincrement()) @db.BigInt
   productId          String @db.Uuid
   skuId              String @db.Uuid // SKU determina canale e parti necessarie
+  /// Piano parti (revisione composizione) congelato alla creazione dell'ordine di assemblaggio.
+  /// Ereditato dai ProductOrder collegati; determina quali parti vengono prelevate/assemblate.
+  productPartPlanId  String? @db.Uuid
   quantityToAssemble Int    @default(0)
   quantityAssembled  Int    @default(0)
   quantityScrapped   Int    @default(0)
@@ -113,6 +122,8 @@ model AssemblyOrder {
 
   product           Product             @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   sku               Sku                 @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// Piano parti congelato per questo ordine di assemblaggio (vedi `productPartPlanId`).
+  productPartPlan   ProductPartPlan?    @relation(fields: [productPartPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   assembledByUserId Int?
   assembledBy       User?               @relation(fields: [assembledByUserId], references: [id], onDelete: SetNull)
   /// Operatore a cui è pianificato l'assemblaggio (da `assignedToUserId`).
@@ -137,6 +148,7 @@ model AssemblyOrder {
   @@index([assembledByUserId])
   @@index([assignedToUserId])
   @@index([skuId])
+  @@index([productPartPlanId])
   @@schema("inventory")
 }
 
