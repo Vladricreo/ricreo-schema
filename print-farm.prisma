@@ -38,6 +38,22 @@ model ProjectThreeMFFile {
   /// JSON array: [{ identifyId: number, name: string, skipped: boolean }]
   sliceObjects   Json?
 
+  /// --- PROFILO DI SLICING (multi-nozzle) — cfr. docs/multi-nozzle §13 ---
+  /// Classificazione derivata da `Metadata/slice_info.config` (`filament_maps`).
+  /// 'SINGLE' = tutti i filamenti su un solo extruder; 'DUAL' = >=2 extruder distinti.
+  /// Null per file legacy senza `filament_maps`.
+  nozzleMode                String?
+  /// Extruder a cui è "pinnato" un file SINGLE (es. tutto su left). Null = ext0/legacy.
+  pinnedExtruder            Int?
+  /// Modalità mappa filamenti del file ('MANUAL' | 'AUTO' | 'DYNAMIC').
+  sliceMapMode              String?
+  /// True se il file è stato affettato assumendo l'FTS (`has_filament_switcher`).
+  fileExpectsFts            Boolean?
+  /// Tipo hardware per-extruder (`extruder_type`, ordine per indice extruder 0,1,...).
+  extruderTypes             Int[]     @default([])
+  /// Diametri nozzle per-extruder (`nozzle_diameters`, ordine per indice extruder 0,1,...).
+  nozzleDiametersByExtruder Decimal[] @default([]) @db.Decimal(4, 2)
+
   /// Percentuale di riempimento del piano (es. 0.70 = 70%)
   /// Usata per stimare l'area delle parti quando non conosciamo le dimensioni esatte
   plateFillPercentage Decimal @default(0.70) @db.Decimal(3, 2)
@@ -617,6 +633,11 @@ model PrinterModel {
   /// 1 = single (X1/P1/A1), 2 = dual (H2D/X2D). Source-of-truth per la UI.
   /// `Printer.nozzleCount` resta come mirror per back-compat con i consumer esistenti.
   nozzleCount Int @default(1)
+
+  /// Se true, i nozzle del modello sono equivalenti (es. tutti direct drive su H2D):
+  /// l'assegnazione filamento->extruder del file può essere permutata fra i nozzle.
+  /// false (X2D): mappa rigida, il filamento deve usare l'extruder esatto del file.
+  extruderAssignmentSwappable Boolean @default(false)
 
   /// Dimensioni piano di stampa (mm)
   buildPlateWidth  Decimal? @db.Decimal(8, 2) // Larghezza piano (X) in mm
