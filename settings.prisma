@@ -37,6 +37,9 @@ enum SettingsName {
   /// Indirizzo mittente di default per le spedizioni inbound FBA (Amazon SP-API).
   /// Valore JSON con shape AddressInput: { name, phoneNumber, addressLine1, addressLine2?, city, postalCode, countryCode, stateOrProvinceCode? }.
   FBA_INBOUND_SOURCE_ADDRESS
+  /// Tempo base in minuti per pezzo per i prodotti senza dati storici (default 1).
+  /// Usato dalla distribuzione automatica degli ordini di assemblaggio.
+  ASSEMBLY_BASE_TIME_PER_PIECE
 
   @@schema("inventory")
 }

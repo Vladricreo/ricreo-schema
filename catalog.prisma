@@ -28,8 +28,6 @@ model Item {
   properties Json?
 
   inStock  Int @default(0)
-  reserved Int @default(0)
-  onOrder  Int @default(0)
   minStock Int @default(0)
   maxStock Int @default(0)
   minOrder Int @default(0)

@@ -115,6 +115,13 @@ model AssemblyOrder {
   sku               Sku                 @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   assembledByUserId Int?
   assembledBy       User?               @relation(fields: [assembledByUserId], references: [id], onDelete: SetNull)
+  /// Operatore a cui è pianificato l'assemblaggio (da `assignedToUserId`).
+  /// Distinto da `assembledByUserId` (chi ha effettivamente eseguito).
+  assignedToUserId  Int?
+  assignedTo        User?               @relation("AssemblyOrderAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  /// Se true, l'assegnazione è stata impostata manualmente e NON verrà modificata
+  /// dalla distribuzione automatica (analogo a `ProductOrder.isManual`).
+  assignmentIsManual Boolean            @default(false)
   productOrders     ProductOrder[]      @relation("AssemblyOrderToProductItemOrder")
   OdetteReservation OdetteReservation[]
   /// Contenuti odette legati a questo ordine (quando valorizzato su OdetteContent).
@@ -128,6 +135,7 @@ model AssemblyOrder {
   assemblyBoxes     AssemblyBox[]
 
   @@index([assembledByUserId])
+  @@index([assignedToUserId])
   @@index([skuId])
   @@schema("inventory")
 }
