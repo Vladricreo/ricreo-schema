@@ -183,6 +183,19 @@ model AssemblyOperation {
   notes    String?
   metadata Json? // Per info extra (es. motivo scarto, boxId, shelfId)
 
+  // --- ESCLUSIONE DALLE STATISTICHE MANODOPERA ---
+  /// Se true, questa operazione è esclusa dal calcolo delle medie tempi/costi di
+  /// manodopera (view `v_product_labor_time_stats`, `v_product_labor_by_operator`,
+  /// `v_product_pricing_summary`). Usato per scartare sessioni anomale (es. tablet
+  /// lasciato aperto, pause non registrate) senza cancellare il dato.
+  excludedFromLaborStats Boolean @default(false)
+  /// Data/ora in cui l'operazione è stata esclusa dalle statistiche (audit).
+  laborStatsExcludedAt DateTime? @db.Timestamptz(6)
+  /// Id dell'utente che ha impostato l'esclusione (audit, nessuna FK per semplicità).
+  laborStatsExcludedByUserId Int?
+  /// Motivo opzionale dell'esclusione (audit).
+  laborStatsExclusionReason String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -190,6 +203,7 @@ model AssemblyOperation {
   @@index([operatorId])
   @@index([lotId])
   @@index([assemblyStageId])
+  @@index([operatorId, excludedFromLaborStats])
   @@schema("inventory")
 }
 
