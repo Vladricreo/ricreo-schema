@@ -370,6 +370,10 @@ model Printer {
   activeExtruder           Int          @default(0)
   /// Tipo piatto attualmente montato (aggiornamento manuale operatore; usato per compatibilità con i file).
   currentPlateType         PlateType    @default(TEXTURED)
+  /// True se la stampante ha il modulo per stampare TPU/TPE installato.
+  /// La compatibilità è per-stampante (non per modello): alcune macchine hanno il modulo, altre no.
+  /// Quando false, lo scheduler non assegna a questa stampante job con materiale TPU/TPE.
+  supportsTpu              Boolean      @default(false)
   structure                String       @default("CoreXY")
   ams                      Boolean?
   /// Modello AMS collegato (se presente). Serve per stimare consumi AMS (standby/working/drying).
