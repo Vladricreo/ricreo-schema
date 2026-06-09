@@ -79,8 +79,10 @@ model FilamentProfile {
   bedTempMax   Int? // Es. 60
 
   // Essiccazione
-  dryingTemp      Int? // Es. 55
-  dryingTimeHours Int? // Es. 8
+  dryingTemp                    Int? // Es. 55
+  dryingTimeHours               Int? // Es. 8
+  warnDryOpenedSpoolBeforePrint Boolean @default(false) // Avvisa se una bobina aperta va asciugata prima della stampa
+  requireHeatedAmsForPrint      Boolean @default(false) // Usa dryingTemp per distinguere AMS 2 Pro (<=65°C) e AMS HT (<=85°C)
 
   // Proprietà fisiche
   density  Decimal? @db.Decimal(5, 3) // g/cm³ per calcolo peso
@@ -130,8 +132,9 @@ model FilamentSpool {
   tag            SpoolTag?            @relation("TaggedSpool")
   tagAssignments SpoolTagAssignment[] @relation("TagAssignments")
 
-  openedAt   DateTime  @default(now()) @db.Timestamptz(6) // Per scadenza/umidità
-  finishedAt DateTime? @db.Timestamptz(6)
+  openedAt    DateTime  @default(now()) @db.Timestamptz(6) // Per scadenza/umidità
+  lastDriedAt DateTime? @db.Timestamptz(6) // Ultima asciugatura confermata/osservata
+  finishedAt  DateTime? @db.Timestamptz(6)
 
   // Dove si trova?
   mountedOnId String?  @db.Uuid // ID Stampante se montata
