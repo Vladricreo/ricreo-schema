@@ -142,3 +142,77 @@ view VPfFilamentConsumption30d {
   @@map("v_pf_filament_consumption_30d")
   @@schema("print_farm_views")
 }
+
+// ============================================================================
+// SMART ETA VIEWS
+// View per stimare la data di completamento (ETA) di job e ordini.
+// Vedi migration 20260619120000_print_farm_eta_views.
+// ============================================================================
+
+/// Latenza harvest (fine stampa -> raccolta) mediana per ora del giorno, ultimi 3 mesi.
+/// Cattura l'effetto "di notte le stampanti non vengono scaricate".
+view VPfHarvestLatencyByHour {
+  finishHour       Int     @unique @map("finishHour")
+  medianLatencyMin Decimal @map("medianLatencyMin") @db.Decimal(12, 2)
+  p25LatencyMin    Decimal @map("p25LatencyMin") @db.Decimal(12, 2)
+  p75LatencyMin    Decimal @map("p75LatencyMin") @db.Decimal(12, 2)
+  sampleSize       Int     @map("sampleSize")
+
+  @@map("v_pf_harvest_latency_by_hour")
+  @@schema("print_farm_views")
+}
+
+/// Utilizzo mensile della flotta (minuti stampa, capacita, % libera, stampanti attive).
+view VPfFleetThroughputMonthly {
+  month           DateTime @unique @db.Date
+  runMinutes      Decimal  @map("runMinutes") @db.Decimal(14, 2)
+  capacityMinutes Decimal  @map("capacityMinutes") @db.Decimal(14, 2)
+  utilizationPct  Decimal  @map("utilizationPct") @db.Decimal(5, 2)
+  freeCapacityPct Decimal  @map("freeCapacityPct") @db.Decimal(5, 2)
+  activePrinters  Int      @map("activePrinters")
+
+  @@map("v_pf_fleet_throughput_monthly")
+  @@schema("print_farm_views")
+}
+
+/// ETA per singolo ProductionJob attivo, come banda (ottimistica/attesa/pessimistica).
+/// Modello ibrido: ancora al Gantt per la parte schedulata, throughput per il resto.
+view VPfJobEta {
+  jobId                String    @unique @map("jobId") @db.Uuid
+  jobNumber            String    @map("jobNumber")
+  productOrderId       String?   @map("productOrderId") @db.Uuid
+  priority             Int       @map("priority")
+  remainingQty         Int       @map("remainingQty")
+  platesRemaining      Int       @map("platesRemaining")
+  workMinutes          Decimal   @map("workMinutes") @db.Decimal(14, 2)
+  scheduledEnd         DateTime? @map("scheduledEnd") @db.Timestamptz(6)
+  ganttCoverage        Decimal   @map("ganttCoverage") @db.Decimal(5, 3)
+  expectedPrinters     Int       @map("expectedPrinters")
+  harvestPerPlateMin   Decimal   @map("harvestPerPlateMin") @db.Decimal(12, 1)
+  queueWaitExpectedMin Decimal   @map("queueWaitExpectedMin") @db.Decimal(14, 1)
+  etaOptimistic        DateTime  @map("etaOptimistic") @db.Timestamptz(6)
+  etaExpected          DateTime  @map("etaExpected") @db.Timestamptz(6)
+  etaPessimistic       DateTime  @map("etaPessimistic") @db.Timestamptz(6)
+  confidence           String    @map("confidence")
+  basis                String    @map("basis")
+
+  @@map("v_pf_job_eta")
+  @@schema("print_farm_views")
+}
+
+/// ETA per ProductOrder completo = massimo tra le ETA dei job figli.
+view VPfOrderEta {
+  orderId           String   @unique @map("orderId") @db.Uuid
+  orderNumber       String   @map("orderNumber")
+  quantityToProduce Int      @map("quantityToProduce")
+  quantityProduced  Int      @map("quantityProduced")
+  productionStatus  String   @map("productionStatus")
+  jobsCount         Int      @map("jobsCount")
+  etaOptimistic     DateTime @map("etaOptimistic") @db.Timestamptz(6)
+  etaExpected       DateTime @map("etaExpected") @db.Timestamptz(6)
+  etaPessimistic    DateTime @map("etaPessimistic") @db.Timestamptz(6)
+  confidence        String   @map("confidence")
+
+  @@map("v_pf_order_eta")
+  @@schema("print_farm_views")
+}
