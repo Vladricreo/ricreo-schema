@@ -278,6 +278,8 @@ model Shipment {
   /// Numero d'ordine del marketplace originale (Amazon, Etsy, eBay, Shopify, ...),
   /// es. ShippyPro `transaction_id`. È l'ID che il cliente vede sul suo account.
   marketplaceOrderId String?
+  /// Store/marketplace di provenienza della vendita, normalizzato dalla sync/import.
+  salesChannel       ShipmentSalesChannel?
   recipientCountry   String?
   recipientName      String?
   trackingNumber     String?
@@ -294,6 +296,7 @@ model Shipment {
   @@index([productId])
   @@index([movementId])
   @@index([marketplaceOrderId])
+  @@index([salesChannel])
   @@schema("inventory")
 }
 
@@ -379,6 +382,16 @@ enum ShipmentType {
   BUSINESS
   STANDARD
   FBA
+
+  @@schema("inventory")
+}
+
+/// Store di provenienza della vendita associata alla spedizione.
+enum ShipmentSalesChannel {
+  AMAZON
+  TEMU
+  EBAY
+  ETSY
 
   @@schema("inventory")
 }
