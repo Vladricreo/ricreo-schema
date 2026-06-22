@@ -200,6 +200,29 @@ view VPfJobEta {
   @@schema("print_farm_views")
 }
 
+/// File 3MF preferito per (ProductPart, variante lineage).
+/// Una parte con piu' lineage compatibili con stampanti diverse genera piu' righe:
+/// lo scheduler le considera come alternative (ognuna col proprio partCount/compatiblePrinters).
+/// La selezione del file dentro la variante e' APPROVED > DRAFT (ultima versione).
+/// Vedi migration 20260622140000_part_preferred_files_view.
+view VPfPartPreferredFile {
+  productPartId            String   @map("productPartId") @db.Uuid
+  /// Radice della catena di versioni: identifica la variante.
+  variantRootId            String   @map("variantRootId") @db.Uuid
+  fileId                   String   @map("fileId") @db.Uuid
+  version                  Int      @map("version")
+  status                   String   @map("status")
+  /// 'approved' | 'draft' (mirror di selectPreferredFile, per variante).
+  selection                String   @map("selection")
+  partCount                Int      @map("partCount")
+  compatiblePrinters       String[] @map("compatiblePrinters")
+  estimatedDurationMinutes Int      @map("estimatedDurationMinutes")
+
+  @@unique([productPartId, variantRootId])
+  @@map("v_pf_part_preferred_files")
+  @@schema("print_farm_views")
+}
+
 /// ETA per ProductOrder completo = massimo tra le ETA dei job figli.
 view VPfOrderEta {
   orderId           String   @unique @map("orderId") @db.Uuid
