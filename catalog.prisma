@@ -27,6 +27,11 @@ model Item {
 
   properties Json?
 
+  /// Ricambio usato/rigenerato (rilevante per type=SPARE_PART). False = nuovo/di scorta.
+  isUsed Boolean @default(false)
+  /// Nota generale sul ricambio (provenienza, condizione, avvertenze). Mostrata in UI.
+  note   String?
+
   inStock  Int @default(0)
   minStock Int @default(0)
   maxStock Int @default(0)
@@ -80,6 +85,11 @@ model Item {
   /// Profili OrcaSlicer associati a questo Item (categoria FILAMENT).
   slicerProfiles    SlicerProfile[]       @relation("ItemSlicerProfiles")
 
+  /// Ricambi multiparte (SPARE_PART): sotto-ricambi che compongono questo ricambio padre.
+  spareComponents       SparePartComponent[] @relation("SparePartCompositeParent")
+  /// Ricambi padre che includono questo ricambio come sotto-parte.
+  spareComponentParents SparePartComponent[] @relation("SparePartCompositeChild")
+
   @@index([type])
   @@index([categoryId])
   @@index([colorId])
@@ -87,6 +97,29 @@ model Item {
   @@index([supplierId])
   @@index([locationId])
   @@index([itemSpecId, specPriority])
+  @@schema("inventory")
+}
+
+/// Composizione di un ricambio multiparte (solo Item di tipo SPARE_PART).
+/// Collega un ricambio "padre" (es. "Hotend completo") ai suoi sotto-ricambi reali
+/// con stock proprio (es. ventolina, termistore, hotend), ciascuno con la quantità inclusa.
+/// Durante la manutenzione si può sostituire solo una sotto-parte: in tal caso viene
+/// scaricato lo stock del solo sotto-ricambio, non dell'intero ricambio padre.
+model SparePartComponent {
+  id       String @id @default(uuid()) @db.Uuid
+  parentId String @db.Uuid
+  childId  String @db.Uuid
+  /// Quantità del sotto-ricambio inclusa in un'unità del ricambio padre.
+  quantity Int    @default(1)
+
+  parent Item @relation("SparePartCompositeParent", fields: [parentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  child  Item @relation("SparePartCompositeChild", fields: [childId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([parentId, childId])
+  @@index([parentId])
+  @@index([childId])
   @@schema("inventory")
 }
 
