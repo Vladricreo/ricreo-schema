@@ -54,6 +54,12 @@ model ProjectThreeMFFile {
   /// Diametri nozzle per-extruder (`nozzle_diameters`, ordine per indice extruder 0,1,...).
   nozzleDiametersByExtruder Decimal[] @default([]) @db.Decimal(4, 2)
 
+  /// Il file richiede un intervento manuale a metà stampa (es. inserimento di un componente/inserto)
+  /// che causa una pausa attesa/pianificata. Usato per mostrare all'operatore un messaggio dedicato
+  /// ("Pausa per inserimento aggiuntivo") alla prima pausa rilevata per questa stampa, invece del
+  /// generico "In pausa".
+  requiresAdditionalInsert Boolean @default(false)
+
   /// Percentuale di riempimento del piano (es. 0.70 = 70%)
   /// Usata per stimare l'area delle parti quando non conosciamo le dimensioni esatte
   plateFillPercentage Decimal @default(0.70) @db.Decimal(3, 2)
@@ -1047,6 +1053,11 @@ model PrinterAssignment {
   partsExpected Int // Parti totali attese per questa stampa (micro-assignment)
   partsProduced Int @default(0) // Parti prodotte ok
   partsRejected Int @default(0) // Parti scartate
+
+  /// Traccia se all'operatore è già stata mostrata la notifica "Pausa per inserimento aggiuntivo"
+  /// per la prima pausa di questa assegnazione (file con `requiresAdditionalInsert = true`).
+  /// Evita di ripetere il messaggio dedicato sulle pause successive della stessa stampa.
+  insertPauseNoticeShown Boolean @default(false)
 
   // === Materiale ===
   /// Categoria materiale richiesto dal file (es. "PETG", "PLA")
