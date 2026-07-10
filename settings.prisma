@@ -27,6 +27,8 @@ enum SettingsName {
   FBM_OPTIMAL_STOCK_DAYS
   FBM_RESTOCK_TIME
   PRODUCTION_ORDER_AUTOMATION
+  /// Lotto minimo globale per gli ordini automatici di produzione (default applicativo: 5).
+  PRODUCTION_MIN_BATCH_QTY
   AMAZON_ORDER_FIXED_COST
   AMAZON_STORAGE_FEE_LOW
   AMAZON_STORAGE_FEE_HIGH
