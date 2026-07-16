@@ -1092,6 +1092,8 @@ model PrinterAssignment {
   @@index([printerId])
   @@index([status])
   @@index([queuePosition])
+  /// Hot path compatible-spools / scheduler: assignment attivi per stampante.
+  @@index([printerId, status])
   @@schema("print-farm")
 }
 

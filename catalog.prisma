@@ -101,6 +101,8 @@ model Item {
   usedVariants Item[] @relation("ItemUsedVariant")
 
   @@index([type])
+  /// Hot path inventario filamenti: MATERIAL con stock > 0.
+  @@index([type, inStock])
   @@index([categoryId])
   @@index([colorId])
   @@index([brandId])
@@ -761,6 +763,8 @@ model Color {
   @@unique([name, associatedItemType])
   @@index([associatedItemType])
   @@index([name])
+  /// Hot path matching colore filamento (hex dal firmware / AMS).
+  @@index([hexCode])
   @@schema("inventory")
 }
 

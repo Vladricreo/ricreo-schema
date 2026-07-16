@@ -165,6 +165,12 @@ model FilamentSpool {
 
   @@index([inventoryLotId])
   @@index([locationId])
+  /// Hot path picker/compatible-spools: filtra per item e join su magazzino.
+  @@index([itemId])
+  /// Hot path unmount/mount: cerca spool montate su una stampante.
+  @@index([mountedOnId])
+  /// Hot path partial disponibili: ACTIVE + non montate + peso residuo.
+  @@index([status, mountedOnId, remainingWeight])
   @@schema("print-farm")
 }
 
