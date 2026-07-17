@@ -86,7 +86,8 @@ model InventoryLot {
 
   /// Quantità iniziale teorica del lotto (pezzi ricevuti/prodotti)
   initialQuantity Int
-  /// Stato logico del lotto (aperto/chiuso), indipendente dal conteggio movimenti
+  /// Stato logico del lotto: OPEN finché c’è stock tracciabile; CLOSED quando esaurito.
+  /// Aggiornato automaticamente dal trigger `after_movement_insert` (ignora WIP STAGE_*).
   status          InventoryLotStatus @default(OPEN)
 
   itemId        String?      @db.Uuid
