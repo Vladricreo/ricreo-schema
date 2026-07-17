@@ -361,6 +361,54 @@ view VProductPartConsumptionDemand {
 }
 
 /// ============================================================================
+/// ITEM CONSUMPTION ANALYTICS VIEWS - Pagina "Ordini > Consumi"
+/// ============================================================================
+
+/// Serie storica giornaliera di consumo per Item (una riga per item+giorno con consumo > 0)
+view VItemConsumptionDaily {
+  itemId           String   @map("item_id") @db.Uuid
+  day              DateTime @map("day") @db.Date
+  consumedQuantity BigInt   @map("consumed_quantity")
+
+  @@unique([itemId, day])
+  @@map("v_item_consumption_daily")
+  @@schema("inventory_views")
+}
+
+/// Riepilogo consumo per Item: totali/medie 30gg e 90gg, categoria, stock attuale
+view VItemConsumptionSummary {
+  itemId            String    @unique @map("item_id") @db.Uuid
+  itemName          String    @map("item_name")
+  itemSku           String?   @map("item_sku")
+  itemType          String    @map("item_type")
+  categoryName      String    @map("category_name")
+  categoryId        String?   @map("category_id") @db.Uuid
+  inStock           Int       @map("in_stock")
+  total30d          BigInt    @map("total_30d")
+  total90d          BigInt    @map("total_90d")
+  avgDaily30d       Decimal   @map("avg_daily_30d") @db.Decimal(14, 2)
+  avgDaily90d       Decimal   @map("avg_daily_90d") @db.Decimal(14, 2)
+  movementCount30d  Int       @map("movement_count_30d")
+  lastMovementDate  DateTime? @map("last_movement_date")
+
+  @@map("v_item_consumption_summary")
+  @@schema("inventory_views")
+}
+
+/// Stagionalità per Item: consumo medio giornaliero per mese dell'anno (1=Gen..12=Dic)
+view VItemConsumptionSeasonality {
+  itemId              String  @map("item_id") @db.Uuid
+  monthOfYear         Int     @map("month_of_year")
+  avgDailyConsumption Decimal @map("avg_daily_consumption") @db.Decimal(14, 2)
+  totalConsumption    BigInt  @map("total_consumption")
+  daysWithData        BigInt  @map("days_with_data")
+
+  @@unique([itemId, monthOfYear])
+  @@map("v_item_consumption_seasonality")
+  @@schema("inventory_views")
+}
+
+/// ============================================================================
 /// LOT VIEWS - Tracciabilità ISO 9001
 /// ============================================================================
 
