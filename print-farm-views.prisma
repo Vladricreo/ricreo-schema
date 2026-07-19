@@ -70,9 +70,11 @@ view VPfFailuresByReason30d {
   @@schema("print_farm_views")
 }
 
-/// Attività recente unificata (issue/failure/manutenzione).
+/// Attività recente unificata (issue/manutenzione).
+/// id è testo composto (`ISSUE:<int>` / `MAINTENANCE:<uuid>`): le fonti hanno
+/// tipi diversi (PrinterLogs.id int4 vs PrinterMaintenanceLog.id uuid).
 view VPfRecentActivity {
-  id          String   @unique @db.Uuid
+  id          String   @unique
   type        String
   at          DateTime @db.Timestamptz(6)
   title       String
