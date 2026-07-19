@@ -31,9 +31,9 @@ model Item {
   properties Json?
 
   /// Ricambio usato/rigenerato (rilevante per type=SPARE_PART). False = nuovo/di scorta.
-  isUsed Boolean @default(false)
+  isUsed     Boolean @default(false)
   /// Nota generale sul ricambio (provenienza, condizione, avvertenze). Mostrata in UI.
-  note   String?
+  note       String?
   /// Per le varianti "usate" (SKU con suffisso _USED): punta al ricambio nuovo di base.
   baseItemId String? @db.Uuid
 
@@ -278,14 +278,14 @@ model Product {
 /// piano ACTIVE e il precedente passa a DEPLETED: gli ordini esistenti restano legati al loro piano,
 /// i nuovi ordini usano il piano attivo. Append-only per preservare la tracciabilità.
 model ProductPartPlan {
-  id        String @id @default(uuid()) @db.Uuid
-  productId String @db.Uuid
+  id        String  @id @default(uuid()) @db.Uuid
+  productId String  @db.Uuid
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Nome leggibile del piano (es. "Revisione 2 - mono parte").
   name           String?
   /// Progressivo della revisione per prodotto (1 = piano iniziale).
-  revisionNumber Int             @default(1)
+  revisionNumber Int                   @default(1)
   /// Stato del piano: bozza, attivo (uno solo per prodotto) o esaurito (storico).
   status         ProductPartPlanStatus @default(ACTIVE)
 

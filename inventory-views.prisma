@@ -377,19 +377,19 @@ view VItemConsumptionDaily {
 
 /// Riepilogo consumo per Item: totali/medie 30gg e 90gg, categoria, stock attuale
 view VItemConsumptionSummary {
-  itemId            String    @unique @map("item_id") @db.Uuid
-  itemName          String    @map("item_name")
-  itemSku           String?   @map("item_sku")
-  itemType          String    @map("item_type")
-  categoryName      String    @map("category_name")
-  categoryId        String?   @map("category_id") @db.Uuid
-  inStock           Int       @map("in_stock")
-  total30d          BigInt    @map("total_30d")
-  total90d          BigInt    @map("total_90d")
-  avgDaily30d       Decimal   @map("avg_daily_30d") @db.Decimal(14, 2)
-  avgDaily90d       Decimal   @map("avg_daily_90d") @db.Decimal(14, 2)
-  movementCount30d  Int       @map("movement_count_30d")
-  lastMovementDate  DateTime? @map("last_movement_date")
+  itemId           String    @unique @map("item_id") @db.Uuid
+  itemName         String    @map("item_name")
+  itemSku          String?   @map("item_sku")
+  itemType         String    @map("item_type")
+  categoryName     String    @map("category_name")
+  categoryId       String?   @map("category_id") @db.Uuid
+  inStock          Int       @map("in_stock")
+  total30d         BigInt    @map("total_30d")
+  total90d         BigInt    @map("total_90d")
+  avgDaily30d      Decimal   @map("avg_daily_30d") @db.Decimal(14, 2)
+  avgDaily90d      Decimal   @map("avg_daily_90d") @db.Decimal(14, 2)
+  movementCount30d Int       @map("movement_count_30d")
+  lastMovementDate DateTime? @map("last_movement_date")
 
   @@map("v_item_consumption_summary")
   @@schema("inventory_views")
@@ -517,6 +517,115 @@ view VMovementByLot {
   productName       String?  @map("product_name")
 
   @@map("v_movement_by_lot")
+  @@schema("inventory_views")
+}
+
+/// ============================================================================
+/// LOT TRACEABILITY VIEWS - Tracciabilità ISO 9001 end-to-end
+/// View SQL: prisma/custom_migrations/sql/lot_traceability_views.sql
+/// Non sono SSOT di stock: ricostruiscono a runtime il grafo di tracciabilità
+/// (upstream/downstream) partendo dalle FK esistenti tra inventory/print-farm/public.
+/// ============================================================================
+
+/// Upstream materiale/produzione per lotto (link ESATTI via FK): stampa 3D,
+/// stampante, bobina filamento e lotto materiale acquistato usato per stamparla.
+/// Una riga per ogni PrintRun collegato al ProductionLot del lotto.
+view VLotUpstreamMaterial {
+  lotId                   String    @map("lot_id") @db.Uuid
+  lotCode                 String    @map("lot_code")
+  productionLotId         String?   @map("production_lot_id") @db.Uuid
+  productionLotCode       String?   @map("production_lot_code")
+  productionJobId         String?   @map("production_job_id") @db.Uuid
+  productionJobNumber     BigInt?   @map("production_job_number")
+  printRunId              String    @unique @map("print_run_id") @db.Uuid
+  printRunNumber          BigInt    @map("print_run_number")
+  printStartedAt          DateTime? @map("print_started_at") @db.Timestamptz(6)
+  printFinishedAt         DateTime? @map("print_finished_at") @db.Timestamptz(6)
+  printerId               String?   @map("printer_id") @db.Uuid
+  printerName             String?   @map("printer_name")
+  spoolId                 String?   @map("spool_id") @db.Uuid
+  spoolLotCode            String?   @map("spool_lot_code")
+  materialLotId           String?   @map("material_lot_id") @db.Uuid
+  materialLotCode         String?   @map("material_lot_code")
+  materialSupplierId      String?   @map("material_supplier_id") @db.Uuid
+  materialSupplierName    String?   @map("material_supplier_name")
+  materialSupplierLotCode String?   @map("material_supplier_lot_code")
+
+  @@map("v_lot_upstream_material")
+  @@schema("inventory_views")
+}
+
+/// Genealogia lotto → lotto INFERITA (best-effort, non FK diretta): collega i
+/// lotti "input" consumati (USO/STAGE_OUT/TRASH) ai lotti "output" prodotti
+/// (PRODUZIONE/STAGE_IN) che condividono lo stesso ordine di assemblaggio/produzione.
+/// Da mostrare in UI sempre come "inferito", mai come legame certo 1:1.
+view VLotGenealogyEdge {
+  orderId         String    @map("order_id") @db.Uuid
+  orderKind       String    @map("order_kind")
+  upstreamLotId   String?   @map("upstream_lot_id") @db.Uuid
+  downstreamLotId String?   @map("downstream_lot_id") @db.Uuid
+  firstMovementAt DateTime? @map("first_movement_at") @db.Timestamptz(6)
+  lastMovementAt  DateTime? @map("last_movement_at") @db.Timestamptz(6)
+
+  @@unique([orderId, upstreamLotId, downstreamLotId])
+  @@map("v_lot_genealogy_edges")
+  @@schema("inventory_views")
+}
+
+/// Timeline eventi unificata per lotto (audit cronologico ISO 9001): ricezione,
+/// stampa, raccolta, movimenti, assemblaggio, QC, spedizione. Alimenta la UI
+/// "storia del lotto".
+view VLotTimelineEvent {
+  lotId       String   @map("lot_id") @db.Uuid
+  eventType   String   @map("event_type")
+  eventAt     DateTime @map("event_at") @db.Timestamptz(6)
+  actorUserId Int?     @map("actor_user_id")
+  actorName   String?  @map("actor_name")
+  refId       String?  @map("ref_id") @db.Uuid
+  detail      Json?
+
+  @@unique([lotId, eventType, refId])
+  @@map("v_lot_timeline_events")
+  @@schema("inventory_views")
+}
+
+/// Destinazione downstream per lotto (spedizione + cliente). `isExactAllocation`
+/// distingue l'allocazione FIFO esatta (`ShipmentLotAllocation`) dal collegamento
+/// legacy (`ShipmentLine.lotId` senza allocazione).
+view VLotDownstreamShipment {
+  lotId              String    @map("lot_id") @db.Uuid
+  shipmentId         String    @map("shipment_id") @db.Uuid
+  shipmentNumber     BigInt    @map("shipment_number")
+  quantity           Int
+  isExactAllocation  Boolean   @map("is_exact_allocation")
+  shippedAt          DateTime? @map("shippedAt") @db.Timestamptz(6)
+  courier            String?
+  trackingNumber     String?   @map("trackingNumber")
+  recipientName      String?   @map("recipientName")
+  recipientCountry   String?   @map("recipientCountry")
+  marketplaceOrderId String?   @map("marketplaceOrderId")
+  salesChannel       String?   @map("salesChannel")
+
+  @@unique([shipmentId, lotId, isExactAllocation])
+  @@map("v_lot_downstream_shipment")
+  @@schema("inventory_views")
+}
+
+/// Report completezza tracciabilità per lotto (data-quality per audit ISO).
+/// Non inventa mai dati: segnala solo cosa manca (operatore, fornitore, QC, ecc.)
+/// per guidare la riconciliazione senza backfillare a caso.
+view VLotCompleteness {
+  lotId                     String  @unique @map("lot_id") @db.Uuid
+  lotCode                   String  @map("lot_code")
+  originType                String  @map("origin_type")
+  missingSupplierLotCode    Boolean @map("missing_supplier_lot_code")
+  missingPurchaseOrderLink  Boolean @map("missing_purchase_order_link")
+  missingMaterialSpoolLink  Boolean @map("missing_material_spool_link")
+  movementsMissingOperator  Int     @map("movements_missing_operator")
+  missingQcInspection       Boolean @map("missing_qc_inspection")
+  hasLegacyOnlyShipmentLink Boolean @map("has_legacy_only_shipment_link")
+
+  @@map("v_lot_completeness")
   @@schema("inventory_views")
 }
 

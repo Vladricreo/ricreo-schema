@@ -240,6 +240,8 @@ model ProductionJob {
   @@index([productId])
   @@index([productPartId])
   @@index([status])
+  /// Hot path tracciabilità ISO: risalire dai job al lotto di produzione.
+  @@index([productionLotId])
   @@schema("print-farm")
 }
 

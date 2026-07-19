@@ -254,24 +254,24 @@ model AmazonIgnoredAsin {
 /// Modello per una spedizione, che può contenere un 'ProductItem' o essere legata a un 'Movement'.
 /// Traccia informazioni come corriere, tracking e stato dell'etichetta.
 model Shipment {
-  id                 String              @id @default(uuid()) @db.Uuid
+  id                 String                @id @default(uuid()) @db.Uuid
   /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
-  number             BigInt              @unique @default(autoincrement()) @db.BigInt
-  movementId         String?             @db.Uuid
+  number             BigInt                @unique @default(autoincrement()) @db.BigInt
+  movementId         String?               @db.Uuid
   /// Relazione al movimento.
-  movement           Movement?           @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  productId          String?             @db.Uuid
-  product            Product?            @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  movement           Movement?             @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productId          String?               @db.Uuid
+  product            Product?              @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   lines              ShipmentLine[]
-  orderedAt          DateTime            @db.Timestamptz(6)
-  shippedAt          DateTime?           @db.Timestamptz(6)
+  orderedAt          DateTime              @db.Timestamptz(6)
+  shippedAt          DateTime?             @db.Timestamptz(6)
   /// Timestamp interno: quando l'etichetta è stata stampata dalla nostra app (CUPS).
   /// Serve per distinguere "stampato lato corriere" vs "stampato da noi".
-  printedAt          DateTime?           @db.Timestamptz(6)
+  printedAt          DateTime?             @db.Timestamptz(6)
   courier            String?
   labelUrl           String?
-  isShipped          Boolean             @default(false)
+  isShipped          Boolean               @default(false)
   /// Identificativo interno dell'ordine sul provider (es. ShippyPro `ordine_id`).
   /// Usato come chiave di sincronizzazione e mostrato come "Ordine".
   orderNumber        String?
@@ -284,10 +284,10 @@ model Shipment {
   recipientName      String?
   trackingNumber     String?
   trackingUrl        String?
-  labelStatus        ShipmentLabelStatus @default(PENDING)
-  shipmentType       ShipmentType        @default(STANDARD)
-  createdAt          DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+  labelStatus        ShipmentLabelStatus   @default(PENDING)
+  shipmentType       ShipmentType          @default(STANDARD)
+  createdAt          DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime              @default(now()) @updatedAt @db.Timestamptz(6)
   fullAddress        String?
   notes              String?
 
@@ -313,19 +313,49 @@ model ShipmentLine {
   /// MIGLIORIA: snapshot testuale dello SKU per documenti/archivio
   skuCodeSnapshot String?
 
+  /// DEPRECATO per lotti multipli: mantenuto solo per compatibilità legacy/UI (lotto "principale").
+  /// La tracciabilità ISO reale usa `lotAllocations` (FIFO, uno o più lotti per riga).
   lotId String?       @db.Uuid
   lot   InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   sku      Sku?     @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt           DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                @default(now()) @updatedAt @db.Timestamptz(6)
   customerReturnLines CustomerReturnLine[]
+  /// Allocazioni FIFO per lotto (tracciabilità ISO): una riga per ogni InventoryLot consumato.
+  lotAllocations      ShipmentLotAllocation[]
 
   @@index([shipmentId])
   @@index([skuId])
   @@index([lotId])
+  @@schema("inventory")
+}
+
+/// Allocazione di quantità di uno specifico `InventoryLot` su una riga di spedizione.
+/// Perché: una `ShipmentLine` può consumare pezzi da più lotti (consumo FIFO). Questa
+/// tabella è la fonte di verità per la tracciabilità "lotto → spedizione → cliente";
+/// `ShipmentLine.lotId` resta solo per compatibilità legacy con l'UI esistente.
+model ShipmentLotAllocation {
+  id             String       @id @default(uuid()) @db.Uuid
+  shipmentLineId String       @db.Uuid
+  shipmentLine   ShipmentLine @relation(fields: [shipmentLineId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  lotId String       @db.Uuid
+  lot   InventoryLot @relation(fields: [lotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantity Int
+
+  /// Movimento VENDITA generato per questa allocazione (audit/tracciabilità).
+  movementId String?   @db.Uuid
+  movement   Movement? @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([shipmentLineId])
+  @@index([lotId])
+  @@index([movementId])
   @@schema("inventory")
 }
 

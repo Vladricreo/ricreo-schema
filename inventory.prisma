@@ -3,45 +3,47 @@
 /// che ne determina l'impatto sulla quantità in magazzino.
 model Movement {
   /// ID univoco del movimento.
-  id              String              @id @default(uuid()) @db.Uuid
-  itemId          String?             @db.Uuid
+  id                     String                  @id @default(uuid()) @db.Uuid
+  itemId                 String?                 @db.Uuid
   /// Spec/famiglia logica che ha guidato la selezione dell'Item (audit per fallback).
-  itemSpecId      String?             @db.Uuid
-  quantity        Int //sempre positivo
-  type            MovementType
-  date            DateTime            @default(now()) @db.Timestamptz(6)
+  itemSpecId             String?                 @db.Uuid
+  quantity               Int //sempre positivo
+  type                   MovementType
+  date                   DateTime                @default(now()) @db.Timestamptz(6)
   /// Utente che ha eseguito il movimento (audit).
-  byUserId        Int?                @db.Integer
-  byUser          User?               @relation(fields: [byUserId], references: [id], onDelete: SetNull)
-  productId       String?             @db.Uuid
+  byUserId               Int?                    @db.Integer
+  byUser                 User?                   @relation(fields: [byUserId], references: [id], onDelete: SetNull)
+  productId              String?                 @db.Uuid
   /// Collega il movimento all'ordine di assemblaggio (audit per-task).
-  assemblyOrderId String?             @db.Uuid
-  assemblyOrder   AssemblyOrder?      @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assemblyOrderId        String?                 @db.Uuid
+  assemblyOrder          AssemblyOrder?          @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Collega il movimento all'ordine di produzione (per progetti futuri / audit).
-  productOrderId  String?             @db.Uuid
-  productOrder    ProductOrder?       @relation(fields: [productOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  assemblyStageId String?             @db.Uuid
-  productPartId   String?             @db.Uuid
+  productOrderId         String?                 @db.Uuid
+  productOrder           ProductOrder?           @relation(fields: [productOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assemblyStageId        String?                 @db.Uuid
+  productPartId          String?                 @db.Uuid
   /// Perché: tracciare quando l'uscita è FBM o FBA; WIP resta NULL (condiviso).
-  channel         InventoryChannel?
+  channel                InventoryChannel?
   /// Perché: quando scarico/spedisco per uno SKU specifico (FBA/FBM).
-  skuId           String?             @db.Uuid
-  sku             Sku?                @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  skuId                  String?                 @db.Uuid
+  sku                    Sku?                    @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// MIGLIORIA: collega il movimento all’odette dove vengono scaricati/prelevati i pezzi
-  odetteId        String?             @db.Uuid
-  odette          Odette?             @relation(fields: [odetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  lotId           String?             @db.Uuid
-  lot             InventoryLot?       @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  odetteId               String?                 @db.Uuid
+  odette                 Odette?                 @relation(fields: [odetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  lotId                  String?                 @db.Uuid
+  lot                    InventoryLot?           @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Perché: tracciare quando l'entrata è FBM o FBA; WIP resta NULL (condiviso).
-  assemblyStage   AssemblyStage?      @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  item            Item?               @relation(fields: [itemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  itemSpec        ItemSpec?           @relation(fields: [itemSpecId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  productPart     ProductPart?        @relation(fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  product         Product?            @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  shipments       Shipment[]
+  assemblyStage          AssemblyStage?          @relation(fields: [assemblyStageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  item                   Item?                   @relation(fields: [itemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  itemSpec               ItemSpec?               @relation(fields: [itemSpecId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productPart            ProductPart?            @relation(fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  product                Product?                @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  shipments              Shipment[]
   /// Audit: movimento legato a una riga reso (recupero / RESO_IN).
-  returnLineId    String?             @db.Uuid
-  returnLine      CustomerReturnLine? @relation(fields: [returnLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  returnLineId           String?                 @db.Uuid
+  returnLine             CustomerReturnLine?     @relation(fields: [returnLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Allocazioni lotto/spedizione generate da questo movimento (tracciabilità ISO).
+  shipmentLotAllocations ShipmentLotAllocation[]
 
   /// Audit: movimento legato a spedizione inbound FBA (uscita stock locale verso Amazon).
   fbaShipmentPlanId String?                @db.Uuid
@@ -120,9 +122,11 @@ model InventoryLot {
   movements      Movement[]
   odetteContents OdetteContent[]
 
-  shipmentLines      ShipmentLine[]
-  assemblyOperations AssemblyOperation[]
-  assemblyBoxes      AssemblyBox[]
+  shipmentLines          ShipmentLine[]
+  /// Allocazioni FIFO su spedizioni (tracciabilità ISO: lotto → cliente).
+  shipmentLotAllocations ShipmentLotAllocation[]
+  assemblyOperations     AssemblyOperation[]
+  assemblyBoxes          AssemblyBox[]
 
   /// Bobine di filamento associate a questo lotto di inventario.
   filamentSpools FilamentSpool[] @relation("InventoryLotFilamentSpools")

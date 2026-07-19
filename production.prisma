@@ -26,8 +26,8 @@ model ProductOrder {
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime         @default(now()) @updatedAt @db.Timestamptz(6)
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  sku     Sku?    @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  product         Product          @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sku             Sku?             @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Piano parti congelato per questo ordine (vedi `productPartPlanId`).
   productPartPlan ProductPartPlan? @relation(fields: [productPartPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
@@ -98,18 +98,18 @@ model ProductOrderProductPart {
 /// Rappresenta un ordine di assemblaggio per un prodotto in base allo SKU.
 /// Lo SKU determina il canale (FBA/FBM) e le parti necessarie per l'assemblaggio.
 model AssemblyOrder {
-  id                 String @id @default(uuid()) @db.Uuid
+  id                 String  @id @default(uuid()) @db.Uuid
   /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
-  number             BigInt @unique @default(autoincrement()) @db.BigInt
-  productId          String @db.Uuid
-  skuId              String @db.Uuid // SKU determina canale e parti necessarie
+  number             BigInt  @unique @default(autoincrement()) @db.BigInt
+  productId          String  @db.Uuid
+  skuId              String  @db.Uuid // SKU determina canale e parti necessarie
   /// Piano parti (revisione composizione) congelato alla creazione dell'ordine di assemblaggio.
   /// Ereditato dai ProductOrder collegati; determina quali parti vengono prelevate/assemblate.
   productPartPlanId  String? @db.Uuid
-  quantityToAssemble Int    @default(0)
-  quantityAssembled  Int    @default(0)
-  quantityScrapped   Int    @default(0)
+  quantityToAssemble Int     @default(0)
+  quantityAssembled  Int     @default(0)
+  quantityScrapped   Int     @default(0)
 
   startedAt  DateTime?      @db.Timestamptz(6)
   finishedAt DateTime?      @db.Timestamptz(6)
@@ -120,30 +120,30 @@ model AssemblyOrder {
   /// Versione per optimistic locking (concorrenza multi-operatore).
   version    Int            @default(0)
 
-  product           Product             @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  sku               Sku                 @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sku                Sku                 @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   /// Piano parti congelato per questo ordine di assemblaggio (vedi `productPartPlanId`).
-  productPartPlan   ProductPartPlan?    @relation(fields: [productPartPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  assembledByUserId Int?
-  assembledBy       User?               @relation(fields: [assembledByUserId], references: [id], onDelete: SetNull)
+  productPartPlan    ProductPartPlan?    @relation(fields: [productPartPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assembledByUserId  Int?
+  assembledBy        User?               @relation(fields: [assembledByUserId], references: [id], onDelete: SetNull)
   /// Operatore a cui è pianificato l'assemblaggio (da `assignedToUserId`).
   /// Distinto da `assembledByUserId` (chi ha effettivamente eseguito).
-  assignedToUserId  Int?
-  assignedTo        User?               @relation("AssemblyOrderAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  assignedToUserId   Int?
+  assignedTo         User?               @relation("AssemblyOrderAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   /// Se true, l'assegnazione è stata impostata manualmente e NON verrà modificata
   /// dalla distribuzione automatica (analogo a `ProductOrder.isManual`).
-  assignmentIsManual Boolean            @default(false)
-  productOrders     ProductOrder[]      @relation("AssemblyOrderToProductItemOrder")
-  OdetteReservation OdetteReservation[]
+  assignmentIsManual Boolean             @default(false)
+  productOrders      ProductOrder[]      @relation("AssemblyOrderToProductItemOrder")
+  OdetteReservation  OdetteReservation[]
   /// Contenuti odette legati a questo ordine (quando valorizzato su OdetteContent).
-  odetteContents    OdetteContent[]
-  lots              InventoryLot[]
+  odetteContents     OdetteContent[]
+  lots               InventoryLot[]
   /// Movimenti inventario collegati a questo ordine di assemblaggio (audit).
-  movements         Movement[]
-  operations        AssemblyOperation[]
+  movements          Movement[]
+  operations         AssemblyOperation[]
   /// Righe picking per questo ordine di assemblaggio.
-  pickingLines      PickingLine[]
-  assemblyBoxes     AssemblyBox[]
+  pickingLines       PickingLine[]
+  assemblyBoxes      AssemblyBox[]
 
   @@index([assembledByUserId])
   @@index([assignedToUserId])
@@ -188,13 +188,13 @@ model AssemblyOperation {
   /// manodopera (view `v_product_labor_time_stats`, `v_product_labor_by_operator`,
   /// `v_product_pricing_summary`). Usato per scartare sessioni anomale (es. tablet
   /// lasciato aperto, pause non registrate) senza cancellare il dato.
-  excludedFromLaborStats Boolean @default(false)
+  excludedFromLaborStats     Boolean   @default(false)
   /// Data/ora in cui l'operazione è stata esclusa dalle statistiche (audit).
-  laborStatsExcludedAt DateTime? @db.Timestamptz(6)
+  laborStatsExcludedAt       DateTime? @db.Timestamptz(6)
   /// Id dell'utente che ha impostato l'esclusione (audit, nessuna FK per semplicità).
   laborStatsExcludedByUserId Int?
   /// Motivo opzionale dell'esclusione (audit).
-  laborStatsExclusionReason String?
+  laborStatsExclusionReason  String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

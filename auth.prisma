@@ -15,35 +15,35 @@ model Profile {
 
 /// Modello per gli utenti del sistema. Gestisce l'autenticazione e le informazioni di base dell'utente.
 model User {
-  id                  Int                 @id @default(autoincrement())
-  email               String              @unique
-  username            String              @unique
-  password            String
-  name                String?
-  isActive            Boolean             @default(true)
+  id                        Int                 @id @default(autoincrement())
+  email                     String              @unique
+  username                  String              @unique
+  password                  String
+  name                      String?
+  isActive                  Boolean             @default(true)
   /// Ordine di intervento nella distribuzione automatica degli ordini di assemblaggio.
   /// Valore minore = riempito prima (es. operatore dedicato = 0, backup = 1).
   /// Se NULL, viene derivato dai ruoli RBAC (Assemblatore senza GestoreStampanti = dedicato).
-  assemblyInterventionOrder Int? @db.SmallInt
-  createdAt           DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
-  posts               Post[]
-  profile             Profile?
-  roles               UserRole[]
-  OdetteMove          OdetteMove[]
-  OdetteCleaningLog   OdetteCleaningLog[]
-  movements           Movement[]
-  productOrders       ProductOrder[]
-  assemblyOrders      AssemblyOrder[]
+  assemblyInterventionOrder Int?                @db.SmallInt
+  createdAt                 DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+  posts                     Post[]
+  profile                   Profile?
+  roles                     UserRole[]
+  OdetteMove                OdetteMove[]
+  OdetteCleaningLog         OdetteCleaningLog[]
+  movements                 Movement[]
+  productOrders             ProductOrder[]
+  assemblyOrders            AssemblyOrder[]
   /// Ordini di assemblaggio pianificati (assegnati) a questo utente.
   /// Distinto da `assemblyOrders` (chi ha eseguito): qui è "pianificato per".
-  assignedAssemblyOrders AssemblyOrder[]  @relation("AssemblyOrderAssignedTo")
+  assignedAssemblyOrders    AssemblyOrder[]     @relation("AssemblyOrderAssignedTo")
   /// Turni di lavoro ricorrenti settimanali per la distribuzione degli assemblaggi.
-  workShifts          WorkShift[]
+  workShifts                WorkShift[]
   /// Giorni di assenza puntuali (ferie, malattia, ecc.): in quel giorno capacità = 0 in distribuzione.
-  workAbsences        WorkAbsence[]
-  performedOperations AssemblyOperation[]
-  lotInspections      LotInspection[]
+  workAbsences              WorkAbsence[]
+  performedOperations       AssemblyOperation[]
+  lotInspections            LotInspection[]
 
   /// Operazioni di raccolta pezzi effettuate da questo utente
   printerHarvests      PrinterHarvest[]      @relation("PrinterHarvests")
@@ -76,22 +76,22 @@ model User {
 }
 
 model Role {
-  id          String           @id @default(uuid()) @db.Uuid
-  name        String           @unique
-  description String?
+  id                           String           @id @default(uuid()) @db.Uuid
+  name                         String           @unique
+  description                  String?
   /// Se true, gli utenti con questo ruolo sono impiegati nell'assemblaggio
   /// e rientrano nella distribuzione automatica degli ordini.
-  isAssemblyRole Boolean @default(false)
+  isAssemblyRole               Boolean          @default(false)
   /// Priorità di intervento del ruolo nella distribuzione (minore = riempito prima).
   /// Usata come default quando l'utente non ha un `assemblyInterventionOrder` esplicito.
-  assemblyPriority Int? @db.SmallInt
+  assemblyPriority             Int?             @db.SmallInt
   /// Se true, gli utenti con questo ruolo possono modificare le assegnazioni degli
   /// ordini di assemblaggio (vedono i controlli/avatar di assegnazione sulla board).
-  canManageAssemblyAssignments Boolean @default(false)
-  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime         @default(now()) @updatedAt @db.Timestamptz(6)
-  users       UserRole[]
-  permissions RolePermission[]
+  canManageAssemblyAssignments Boolean          @default(false)
+  createdAt                    DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt                    DateTime         @default(now()) @updatedAt @db.Timestamptz(6)
+  users                        UserRole[]
+  permissions                  RolePermission[]
 
   @@schema("public")
 }
