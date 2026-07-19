@@ -258,9 +258,11 @@ model PrintRun {
 
   /// Stampante associata a questa run.
   ///
-  /// Per le run “pianificate” l'informazione passa da `assignment -> printer`.
-  /// Questo campo serve soprattutto per run “unplanned/custom” (es. stampa avviata dal pannello della stampante),
-  /// dove potremmo non avere una `PrinterAssignment` da collegare.
+  /// OBBLIGATORIO per tracciabilità ISO: le view inventario (`v_lot_upstream_material`,
+  /// `v_lot_timeline_events`) leggono `PrintRun.printerId` direttamente — non via assignment.
+  /// Valorizzare SEMPRE anche sulle run pianificate (oltre ad `assignmentId`), altrimenti
+  /// il nome stampante non compare nella timeline del lotto. Utile anche per run unplanned/custom
+  /// senza `PrinterAssignment`.
   printerId String?  @db.Uuid
   printer   Printer? @relation("PrintRunPrinter", fields: [printerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
