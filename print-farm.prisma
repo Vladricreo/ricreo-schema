@@ -234,6 +234,9 @@ model ProductionJob {
   /// Task Gantt che coinvolgono questo job
   ganttTasks GanttTask[]
 
+  /// Segnalazioni sui file rilevate durante questo job.
+  feedbacks FarmFeedback[]
+
   @@unique([productOrderId, productPartId])
   @@index([productOrderId])
   @@index([assemblyOrderId])
@@ -1172,6 +1175,9 @@ model PrinterHarvest {
   notes        String?
   /// Foto/immagine dei pezzi (opzionale)
   imageUrl     String?
+
+  /// Segnalazioni sui file aperte da questo scarico.
+  feedbacks FarmFeedback[]
 
   // === Lotto ===
   /// Lotto di produzione associato
