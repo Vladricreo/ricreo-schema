@@ -589,7 +589,7 @@ view VLotTimelineEvent {
   @@schema("inventory_views")
 }
 
-/// Destinazione downstream per lotto (spedizione + cliente). `isExactAllocation`
+/// Destinazione downstream per lotto (spedizione, senza PII cliente). `isExactAllocation`
 /// distingue l'allocazione FIFO esatta (`ShipmentLotAllocation`) dal collegamento
 /// legacy (`ShipmentLine.lotId` senza allocazione).
 view VLotDownstreamShipment {
@@ -601,7 +601,6 @@ view VLotDownstreamShipment {
   shippedAt          DateTime? @map("shippedAt") @db.Timestamptz(6)
   courier            String?
   trackingNumber     String?   @map("trackingNumber")
-  recipientName      String?   @map("recipientName")
   recipientCountry   String?   @map("recipientCountry")
   marketplaceOrderId String?   @map("marketplaceOrderId")
   salesChannel       String?   @map("salesChannel")

@@ -281,14 +281,19 @@ model Shipment {
   /// Store/marketplace di provenienza della vendita, normalizzato dalla sync/import.
   salesChannel       ShipmentSalesChannel?
   recipientCountry   String?
+  /// Nome destinatario cifrato a riposo con AES-256-GCM.
   recipientName      String?
+  /// Blind index HMAC-SHA256 del nome normalizzato, usato per confronti esatti.
+  recipientNameHash  String?               @db.VarChar(64)
   trackingNumber     String?
   trackingUrl        String?
   labelStatus        ShipmentLabelStatus   @default(PENDING)
   shipmentType       ShipmentType          @default(STANDARD)
   createdAt          DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime              @default(now()) @updatedAt @db.Timestamptz(6)
+  /// Indirizzo completo cifrato a riposo con AES-256-GCM.
   fullAddress        String?
+  /// Note spedizione cifrate a riposo con AES-256-GCM.
   notes              String?
 
   customerReturns CustomerReturn[]
@@ -297,6 +302,7 @@ model Shipment {
   @@index([movementId])
   @@index([marketplaceOrderId])
   @@index([salesChannel])
+  @@index([recipientNameHash])
   @@schema("inventory")
 }
 
