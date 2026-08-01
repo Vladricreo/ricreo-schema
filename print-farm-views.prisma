@@ -145,6 +145,43 @@ view VPfFilamentConsumption30d {
   @@schema("print_farm_views")
 }
 
+/// Accuratezza osservata del piano per assignment collegata a un task Gantt.
+/// Una riga per assignment; i campi errore restano null finché i tempi reali
+/// o le metriche filamento non sono disponibili.
+view VPfScheduleAccuracy {
+  assignmentId String  @unique @map("assignmentId") @db.Uuid
+  ganttTaskId  String? @map("ganttTaskId") @db.Uuid
+
+  printerId        String  @map("printerId") @db.Uuid
+  printerModelId   Int     @map("printerModelId")
+  productionJobId  String? @map("productionJobId") @db.Uuid
+  fileId           String? @map("fileId") @db.Uuid
+  materialCategory String? @map("materialCategory")
+
+  plannedStart           DateTime  @map("plannedStart") @db.Timestamptz(6)
+  plannedEnd             DateTime  @map("plannedEnd") @db.Timestamptz(6)
+  plannedDurationMinutes Int       @map("plannedDurationMinutes")
+  actualStart            DateTime? @map("actualStart") @db.Timestamptz(6)
+  actualEnd              DateTime? @map("actualEnd") @db.Timestamptz(6)
+  actualDurationMinutes  Decimal?  @map("actualDurationMinutes") @db.Decimal(14, 4)
+
+  startDeltaMinutes       Decimal? @map("startDeltaMinutes") @db.Decimal(14, 4)
+  endDeltaMinutes         Decimal? @map("endDeltaMinutes") @db.Decimal(14, 4)
+  durationErrorMinutes    Decimal? @map("durationErrorMinutes") @db.Decimal(14, 4)
+  durationAbsErrorMinutes Decimal? @map("durationAbsErrorMinutes") @db.Decimal(14, 4)
+  durationApePercent      Decimal? @map("durationApePercent") @db.Decimal(14, 4)
+
+  expectedFilamentGrams Decimal? @map("expectedFilamentGrams") @db.Decimal(14, 4)
+  actualFilamentGrams   Decimal? @map("actualFilamentGrams") @db.Decimal(14, 4)
+  filamentErrorGrams    Decimal? @map("filamentErrorGrams") @db.Decimal(14, 4)
+  filamentApePercent    Decimal? @map("filamentApePercent") @db.Decimal(14, 4)
+
+  ganttWithin24h Boolean @map("ganttWithin24h")
+
+  @@map("v_pf_schedule_accuracy")
+  @@schema("print_farm_views")
+}
+
 // ============================================================================
 // SMART ETA VIEWS
 // View per stimare la data di completamento (ETA) di job e ordini.

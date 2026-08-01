@@ -15,7 +15,17 @@ model ProductOrder {
   productPartPlanId String?          @db.Uuid
   quantityToProduce Int /// Quantità totale di prodotti finiti da produrre
   quantityProduced  Int              @default(0) /// Quantità di prodotti finiti completati
+  /// Mediana (P50) del completamento ordine derivata dall'ultimo piano Gantt valido.
   eta               DateTime?        @db.Timestamptz(6)
+  /// Quantile conservativo P80 dello stesso modello ETA.
+  etaP80            DateTime?        @db.Timestamptz(6)
+  /// Confidenza numerica 0..1; componenti e penalità sono spiegati in etaBreakdown.
+  etaConfidence     Float?
+  /// Spiegazione tipizzata serializzata: fonti, copertura, attese, rework e blocker.
+  etaBreakdown      Json?            @db.JsonB
+  /// Scadenza operativa opzionale. Se assente lo scheduler non inventa SLA:
+  /// il canale/SKU non espone ancora una policy affidabile e versionata.
+  dueDate           DateTime?        @db.Timestamptz(6)
   finishedAt        DateTime?        @db.Timestamptz(6)
   cost              Decimal?         @db.Decimal(12, 2)
   priority          Int              @default(1) /// 1=low, 2=medium, 3=high, 4=critical
@@ -44,7 +54,8 @@ model ProductOrder {
   lots InventoryLot[]
 
   /// Job di stampa 3D generati da questo ordine (uno per parte)
-  productionJobs ProductionJob[] @relation("ProductOrderJobs")
+  productionJobs ProductionJob[]             @relation("ProductOrderJobs")
+  etaSnapshots   SchedulerOrderEtaSnapshot[]
   movements      Movement[]
   /// Contenuti odette collegati a questo ordine (scarico/stoccaggio WIP).
   odetteContents OdetteContent[]
@@ -58,6 +69,7 @@ model ProductOrder {
   @@index([producedByUserId])
   @@index([productionStatus])
   @@index([priority])
+  @@index([dueDate])
   @@index([customerReturnLineId])
   @@index([productPartPlanId])
   @@schema("inventory")

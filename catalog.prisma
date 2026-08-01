@@ -81,14 +81,15 @@ model Item {
   assemblyBoxPackages       AssemblyBox[]             @relation("AssemblyBoxPackagingItem")
 
   // Relazioni Print Farm
-  projectFiles      ProjectThreeMFFile[]
-  fileMaterialUsage ProjectFileMaterial[] @relation("FileMaterialUsage") // Uso materiale nei file con peso specifico
-  productionJobs    ProductionJob[]
-  printRuns         PrintRun[]
-  spools            FilamentSpool[]
-  filamentProfile   FilamentProfile? // Profilo tecnico per materiali (solo per type=MATERIAL)
+  projectFiles         ProjectThreeMFFile[]
+  fileMaterialUsage    ProjectFileMaterial[] @relation("FileMaterialUsage") // Uso materiale nei file con peso specifico
+  productionJobs       ProductionJob[]
+  printRuns            PrintRun[]
+  spools               FilamentSpool[]
+  assignmentSpoolPlans AssignmentSpoolPlan[]
+  filamentProfile      FilamentProfile? // Profilo tecnico per materiali (solo per type=MATERIAL)
   /// Profili OrcaSlicer associati a questo Item (categoria FILAMENT).
-  slicerProfiles    SlicerProfile[]       @relation("ItemSlicerProfiles")
+  slicerProfiles       SlicerProfile[]       @relation("ItemSlicerProfiles")
 
   /// Ricambi multiparte (SPARE_PART): sotto-ricambi che compongono questo ricambio padre.
   spareComponents       SparePartComponent[] @relation("SparePartCompositeParent")

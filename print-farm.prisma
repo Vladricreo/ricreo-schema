@@ -77,18 +77,19 @@ model ProjectThreeMFFile {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
-  printRuns      PrintRun[]
-  productId      String?               @db.Uuid
-  product        Product?              @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  printRuns             PrintRun[]
+  schedulerCalibrations SchedulerCalibration[]
+  productId             String?                @db.Uuid
+  product               Product?               @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Parte principale associata al file (opzionale).
   /// Nota: il dettaglio multi-parte rimane in `ProjectPart`, ma questo campo serve per risoluzioni rapide e affidabili.
-  productPartId  String?               @db.Uuid
-  productPart    ProductPart?          @relation("ProductPartFiles", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  materials      Item[] // Relazione legacy (per compatibilità)
-  fileMaterials  ProjectFileMaterial[] // Nuova relazione con peso specifico del file
-  productionJobs ProductionJob[]       @relation("JobsToFiles")
-  parts          ProjectPart[]         @relation("ProjectParts")
-  feedbacks      FarmFeedback[]
+  productPartId         String?                @db.Uuid
+  productPart           ProductPart?           @relation("ProductPartFiles", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  materials             Item[] // Relazione legacy (per compatibilità)
+  fileMaterials         ProjectFileMaterial[] // Nuova relazione con peso specifico del file
+  productionJobs        ProductionJob[]        @relation("JobsToFiles")
+  parts                 ProjectPart[]          @relation("ProjectParts")
+  feedbacks             FarmFeedback[]
 
   /// Task di accodamento persistenti (flusso "send to print")
   queueTasks QueueTask[] @relation("FileQueueTasks")
@@ -526,7 +527,11 @@ model Printer {
   queueTasks QueueTask[] @relation("PrinterQueueTasks")
 
   /// Task Gantt pianificati su questa stampante
-  ganttTasks GanttTask[]
+  ganttTasks             GanttTask[]
+  /// Interventi operatore registrati dal client.
+  schedulerInterventions SchedulerInterventionLog[]
+  /// Cicli di asciugatura JIT pianificati sulla stampante.
+  assignmentDryingPlans  AssignmentDryingPlan[]     @relation("DryingPlanPrinter")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -602,7 +607,9 @@ model PrinterAmsUnit {
   dryTimeMin   Int?
 
   /// Slot AMS appartenenti a questa unità (relazione 1:N opzionale verso `PrinterAmsSlot.amsUnitId`).
-  slots PrinterAmsSlot[] @relation("AmsUnitSlots")
+  slots                 PrinterAmsSlot[]       @relation("AmsUnitSlots")
+  /// Cicli JIT che occupano in esclusiva questa unità durante l'asciugatura.
+  assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanAmsUnit")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -661,16 +668,18 @@ model PrinterModel {
   buildPlateDepth  Decimal? @db.Decimal(8, 2) // Profondità piano (Y) in mm
   buildPlateHeight Decimal? @db.Decimal(8, 2) // Altezza massima (Z) in mm
 
-  printers       Printer[]
+  printers              Printer[]
   /// Profili consumo energia per questo modello (per tensione/fase/materiale).
-  energyProfiles PrinterModelEnergyProfile[]
-  errorCodes     ErrorCode[]                 @relation("PrinterModelErrorCode")
+  energyProfiles        PrinterModelEnergyProfile[]
+  errorCodes            ErrorCode[]                 @relation("PrinterModelErrorCode")
   /// Macro G-code compatibili con questo modello di stampante
-  printerMacros  PrinterMacro[]              @relation("PrinterModelMacroCompatibility")
+  printerMacros         PrinterMacro[]              @relation("PrinterModelMacroCompatibility")
   /// Profili OrcaSlicer (printer/process) associati a questo modello.
-  slicerProfiles SlicerProfile[]             @relation("PrinterModelSlicerProfiles")
+  slicerProfiles        SlicerProfile[]             @relation("PrinterModelSlicerProfiles")
   /// Job di slicing eseguiti per questo modello.
-  sliceJobs      SliceJob[]                  @relation("PrinterModelSliceJobs")
+  sliceJobs             SliceJob[]                  @relation("PrinterModelSliceJobs")
+  /// Fattori di calibrazione appresi per file e materiale.
+  schedulerCalibrations SchedulerCalibration[]
 
   @@schema("print-farm")
 }
@@ -1028,12 +1037,22 @@ model PrinterAssignment {
   status        AssignmentStatus @default(SCHEDULED)
 
   // === Timing ===
-  scheduledAt DateTime? @db.Timestamptz(6) // Quando è stato schedulato
+  scheduledAt            DateTime?  @db.Timestamptz(6) // Quando è stato schedulato
   /// Timestamp "claim" (lock) usato SOLO dallo scheduler backend per evitare doppio start.
   /// Non rappresenta l'inizio stampa: serve solo come mutex soft recuperabile (stale) in caso di crash.
-  claimedAt   DateTime? @db.Timestamptz(6)
-  startedAt   DateTime? @db.Timestamptz(6) // Inizio stampa effettivo
-  completedAt DateTime? @db.Timestamptz(6) // Fine stampa
+  claimedAt              DateTime?  @db.Timestamptz(6)
+  startedAt              DateTime?  @db.Timestamptz(6) // Inizio stampa effettivo
+  completedAt            DateTime?  @db.Timestamptz(6) // Fine stampa
+  /// Snapshot immutabile del piano quando il task Gantt viene collegato.
+  plannedStart           DateTime?  @db.Timestamptz(6)
+  plannedEnd             DateTime?  @db.Timestamptz(6)
+  plannedDurationMinutes Int?
+  /// Origine F6 della decisione immediata. Il task è unique per rendere retry
+  /// e doppi cron idempotenti; il piano resta separato per audit/query.
+  sourceGanttPlanId      String?    @db.Uuid
+  sourceGanttPlan        GanttPlan? @relation("AssignmentSourceGanttPlan", fields: [sourceGanttPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sourceGanttTaskId      String?    @unique @db.Uuid
+  sourceGanttTask        GanttTask? @relation("AssignmentSourceGanttTask", fields: [sourceGanttTaskId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Operazioni di raccolta pezzi associate a questa assegnazione
   harvests PrinterHarvest[]
@@ -1054,7 +1073,15 @@ model PrinterAssignment {
   downtimeEvents PrinterDowntimeEvent[] @relation("AssignmentDowntimeEvents")
 
   /// Issue operative/tecniche collegate a questa assignment (opzionale).
-  issues PrinterIssue[]
+  issues                 PrinterIssue[]
+  /// Task di piani diversi che hanno rappresentato questa assignment.
+  ganttTasks             GanttTask[]
+  /// Interventi operatore correlati, quando l'assignment è nota.
+  schedulerInterventions SchedulerInterventionLog[]
+  /// Piano concreto delle bobine primarie/backup per ciascun filamento del file.
+  spoolPlans             AssignmentSpoolPlan[]
+  /// Cicli di asciugatura JIT richiesti prima della stampa.
+  dryingPlans            AssignmentDryingPlan[]     @relation("DryingPlanAssignment")
 
   // === Conteggi parti ===
   partsExpected Int // Parti totali attese per questa stampa (micro-assignment)
@@ -1099,8 +1126,171 @@ model PrinterAssignment {
   @@index([printerId])
   @@index([status])
   @@index([queuePosition])
+  @@index([plannedStart])
+  @@index([sourceGanttPlanId])
   /// Hot path compatible-spools / scheduler: assignment attivi per stampante.
   @@index([printerId, status])
+  @@schema("print-farm")
+}
+
+enum AssignmentSpoolPlanStatus {
+  PLANNED
+  LOADED
+  CONSUMED
+  CANCELLED
+
+  @@schema("print-farm")
+}
+
+enum AssignmentSpoolPlanProvenance {
+  OPEN_SPOOL
+  SEALED_INVENTORY
+
+  @@schema("print-farm")
+}
+
+enum AssignmentSpoolPlanVerification {
+  VERIFIED
+  OPERATOR_REVIEW_REQUIRED
+
+  @@schema("print-farm")
+}
+
+/// Riga source-of-truth per una bobina primaria/backup pianificata.
+/// La reservation vive qui: `reservedSlotId` è unique e viene rilasciato
+/// azzerandolo su cancellazione/scadenza, senza lasciare lock sullo slot.
+model AssignmentSpoolPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  assignmentId String            @db.Uuid
+  assignment   PrinterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  fileFilamentIndex Int
+  sequence          Int
+
+  /// Null per una bobina ancora sigillata: in quel caso `itemId` identifica
+  /// l'articolo da aprire e la riga non può essere VERIFIED/automatizzabile.
+  spoolId String?        @db.Uuid
+  spool   FilamentSpool? @relation("AssignmentSpoolPlans", fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  itemId  String?        @db.Uuid
+  item    Item?          @relation(fields: [itemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  plannedGrams Decimal @db.Decimal(10, 2)
+  amsUnit      Int?
+  slot         Int?
+
+  status       AssignmentSpoolPlanStatus       @default(PLANNED)
+  provenance   AssignmentSpoolPlanProvenance
+  verification AssignmentSpoolPlanVerification @default(OPERATOR_REVIEW_REQUIRED)
+
+  /// Snapshot esplicito: true solo con spool concreta, profilo tray verificato
+  /// e reservation non scaduta. Non modifica i comandi inviati al backend.
+  automationEligible Boolean @default(false)
+
+  reservedSlotId       String?                @unique @db.Uuid
+  reservedSlot         PrinterAmsSlot?        @relation("SpoolPlanReservedSlot", fields: [reservedSlotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reservationExpiresAt DateTime?              @db.Timestamptz(6)
+  /// Cicli di asciugatura JIT generati per questa riga primaria/backup.
+  dryingPlans          AssignmentDryingPlan[] @relation("DryingPlanSpoolPlan")
+
+  planVersion Int    @default(1)
+  plannedBy   String @default("scheduler-f5-v1")
+  metadata    Json?  @db.JsonB
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([assignmentId, fileFilamentIndex, sequence])
+  @@index([assignmentId])
+  @@index([spoolId])
+  @@index([itemId])
+  @@index([reservedSlotId, reservationExpiresAt])
+  @@index([status])
+  @@schema("print-farm")
+}
+
+/// Stato persistente del ciclo di asciugatura JIT.
+enum AssignmentDryingPlanStatus {
+  PLANNED
+  AWAITING_OPERATOR
+  DRYING
+  READY
+  CONSUMED
+  EXPIRED
+  CANCELLED
+  FAILED
+
+  @@schema("print-farm")
+}
+
+/// Ciclo di asciugatura JIT legato a una bobina fisica e a una stampa dipendente.
+/// La risorsa esclusiva è l'unità AMS; lo slot identifica la bobina realmente trattata.
+model AssignmentDryingPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  assignmentId String            @db.Uuid
+  assignment   PrinterAssignment @relation("DryingPlanAssignment", fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  spoolPlanId String              @db.Uuid
+  spoolPlan   AssignmentSpoolPlan @relation("DryingPlanSpoolPlan", fields: [spoolPlanId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  spoolId String        @db.Uuid
+  spool   FilamentSpool @relation("DryingPlanSpool", fields: [spoolId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  printerId String  @db.Uuid
+  printer   Printer @relation("DryingPlanPrinter", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  amsUnitId String         @db.Uuid
+  amsUnit   PrinterAmsUnit @relation("DryingPlanAmsUnit", fields: [amsUnitId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  amsSlotId String         @db.Uuid
+  amsSlot   PrinterAmsSlot @relation("DryingPlanAmsSlot", fields: [amsSlotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  ganttPlanId String?    @db.Uuid
+  ganttPlan   GanttPlan? @relation("DryingPlanGanttPlan", fields: [ganttPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  ganttTaskId String?    @db.Uuid
+  ganttTask   GanttTask? @relation("DryingPlanGanttTask", fields: [ganttTaskId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  fileFilamentIndex Int
+  extruderId        Int?
+  routingReason     String?
+
+  policy          FilamentDryingPolicy
+  status          AssignmentDryingPlanStatus @default(PLANNED)
+  tempC           Int
+  durationMinutes Int
+  freshnessHours  Int
+
+  plannedStart   DateTime  @db.Timestamptz(6)
+  plannedEnd     DateTime  @db.Timestamptz(6)
+  dueBefore      DateTime  @db.Timestamptz(6)
+  freshnessUntil DateTime? @db.Timestamptz(6)
+
+  operatorConfirmedAt DateTime? @db.Timestamptz(6)
+  startedAt           DateTime? @db.Timestamptz(6)
+  completedAt         DateTime? @db.Timestamptz(6)
+  stoppedAt           DateTime? @db.Timestamptz(6)
+
+  commandIdempotencyKey String? @unique
+  commandVersion        Int     @default(1)
+  planVersion           Int     @default(1)
+  plannedBy             String  @default("scheduler-drying-v1")
+
+  failureReason String?
+  metadata      Json?   @db.JsonB
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([assignmentId, spoolPlanId, planVersion])
+  @@index([assignmentId, status])
+  @@index([spoolId, status])
+  @@index([printerId, status])
+  @@index([amsUnitId, plannedStart, plannedEnd])
+  @@index([amsSlotId, status])
+  @@index([ganttTaskId])
+  @@index([status, dueBefore])
+  @@index([freshnessUntil])
   @@schema("print-farm")
 }
 
@@ -1343,9 +1533,16 @@ model GanttPlan {
   solverDurationMs  Int?
   jobsEvaluated     Int      @default(0)
   printersEvaluated Int      @default(0)
+  /// Diagnostica F3: copertura, churn, carryover, potatura e decisione di replan.
+  diagnostics       Json?    @db.JsonB
+  /// Bucket capacitivi giornalieri oltre l'orizzonte tattico dettagliato.
+  capacityPlan      Json?    @db.JsonB
 
   /// Task (blocchi temporali) del piano
-  tasks GanttTask[]
+  tasks             GanttTask[]
+  etaSnapshots      SchedulerOrderEtaSnapshot[]
+  sourceAssignments PrinterAssignment[]         @relation("AssignmentSourceGanttPlan")
+  dryingPlans       AssignmentDryingPlan[]      @relation("DryingPlanGanttPlan")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -1370,6 +1567,16 @@ model GanttTask {
   /// Job di produzione (null se il task è un setup/filament change)
   productionJobId String?        @db.Uuid
   productionJob   ProductionJob? @relation(fields: [productionJobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Assignment reale collegata a questa run pianificata.
+  /// Non è unique globalmente: la stessa assignment può apparire in snapshot
+  /// Gantt successivi. Il vincolo composto evita duplicati nello stesso piano.
+  assignmentId     String?                @db.Uuid
+  assignment       PrinterAssignment?     @relation(fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Assignment creata direttamente da questo task (relazione audit F6).
+  sourceAssignment PrinterAssignment?     @relation("AssignmentSourceGanttTask")
+  /// Cicli JIT dipendenti da questo blocco di stampa.
+  dryingPlans      AssignmentDryingPlan[] @relation("DryingPlanGanttTask")
 
   /// Ordine di produzione (denormalizzato per query rapide nella UI)
   productOrderId String? @db.Uuid
@@ -1403,12 +1610,116 @@ model GanttTask {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
+  @@unique([ganttPlanId, assignmentId])
   @@index([ganttPlanId])
   @@index([printerId])
   @@index([productionJobId])
+  @@index([assignmentId])
   @@index([productOrderId])
   @@index([taskStatus])
   @@index([plannedStart])
+  @@schema("print-farm")
+}
+
+/// Fattori appresi da run reali con identità file/modello/materiale affidabile.
+/// `scopeKey` evita la semantica ambigua degli unique composti con file nullable.
+model SchedulerCalibration {
+  id       String @id @default(uuid()) @db.Uuid
+  scopeKey String @unique
+
+  printerModelId Int
+  printerModel   PrinterModel @relation(fields: [printerModelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  materialCategory String
+
+  fileId String             @db.Uuid
+  file   ProjectThreeMFFile @relation(fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  durationFactor   Decimal @default(1) @db.Decimal(10, 6)
+  /// Varianza campionaria del rapporto durata reale/stimata.
+  durationVariance Decimal @default(0) @db.Decimal(12, 8)
+  filamentFactor   Decimal @default(1) @db.Decimal(10, 6)
+  failureRate      Decimal @default(0) @db.Decimal(10, 6)
+
+  sampleCount         Int @default(0)
+  durationSampleCount Int @default(0)
+  filamentSampleCount Int @default(0)
+  failureSampleCount  Int @default(0)
+
+  windowStart DateTime? @db.Timestamptz(6)
+  windowEnd   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerModelId, materialCategory])
+  @@index([fileId])
+  @@schema("print-farm")
+}
+
+/// Snapshot prospettico dell'ETA ordine prodotto da un piano Gantt valido.
+/// Consente di misurare T-24h/T-72h solo da quando gli snapshot esistono.
+model SchedulerOrderEtaSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+
+  ganttPlanId String    @db.Uuid
+  ganttPlan   GanttPlan @relation(fields: [ganttPlanId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  productOrderId String       @db.Uuid
+  productOrder   ProductOrder @relation(fields: [productOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  forecastAt DateTime @default(now()) @db.Timestamptz(6)
+  etaP50     DateTime @db.Timestamptz(6)
+  etaP80     DateTime @db.Timestamptz(6)
+  confidence Float
+  source     String
+  coverage   Float
+  breakdown  Json     @db.JsonB
+
+  @@unique([ganttPlanId, productOrderId])
+  @@index([productOrderId, forecastAt])
+  @@index([forecastAt])
+  @@schema("print-farm")
+}
+
+enum SchedulerInterventionType {
+  FILAMENT_SWAP
+  FILAMENT_DRYING
+  SPOOL_MOVE
+  PLATE_CHANGE
+  MANUAL_RETRY
+  MANUAL_OVERRIDE
+
+  @@schema("print-farm")
+}
+
+enum SchedulerInterventionSource {
+  PLANNED
+  UNPLANNED
+  UNKNOWN
+
+  @@schema("print-farm")
+}
+
+/// Evento operatore affidabile prodotto da un flusso client persistito.
+model SchedulerInterventionLog {
+  id       String  @id @default(uuid()) @db.Uuid
+  eventKey String? @unique
+
+  type   SchedulerInterventionType
+  source SchedulerInterventionSource @default(UNKNOWN)
+
+  printerId String?  @db.Uuid
+  printer   Printer? @relation(fields: [printerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  assignmentId String?            @db.Uuid
+  assignment   PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  metadata  Json?    @db.JsonB
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([type, createdAt])
+  @@index([printerId, createdAt])
+  @@index([assignmentId])
   @@schema("print-farm")
 }
 

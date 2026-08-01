@@ -81,8 +81,11 @@ model FilamentProfile {
   // Essiccazione
   dryingTemp                    Int? // Es. 55
   dryingTimeHours               Int? // Es. 8
-  warnDryOpenedSpoolBeforePrint Boolean @default(false) // Avvisa se una bobina aperta va asciugata prima della stampa
-  requireHeatedAmsForPrint      Boolean @default(false) // Usa dryingTemp per distinguere AMS 2 Pro (<=65°C) e AMS HT (<=85°C)
+  dryingPolicy                  FilamentDryingPolicy @default(NONE) // Policy esplicita: distinta dal vincolo sul percorso di stampa
+  dryingFreshnessHours          Int? // Validità dell'asciugatura completata; null usa il default scheduler
+  warnDryOpenedSpoolBeforePrint Boolean              @default(false) // Avvisa se una bobina aperta va asciugata prima della stampa
+  requireHeatedAmsForPrint      Boolean              @default(false) // Usa dryingTemp per distinguere AMS 2 Pro (<=65°C) e AMS HT (<=85°C)
+  requireAmsHtForPrint          Boolean              @default(false) // Vincolo esplicito: stampa esclusivamente tramite AMS HT
 
   // Proprietà fisiche
   density  Decimal? @db.Decimal(5, 3) // g/cm³ per calcolo peso
@@ -96,6 +99,16 @@ model FilamentProfile {
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@schema("print-farm")
+}
+
+/// Policy di asciugatura del materiale prima della stampa.
+/// Non descrive il percorso di alimentazione: `requireAmsHtForPrint` resta un vincolo separato.
+enum FilamentDryingPolicy {
+  NONE
+  RECOMMENDED
+  REQUIRED
 
   @@schema("print-farm")
 }
@@ -160,6 +173,11 @@ model FilamentSpool {
   /// Per dual-nozzle, distingue Right (extruderId=0) e Left (extruderId=1).
   externalSpool PrinterExternalSpool? @relation("ExternalSpool")
 
+  /// Righe di piano scheduler che useranno questa bobina.
+  assignmentSpoolPlans  AssignmentSpoolPlan[]  @relation("AssignmentSpoolPlans")
+  /// Cicli JIT pianificati per questa bobina fisica.
+  assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanSpool")
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -215,6 +233,11 @@ model PrinterAmsSlot {
   reportedColor        String? // es. "BLACK", "RED", "#FF0000" (best-effort)
   reportedTrayInfoIdx  String? // es. "GFB99" (Bambu tray_info_idx) - opzionale
   reportedLastSeenAt   DateTime? @db.Timestamptz(6)
+
+  /// Reservation source-of-truth opzionale; il vincolo unique è sulla riga piano.
+  spoolPlanReservation  AssignmentSpoolPlan?   @relation("SpoolPlanReservedSlot")
+  /// Cicli JIT che richiedono la spool fisica in questo slot.
+  assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanAmsSlot")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

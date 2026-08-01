@@ -250,9 +250,9 @@ model FarmFeedback {
   file   ProjectThreeMFFile? @relation(fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   /// Foto del problema, servite tramite il proxy storage same-origin.
-  imageUrls String[] @default([])
+  imageUrls        String[]          @default([])
   /// Categoria strutturata del difetto segnalato.
-  category FeedbackCategory?
+  category         FeedbackCategory?
   /// Numero di pezzi interessati, se la segnalazione nasce dallo scarico.
   affectedQuantity Int?
 
