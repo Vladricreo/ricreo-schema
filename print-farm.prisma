@@ -775,6 +775,12 @@ model AmsEnergyProfile {
 
 /// Slice giornaliera di energia (kWh) per stampante/fase.
 /// Usata per grafici energia \"totale farm\" (include standby + stampa).
+///
+/// Nota upsert backend (`EnergyMonitor.incrementDailyEnergySlice`):
+/// - con categoria: ON CONFLICT (day, printerId, phase, materialCategoryId)
+/// - senza categoria: ON CONFLICT (day, printerId, phase) WHERE materialCategoryId IS NULL
+///   (indice SQL parziale `PrinterEnergyDailySlice_day_printerId_phase_null_category_key`,
+///   necessario perché Postgres tratta i NULL come distinti nell'@@unique a 4 colonne)
 model PrinterEnergyDailySlice {
   id String @id @default(uuid()) @db.Uuid
 
