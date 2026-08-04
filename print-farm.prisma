@@ -1364,7 +1364,16 @@ model PrinterHarvest {
   /// Pezzi totali (accepted + rejected)
   partsTotal    Int @default(0)
 
+  /// Stato dell'assignment nel momento dello scarico (es. TO_HARVEST, FAILED).
+  /// Serve per annullare uno scarico ripristinando lo stato originale: senza questo dato
+  /// l'assignment tornava sempre in TO_HARVEST, cambiando il comportamento del ri-scarico.
+  assignmentStatusAtHarvest String?
+
   // === Qualità ===
+  /// Scarico "saltato": il piatto è stato liberato senza raccogliere i pezzi.
+  /// I pezzi vengono comunque contati in `partsRejected` (fisicamente persi), ma il flag
+  /// permette di distinguerli dagli scarti di qualità in cronologia e nei report.
+  wasSkipped   Boolean @default(false)
   /// Motivo scarto (se ci sono pezzi rejected)
   rejectReason String?
   /// Note dell'operatore
@@ -1374,6 +1383,12 @@ model PrinterHarvest {
 
   /// Segnalazioni sui file aperte da questo scarico.
   feedbacks FarmFeedback[]
+
+  /// Movimenti inventario generati da questo scarico.
+  /// Serve per annullare uno scarico in modo esatto: senza questo legame l'annullamento
+  /// deve indovinare i movimenti per (parte, utente, finestra temporale) e può cancellare
+  /// quelli di scarichi diversi avvenuti negli stessi secondi (tipico dello scarico massivo).
+  movements Movement[]
 
   // === Lotto ===
   /// Lotto di produzione associato

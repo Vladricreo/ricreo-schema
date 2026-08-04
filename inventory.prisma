@@ -53,6 +53,10 @@ model Movement {
   /// Audit: movimento legato a un intervento di manutenzione stampante (USO ricambi).
   maintenanceLogId  String?                @db.Uuid
   maintenanceLog    PrinterMaintenanceLog? @relation(fields: [maintenanceLogId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Audit: movimento generato dallo scarico di una stampante (PRODUZIONE pezzi OK).
+  /// Permette di annullare uno scarico eliminando esattamente i suoi movimenti.
+  harvestId         String?                @db.Uuid
+  harvest           PrinterHarvest?        @relation(fields: [harvestId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([productPartId])
   @@index([assemblyStageId])
@@ -73,6 +77,7 @@ model Movement {
   @@index([fbaShipmentPlanId])
   @@index([assemblyBoxId])
   @@index([maintenanceLogId])
+  @@index([harvestId])
   @@schema("inventory")
 }
 
