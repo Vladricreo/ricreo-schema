@@ -43,6 +43,8 @@ model User {
   /// Giorni di assenza puntuali (ferie, malattia, ecc.): in quel giorno capacità = 0 in distribuzione.
   workAbsences              WorkAbsence[]
   performedOperations       AssemblyOperation[]
+  /// Operazioni di assemblaggio registrate nel diario (per il revert).
+  assemblyJournalEntries    AssemblyJournalEntry[]
   lotInspections            LotInspection[]
 
   /// Operazioni di raccolta pezzi effettuate da questo utente

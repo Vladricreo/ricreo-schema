@@ -58,6 +58,12 @@ model Movement {
   harvestId         String?                @db.Uuid
   harvest           PrinterHarvest?        @relation(fields: [harvestId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Audit: operazione di assemblaggio che ha generato questo movimento.
+  /// Permette di raggruppare i movimenti per operazione e di revertarla per intero
+  /// senza dover indovinare quali movimenti ne facevano parte.
+  journalEntryId    String?                @db.Uuid
+  journalEntry      AssemblyJournalEntry?  @relation(fields: [journalEntryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   @@index([productPartId])
   @@index([assemblyStageId])
   @@index([productId])
@@ -78,6 +84,7 @@ model Movement {
   @@index([assemblyBoxId])
   @@index([maintenanceLogId])
   @@index([harvestId])
+  @@index([journalEntryId])
   @@schema("inventory")
 }
 

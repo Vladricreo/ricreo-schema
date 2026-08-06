@@ -153,6 +153,8 @@ model AssemblyOrder {
   /// Movimenti inventario collegati a questo ordine di assemblaggio (audit).
   movements          Movement[]
   operations         AssemblyOperation[]
+  /// Diario delle operazioni eseguite su questo ordine (per il revert).
+  journalEntries     AssemblyJournalEntry[]
   /// Righe picking per questo ordine di assemblaggio.
   pickingLines       PickingLine[]
   assemblyBoxes      AssemblyBox[]
@@ -216,6 +218,88 @@ model AssemblyOperation {
   @@index([lotId])
   @@index([assemblyStageId])
   @@index([operatorId, excludedFromLaborStats])
+  @@schema("inventory")
+}
+
+/// Diario di un'operazione di assemblaggio, scritto nella stessa transazione
+/// dell'operazione stessa.
+///
+/// Serve a rendere reversibile un avanzamento: i `Movement` da soli sono un
+/// registro piatto e non dicono che un certo gruppo di movimenti, decrementi di
+/// odette e contatori era *una* operazione. Senza questo dato il revert può solo
+/// tirare a indovinare (vedi la ricostruzione euristica a 2 ore in
+/// `POST /api/odettes/[id]/contents/rollback`).
+///
+/// `payload` contiene il dettaglio completo di ogni scrittura: vedi
+/// `AssemblyJournalPayload` in `src/lib/services/assembly-journal-service.ts`.
+model AssemblyJournalEntry {
+  id String @id @default(uuid()) @db.Uuid
+
+  assemblyOrderId String        @db.Uuid
+  assemblyOrder   AssemblyOrder @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  kind   AssemblyJournalKind
+  status AssemblyJournalStatus @default(APPLIED)
+
+  /// Fase di partenza e di arrivo dell'operazione (null dove non applicabile,
+  /// es. deposito iniziale o scarto).
+  fromStageType AssemblyStageType?
+  toStageType   AssemblyStageType?
+
+  /// Pezzi movimentati dall'operazione.
+  quantity Int @default(0)
+
+  /// Quanti pezzi sono già stati annullati da revert successivi (revert parziali).
+  quantityReverted Int @default(0)
+
+  /// Versione dell'ordine prima e dopo l'operazione: permette di rifiutare un
+  /// revert se l'ordine è stato modificato da altri nel frattempo.
+  orderVersionBefore Int?
+  orderVersionAfter  Int?
+
+  operatorId Int?
+  operator   User? @relation(fields: [operatorId], references: [id], onDelete: SetNull)
+
+  /// Entry di cui questa è il revert (valorizzato solo per `kind = REVERT`).
+  revertsEntryId String?               @db.Uuid
+  revertsEntry   AssemblyJournalEntry? @relation("AssemblyJournalRevert", fields: [revertsEntryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  revertedBy     AssemblyJournalEntry[] @relation("AssemblyJournalRevert")
+
+  /// Movimenti generati dall'operazione: permette di annullare esattamente i suoi
+  /// movimenti e di raggruppare le righe nella pagina movimenti.
+  movements Movement[]
+
+  /// Dettaglio completo dell'operazione (movimenti, delta odette, lotti, contatori).
+  payload Json @db.JsonB
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([assemblyOrderId, createdAt])
+  @@index([assemblyOrderId, status])
+  @@index([revertsEntryId])
+  @@index([operatorId])
+  @@schema("inventory")
+}
+
+/// Tipo di operazione registrata nel diario di assemblaggio.
+enum AssemblyJournalKind {
+  DEPOSIT // Deposito in fase iniziale (con o senza odette)
+  ADVANCE // Avanzamento fra due fasi
+  SKU_COMPLETE // Chiusura SKU: WIP finito -> stock vendibile
+  SCRAP // Scarto di WIP da una fase
+  REVERT // Annullamento di un'altra entry
+
+  @@schema("inventory")
+}
+
+/// Stato di reversibilità di una entry del diario.
+enum AssemblyJournalStatus {
+  APPLIED // Operazione valida, revertabile
+  PARTIALLY_REVERTED // Parte dei pezzi è stata annullata
+  REVERTED // Annullata del tutto
+  REVERT_ENTRY // È essa stessa un revert: non si annulla un annullamento
+
   @@schema("inventory")
 }
 
