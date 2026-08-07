@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["public", "inventory", "print-farm", "inventory_views", "print_farm_views"]
+  schemas  = ["public", "inventory", "print-farm", "inventory_views", "print_farm_views", "product"]
 }
 
 /// Stato di un ordine di acquisto da fornitore.

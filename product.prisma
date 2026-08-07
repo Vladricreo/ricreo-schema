@@ -1,0 +1,36 @@
+/// Mapping tra identificativi esterni ERP e goodsId Temu dopo create V3.
+/// Schema Postgres `product`: di proprietà di Product Console.
+model TemuGoodsMapping {
+  id              String   @id @default(cuid())
+  /// Identificativo esterno inviato a Temu (`externalGoodsId`).
+  externalGoodsId String
+  /// Identificativo generato da Temu (`goodsId`).
+  goodsId         String
+  /// SKU esterni associati alla create (convenience).
+  externalSkuIds  String[] @default([])
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([externalGoodsId])
+  @@index([goodsId])
+  @@schema("product")
+}
+
+/// Credenziali OAuth Etsy per un singolo shop (Seller App).
+/// Access token ~1h; refresh token ~90 giorni (può ruotare al refresh).
+model EtsyOAuthCredential {
+  id           String   @id @default(cuid())
+  /// Shop Etsy autorizzato (`ETSY_SHOP_ID`).
+  shopId       String
+  accessToken  String
+  refreshToken String
+  /// Scadenza access token (UTC).
+  expiresAt    DateTime @db.Timestamptz(6)
+  /// Scope concessi (spazio-separati), es. `listings_r listings_w shops_r`.
+  scopes       String   @default("")
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([shopId])
+  @@schema("product")
+}
