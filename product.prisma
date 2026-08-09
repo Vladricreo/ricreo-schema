@@ -34,3 +34,22 @@ model EtsyOAuthCredential {
   @@unique([shopId])
   @@schema("product")
 }
+
+/// Credenziali OAuth Gmail (Workspace) per leggere/rispondere ai messaggi Amazon inoltrati.
+/// La casella deve ricevere il forward del gruppo Google (o essere membro con consegna email).
+model GmailOAuthCredential {
+  id           String   @id @default(cuid())
+  /// Indirizzo della casella autorizzata (es. amazon@tuodominio.it).
+  mailboxEmail String
+  accessToken  String
+  refreshToken String
+  /// Scadenza access token (UTC).
+  expiresAt    DateTime @db.Timestamptz(6)
+  /// Scope concessi (spazio-separati).
+  scopes       String   @default("")
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([mailboxEmail])
+  @@schema("product")
+}
