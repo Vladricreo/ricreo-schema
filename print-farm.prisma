@@ -539,6 +539,8 @@ model Printer {
   schedulerInterventions SchedulerInterventionLog[]
   /// Cicli di asciugatura JIT pianificati sulla stampante.
   assignmentDryingPlans  AssignmentDryingPlan[]     @relation("DryingPlanPrinter")
+  /// Cicli di asciugatura bobina (manuali o avviati con le stampe).
+  spoolDryingSessions    SpoolDryingSession[]       @relation("PrinterSpoolDryingSessions")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -617,6 +619,8 @@ model PrinterAmsUnit {
   slots                 PrinterAmsSlot[]       @relation("AmsUnitSlots")
   /// Cicli JIT che occupano in esclusiva questa unità durante l'asciugatura.
   assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanAmsUnit")
+  /// Cicli di asciugatura bobina che occupano in esclusiva questa unità.
+  spoolDryingSessions   SpoolDryingSession[]   @relation("AmsUnitSpoolDryingSessions")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

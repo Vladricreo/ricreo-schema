@@ -146,7 +146,10 @@ model FilamentSpool {
   tagAssignments SpoolTagAssignment[] @relation("TagAssignments")
 
   openedAt    DateTime  @default(now()) @db.Timestamptz(6) // Per scadenza/umidità
-  lastDriedAt DateTime? @db.Timestamptz(6) // Ultima asciugatura confermata/osservata
+  /// Ultima asciugatura confermata/osservata.
+  /// Il default coincide con l'apertura: una bobina sigillata appena aperta è
+  /// già asciutta per tutta la finestra di validità del materiale.
+  lastDriedAt DateTime? @default(now()) @db.Timestamptz(6)
   finishedAt  DateTime? @db.Timestamptz(6)
 
   // Dove si trova?
@@ -177,6 +180,8 @@ model FilamentSpool {
   assignmentSpoolPlans  AssignmentSpoolPlan[]  @relation("AssignmentSpoolPlans")
   /// Cicli JIT pianificati per questa bobina fisica.
   assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanSpool")
+  /// Cicli di asciugatura avviati sulla bobina (non legati a un assignment).
+  dryingSessions        SpoolDryingSession[]   @relation("SpoolDryingSessions")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -271,6 +276,8 @@ model PrinterAmsSlot {
   spoolPlanReservation  AssignmentSpoolPlan?   @relation("SpoolPlanReservedSlot")
   /// Cicli JIT che richiedono la spool fisica in questo slot.
   assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanAmsSlot")
+  /// Cicli di asciugatura bobina avviati su questo slot.
+  dryingSessions        SpoolDryingSession[]   @relation("SpoolDryingSessionSlot")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -280,5 +287,87 @@ model PrinterAmsSlot {
   @@index([printerId])
   @@index([spoolId])
   @@index([amsUnitId])
+  @@schema("print-farm")
+}
+
+/// Stato di un ciclo di asciugatura avviato su una bobina specifica.
+enum SpoolDryingSessionStatus {
+  DRYING
+  COMPLETED
+  STOPPED
+  FAILED
+
+  @@schema("print-farm")
+}
+
+/// Origine del ciclo di asciugatura bobina.
+enum SpoolDryingTrigger {
+  /// Avviato dall'operatore dalla pagina di preparazione.
+  MANUAL
+  /// Avviato in automatico insieme all'invio delle stampe (asciuga mentre stampa).
+  PRINT_START
+
+  @@schema("print-farm")
+}
+
+/// Ciclo di asciugatura legato alla **bobina fisica**, non a un assignment.
+///
+/// Complementare a `AssignmentDryingPlan` (asciugatura JIT pianificata dallo
+/// scheduler): qui l'operatore mette la bobina nella AMS HT e avvia il ciclo
+/// quando vuole. Mentre la sessione è `DRYING` l'unità AMS risulta occupata e
+/// non viene proposta per altri materiali, ma la stampante può continuare a
+/// stampare usando le altre unità.
+///
+/// Il completamento arriva dalla telemetria backend (`/api/internal/drying-events`)
+/// e aggiorna `FilamentSpool.lastDriedAt`, da cui deriva la validità.
+model SpoolDryingSession {
+  id String @id @default(uuid()) @db.Uuid
+
+  spoolId String        @db.Uuid
+  spool   FilamentSpool @relation("SpoolDryingSessions", fields: [spoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterSpoolDryingSessions", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  amsUnitId String         @db.Uuid
+  amsUnit   PrinterAmsUnit @relation("AmsUnitSpoolDryingSessions", fields: [amsUnitId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  amsSlotId String         @db.Uuid
+  amsSlot   PrinterAmsSlot @relation("SpoolDryingSessionSlot", fields: [amsSlotId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  status  SpoolDryingSessionStatus @default(DRYING)
+  trigger SpoolDryingTrigger       @default(MANUAL)
+
+  /// Parametri effettivi del ciclo, risolti dal profilo filamento al momento dell'avvio.
+  tempC           Int
+  durationMinutes Int
+  freshnessHours  Int
+  /// Materiale inviato nel comando MQTT (`ams_filament_drying.filament`).
+  filamentLabel   String?
+
+  startedAt     DateTime  @default(now()) @db.Timestamptz(6)
+  /// Fine prevista del ciclo: base della barra di progresso lato UI.
+  expectedEndAt DateTime  @db.Timestamptz(6)
+  completedAt   DateTime? @db.Timestamptz(6)
+  stoppedAt     DateTime? @db.Timestamptz(6)
+  /// Valorizzato al completamento: `completedAt + freshnessHours`.
+  freshnessUntil DateTime? @db.Timestamptz(6)
+
+  /// Identità del comando verso il backend: blocca callback stale/duplicate.
+  commandIdempotencyKey String @unique
+
+  failureReason String?
+  /// Operatore che ha avviato il ciclo (scalare: nessuna FK verso lo schema auth).
+  operatorUserId Int?
+
+  metadata Json? @db.JsonB
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([spoolId, startedAt(sort: Desc)])
+  @@index([printerId, status])
+  @@index([amsUnitId, status])
+  @@index([status, startedAt(sort: Desc)])
   @@schema("print-farm")
 }
