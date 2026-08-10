@@ -87,6 +87,11 @@ model FilamentProfile {
   requireHeatedAmsForPrint      Boolean              @default(false) // Usa dryingTemp per distinguere AMS 2 Pro (<=65°C) e AMS HT (<=85°C)
   requireAmsHtForPrint          Boolean              @default(false) // Vincolo esplicito: stampa esclusivamente tramite AMS HT
 
+  // Riscaldamento mantenuto durante la stampa (non e' un ciclo di asciugatura):
+  // il backend lo avvia allo start sull'unita' che alimenta la stampa.
+  keepAmsHeatedDuringPrint Boolean @default(false)
+  amsHeatDuringPrintTempC  Int? // Temperatura mantenuta durante la stampa (<=65°C su AMS 2 Pro, <=85°C su AMS HT)
+
   // Proprietà fisiche
   density  Decimal? @db.Decimal(5, 3) // g/cm³ per calcolo peso
   diameter Decimal  @default(1.75) @db.Decimal(4, 2) // mm
