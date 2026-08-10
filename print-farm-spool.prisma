@@ -200,6 +200,39 @@ enum SpoolStatus {
   @@schema("print-farm")
 }
 
+/// Tipo di risorsa trattenuta dal piano di preparazione live.
+enum PreparationReservationKind {
+  SPOOL
+  UNLOAD_LOCATION
+  AMS_SLOT
+
+  @@schema("print-farm")
+}
+
+/// Lock leggero e temporaneo del piano di preparazione.
+/// Le relazioni restano scalari per poter prenotare anche inventory sigillato
+/// senza creare una FilamentSpool prima dell'apertura fisica.
+model PreparationReservation {
+  id String @id @default(uuid()) @db.Uuid
+
+  spoolId    String? @unique @db.Uuid
+  locationId String? @unique @db.Uuid
+  amsSlotId  String? @unique @db.Uuid
+
+  printerId    String  @db.Uuid
+  assignmentId String? @db.Uuid
+  kind         PreparationReservationKind
+  expiresAt    DateTime @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerId, expiresAt])
+  @@index([assignmentId, expiresAt])
+  @@index([expiresAt])
+  @@schema("print-farm")
+}
+
 /// Slot AMS di una stampante.
 /// Ogni stampante con AMS può avere fino a 4 unità (A-D), ciascuna con 4 slot (1-4).
 /// Questo model traccia quale spool è caricata in ogni slot.
