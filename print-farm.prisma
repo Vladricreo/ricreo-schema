@@ -406,6 +406,11 @@ model Printer {
   /// È un flag persistente “overlay” separato da `operationalStatus` per evitare conflitti.
   needsFilamentSwap Boolean @default(false)
 
+  /// Istante in cui il flag è passato a true: serve per misurare il tempo di reazione
+  /// dell'operatore (attesa stampante) nelle sessioni di cambio filamento.
+  /// Non viene rinfrescato se il flag era già true.
+  needsFilamentSwapAt DateTime? @db.Timestamptz(6)
+
   /// True quando il piatto è *attivamente* in riscaldamento verso il target (indipendente da operationalStatus).
   /// Viene aggiornato dal backend in base a `bedTemp` e `bedTargetTemp` con isteresi (evita toggle rapido).
   isBedHeating Boolean @default(false)
@@ -498,6 +503,8 @@ model Printer {
   harvests      PrinterHarvest[]
   /// Storico carichi filamento su questa stampante
   filamentLoads PrinterFilamentLoad[]
+  /// Sessioni cronometrate di cambio/ricarica filamento su questa stampante
+  swapSessions  FilamentSwapSession[]
 
   /// Slot AMS per stampanti con AMS.
   /// Ogni slot può contenere una spool. Per stampanti senza AMS, usare currentSpoolId.
@@ -1475,6 +1482,9 @@ model PrinterFilamentLoad {
   /// Note dell'operatore
   notes String?
 
+  /// Sessioni cronometrate che hanno prodotto questo carico
+  swapSessions FilamentSwapSession[]
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -1491,6 +1501,74 @@ enum FilamentLoadTrigger {
   SWAP
   MISMATCH
 
+  @@schema("print-farm")
+}
+
+/// Sessione cronometrata di cambio/ricarica filamento eseguita da un operatore.
+/// Un record per stampante+slot per ogni passaggio nel dialog di swap: misura quanto
+/// tempo serve davvero per sostituire una bobina, separando l'attesa (stampante ferma
+/// in attesa dell'operatore) dal lavoro effettivo (step del dialog).
+model FilamentSwapSession {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Chiave generata dal client: rende idempotente l'apertura della sessione
+  /// anche dopo reload della pagina (il dialog persiste il progresso in localStorage).
+  clientKey String @unique
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Operatore che ha eseguito il cambio
+  operatorUserId Int
+  operatorUser   User @relation("FilamentSwapSessions", fields: [operatorUserId], references: [id], onDelete: Restrict)
+
+  /// Motivo dell'intervento: RUNOUT (bobina esaurita) vs SWAP (cambio pianificato)
+  trigger FilamentLoadTrigger @default(SWAP)
+
+  /// Target: 'ams' oppure 'external'
+  targetKind String @default("external") @db.VarChar(10)
+  amsUnit    Int?
+  slot       Int?
+  extruderId Int?
+
+  /// Bobina rimossa e bobina montata (best-effort: possono mancare su inventario sigillato)
+  fromSpoolId String? @db.Uuid
+  toSpoolId   String? @db.Uuid
+
+  /// Carico inventario generato dallo step "monta"
+  filamentLoadId String?              @db.Uuid
+  filamentLoad   PrinterFilamentLoad? @relation(fields: [filamentLoadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Quando la stampante ha richiesto l'intervento (runout/flag swap). Best-effort.
+  detectedAt DateTime? @db.Timestamptz(6)
+  /// Apertura del dialog sulla riga: inizio presa in carico dell'operatore
+  startedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  /// Ultimo step registrato: serve per chiudere le sessioni abbandonate
+  lastStepAt DateTime  @default(now()) @db.Timestamptz(6)
+  /// Step finale completato con successo
+  finishedAt DateTime? @db.Timestamptz(6)
+
+  /// Attesa prima dell'intervento (detectedAt → startedAt)
+  waitSeconds    Int?
+  /// Durata totale a orologio (startedAt → finishedAt), pause incluse
+  elapsedSeconds Int?
+  /// Lavoro effettivo: somma degli step, ognuno limitato per non contare le pause lunghe
+  workSeconds    Int?
+  /// Durata in secondi per singolo step: { unload, unmount, mount, load, done }
+  stepSeconds    Json? @db.JsonB
+
+  /// Step falliti/ritentati durante la sessione
+  errorCount Int     @default(0)
+  /// Sessione chiusa senza raggiungere lo step finale
+  abandoned  Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerId, startedAt(sort: Desc)])
+  @@index([operatorUserId, startedAt(sort: Desc)])
+  @@index([trigger, startedAt(sort: Desc)])
+  @@index([finishedAt(sort: Desc)])
   @@schema("print-farm")
 }
 

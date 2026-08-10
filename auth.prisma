@@ -51,6 +51,8 @@ model User {
   printerHarvests      PrinterHarvest[]      @relation("PrinterHarvests")
   /// Operazioni di carico filamento effettuate da questo utente
   printerFilamentLoads PrinterFilamentLoad[] @relation("PrinterFilamentLoads")
+  /// Sessioni cronometrate di cambio/ricarica filamento eseguite da questo utente
+  filamentSwapSessions FilamentSwapSession[] @relation("FilamentSwapSessions")
 
   /// Notifiche create da questo utente (audit/actor).
   notificationsCreated   Notification[]          @relation("NotificationCreatedBy")

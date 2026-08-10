@@ -262,6 +262,35 @@ view VPfPartPreferredFile {
   @@schema("print_farm_views")
 }
 
+/// Tempi operatore per cambio/ricarica filamento, aggregati per motivo (30 giorni).
+/// `trigger` = RUNOUT | SWAP | MANUAL | MISMATCH.
+view VPfFilamentSwapTime30d {
+  trigger          String  @unique
+  sessionsCount    Int     @map("sessionsCount")
+  /// Sessioni chiuse senza completare lo step finale (escluse dalle medie).
+  abandonedCount   Int     @map("abandonedCount")
+  avgWorkSeconds   Decimal @map("avgWorkSeconds") @db.Decimal(12, 2)
+  medianWorkSeconds Decimal @map("medianWorkSeconds") @db.Decimal(12, 2)
+  avgWaitSeconds   Decimal @map("avgWaitSeconds") @db.Decimal(12, 2)
+  totalWorkSeconds Int     @map("totalWorkSeconds")
+
+  @@map("v_pf_filament_swap_time_30d")
+  @@schema("print_farm_views")
+}
+
+/// Tempi operatore per cambio/ricarica filamento, aggregati per operatore (30 giorni).
+view VPfFilamentSwapByOperator30d {
+  operatorUserId Int     @unique @map("operatorUserId")
+  operatorName   String  @map("operatorName")
+  sessionsCount  Int     @map("sessionsCount")
+  runoutCount    Int     @map("runoutCount")
+  swapCount      Int     @map("swapCount")
+  avgWorkSeconds Decimal @map("avgWorkSeconds") @db.Decimal(12, 2)
+
+  @@map("v_pf_filament_swap_by_operator_30d")
+  @@schema("print_farm_views")
+}
+
 /// ETA per ProductOrder completo = massimo tra le ETA dei job figli.
 view VPfOrderEta {
   orderId           String   @unique @map("orderId") @db.Uuid
