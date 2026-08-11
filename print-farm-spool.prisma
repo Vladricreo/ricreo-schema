@@ -281,6 +281,8 @@ model PrinterAmsSlot {
   spoolPlanReservation  AssignmentSpoolPlan?   @relation("SpoolPlanReservedSlot")
   /// Cicli JIT che richiedono la spool fisica in questo slot.
   assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanAmsSlot")
+  /// Cicli JIT che, a fine asciugatura, richiedono la spool trasferita qui.
+  dryingRelocations     AssignmentDryingPlan[] @relation("DryingPlanRelocationSlot")
   /// Cicli di asciugatura bobina avviati su questo slot.
   dryingSessions        SpoolDryingSession[]   @relation("SpoolDryingSessionSlot")
 

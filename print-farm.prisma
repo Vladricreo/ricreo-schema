@@ -1263,6 +1263,17 @@ model AssignmentDryingPlan {
   amsSlotId String         @db.Uuid
   amsSlot   PrinterAmsSlot @relation("DryingPlanAmsSlot", fields: [amsSlotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
+  /// Trasferimento fisico post-ciclo: la bobina si asciuga in `amsSlot` (es. AMS HT
+  /// cablata al nozzle destro) ma la stampa la preleva da `relocationTargetSlot`
+  /// (es. AMS 2 Pro sul nozzle sinistro). Senza FTS il percorso è fisico, quindi
+  /// serve un passo operatore fra fine ciclo e avvio stampa.
+  relocationTargetSlotId String?         @db.Uuid
+  relocationTargetSlot   PrinterAmsSlot? @relation("DryingPlanRelocationSlot", fields: [relocationTargetSlotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Minuti operatore previsti per lo spostamento (0 = nessun trasferimento).
+  relocationMinutes      Int?
+  /// Valorizzato quando la bobina è stata effettivamente montata nel target.
+  relocationDoneAt       DateTime?       @db.Timestamptz(6)
+
   ganttPlanId String?    @db.Uuid
   ganttPlan   GanttPlan? @relation("DryingPlanGanttPlan", fields: [ganttPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   ganttTaskId String?    @db.Uuid
@@ -1305,6 +1316,7 @@ model AssignmentDryingPlan {
   @@index([printerId, status])
   @@index([amsUnitId, plannedStart, plannedEnd])
   @@index([amsSlotId, status])
+  @@index([relocationTargetSlotId])
   @@index([ganttTaskId])
   @@index([status, dueBefore])
   @@index([freshnessUntil])
