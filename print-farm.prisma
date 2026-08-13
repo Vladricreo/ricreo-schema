@@ -482,6 +482,8 @@ model Printer {
 
   logs             PrinterLogs[]
   maintenanceLogs  PrinterMaintenanceLog[]
+  /// Periodi di override (manutenzione / disabilitata / stampa manuale) con ingresso e uscita.
+  overridePeriods  PrinterOverridePeriod[]
   /// Piani di manutenzione ricorrente associati alla stampante (template ISO).
   maintenancePlans PrinterMaintenancePlan[]
   feedbacks        FarmFeedback[]

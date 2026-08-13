@@ -1,3 +1,33 @@
+/// Periodo in cui una stampante e' fuori flotta produttiva per override operatore.
+/// Copre MAINTENANCE, DISABLED e MANUAL_PRINTING: ingresso (`startedAt`) e uscita (`endedAt`).
+/// Un solo periodo aperto per stampante (indice parziale SQL su endedAt IS NULL).
+model PrinterOverridePeriod {
+  id        String  @id @default(uuid()) @db.Uuid
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  status PrinterManualOverrideStatus
+
+  startedAt DateTime  @db.Timestamptz(6)
+  endedAt   DateTime? @db.Timestamptz(6)
+
+  /// User.id numerico come stringa (stesso pattern di Printer.manualOverrideBy, no FK cross-schema).
+  setByUserId     String?
+  clearedByUserId String?
+
+  reason String?
+  /// Origine del cambio: settings, harvest, maintenance_start, maintenance_patch, ...
+  source String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerId, startedAt])
+  @@index([printerId, endedAt])
+  @@index([status, endedAt])
+  @@schema("print-farm")
+}
+
 /// Registro degli interventi di manutenzione sulla stampante.
 model PrinterMaintenanceLog {
   id        String  @id @default(uuid()) @db.Uuid
