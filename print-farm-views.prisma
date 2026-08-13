@@ -1,7 +1,7 @@
 /// ============================================================================
 /// VIEW MODELS - Schema "print_farm_views"
 /// Modelli read-only per le view della dashboard print farm.
-/// Queste view sono create in SQL (vedi migrations/print_farm_views.sql)
+/// Queste view sono create in SQL (vedi prisma/custom_migrations/sql/print_farm_views.sql)
 /// e mappate qui per tipizzazione Prisma.
 /// ============================================================================
 

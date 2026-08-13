@@ -1,7 +1,7 @@
 /// ============================================================================
 /// VIEW MODELS - Schema "inventory_views"
 /// Modelli read-only per le view della dashboard.
-/// Queste view sono create in SQL (vedi migrations) e mappate qui per tipizzazione.
+/// Queste view sono create in SQL (vedi prisma/custom_migrations/sql) e mappate qui per tipizzazione.
 /// Nota: le view in Prisma non possono avere @id.
 /// ============================================================================
 
