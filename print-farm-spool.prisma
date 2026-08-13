@@ -155,6 +155,10 @@ model FilamentSpool {
   /// Il default coincide con l'apertura: una bobina sigillata appena aperta è
   /// già asciutta per tutta la finestra di validità del materiale.
   lastDriedAt DateTime? @default(now()) @db.Timestamptz(6)
+  /// Quando valorizzato, l'orologio di validità è fermo: la bobina è in una AMS
+  /// che asciuga (HT / 2 Pro). Si azzera e si sposta `lastDriedAt` in avanti
+  /// quando torna in rack o in un'AMS senza asciugatura.
+  freshnessPausedAt DateTime? @db.Timestamptz(6)
   finishedAt  DateTime? @db.Timestamptz(6)
 
   // Dove si trova?
