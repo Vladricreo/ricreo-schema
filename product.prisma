@@ -123,6 +123,32 @@ model StoreOrderLine {
   @@index([storeKey, purchaseDate])
   @@index([fulfillmentChannel])
   @@index([channel, sku, purchaseDate])
+  @@index([amazonOrderId])
+  @@schema("product")
+}
+
+/// Pick&pack FBA reale da Finances API (non Fee Preview).
+/// Una riga per ordine + item; l'analytics la somma sul periodo.
+model StoreOrderFee {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+
+  amazonOrderId String
+  /// Vuoto se Amazon non invia OrderItemId.
+  orderItemId   String @default("")
+  sku           String
+
+  /// Totale riga addebitato da Amazon (valore assoluto).
+  fbaFulfillmentFee Decimal @db.Decimal(12, 4)
+  currency          String  @default("EUR")
+  postedDate        DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, amazonOrderId, orderItemId, sku], map: "StoreOrderFee_item_key")
+  @@index([sku], map: "StoreOrderFee_sku_idx")
+  @@index([amazonOrderId], map: "StoreOrderFee_order_idx")
   @@schema("product")
 }
 
@@ -272,6 +298,28 @@ model StoreReportJob {
 
   @@unique([channel, reportType, storeKey, dataStart, dataEnd], map: "StoreReportJob_window_key")
   @@index([status, createdAt])
+  @@schema("product")
+}
+
+/// Cursore paginazione Finances API (listFinancialEvents) per finestra di posted date.
+model StoreFinanceCursor {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  /// Marketplace da cui derivare l'endpoint regionale.
+  storeKey String
+  dataStart DateTime @db.Timestamptz(6)
+  dataEnd   DateTime @db.Timestamptz(6)
+  nextToken String?
+  status    StoreReportStatus @default(REQUESTED)
+  pagesFetched Int @default(0)
+  itemsUpserted Int @default(0)
+  importedAt DateTime? @db.Timestamptz(6)
+  errorMessage String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, dataStart, dataEnd], map: "StoreFinanceCursor_window_key")
+  @@index([status, createdAt], map: "StoreFinanceCursor_status_idx")
   @@schema("product")
 }
 
