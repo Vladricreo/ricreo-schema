@@ -35,6 +35,294 @@ model EtsyOAuthCredential {
   @@schema("product")
 }
 
+/// Canale store su cui vive uno SKU (stesso SKU su Amazon, Etsy, eBay, Temu).
+enum StoreChannel {
+  AMAZON
+  ETSY
+  EBAY
+  TEMU
+
+  @@schema("product")
+}
+
+/// Stato di un job Reports SP-API (createReport è asincrono).
+enum StoreReportStatus {
+  REQUESTED
+  DONE
+  FAILED
+  CANCELLED
+
+  @@schema("product")
+}
+
+/// Vendite giornaliere per SKU e store. Chiave comune futura: SKU + channel + storeKey.
+model StoreSalesDaily {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  /// Amazon: marketplaceId; in futuro shop Etsy / marketplace eBay / region Temu.
+  storeKey String
+  sku      String
+  date     DateTime    @db.Date
+
+  asin        String?
+  productName String?
+
+  unitsOrdered        Int     @default(0)
+  unitsRefunded       Int     @default(0)
+  unitsShipped        Int     @default(0)
+  orderedProductSales Decimal @default(0) @db.Decimal(12, 2)
+  currency            String  @default("EUR")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, date])
+  @@index([sku, date])
+  @@index([channel, date])
+  @@index([channel, sku, date])
+  @@schema("product")
+}
+
+/// Riga ordine (FBA e FBM). Serve per paese, canale di fulfillment e ricavi.
+model StoreOrderLine {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  storeKey String
+  /// Chiave idempotente (es. amazonOrderId + orderItemId).
+  lineKey  String
+
+  amazonOrderId String?
+  orderItemId   String?
+  purchaseDate  DateTime? @db.Timestamptz(6)
+
+  /// Amazon: FBA / FBM. Null sugli altri canali.
+  fulfillmentChannel String?
+  salesChannel       String?
+  shipCountry        String?
+
+  sku         String
+  asin        String?
+  productName String?
+  quantity    Int      @default(0)
+  itemPrice   Decimal? @db.Decimal(12, 2)
+  /// IVA riga (Amazon la calcola per paese di spedizione).
+  itemTax     Decimal? @db.Decimal(12, 2)
+  /// Spedizione addebitata al cliente (non il costo seller).
+  shippingPrice Decimal? @db.Decimal(12, 2)
+  shippingTax   Decimal? @db.Decimal(12, 2)
+  itemPromotionDiscount Decimal? @db.Decimal(12, 2)
+  shipPromotionDiscount Decimal? @db.Decimal(12, 2)
+  itemStatus  String?
+  currency    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, lineKey])
+  @@index([sku, purchaseDate])
+  @@index([storeKey, purchaseDate])
+  @@index([fulfillmentChannel])
+  @@index([channel, sku, purchaseDate])
+  @@index([amazonOrderId])
+  @@schema("product")
+}
+
+/// Pick&pack FBA reale da Finances API (non Fee Preview).
+/// Una riga per ordine + item; l'analytics la somma sul periodo.
+model StoreOrderFee {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+
+  amazonOrderId String
+  /// Vuoto se Amazon non invia OrderItemId.
+  orderItemId   String @default("")
+  sku           String
+
+  /// Totale riga addebitato da Amazon (valore assoluto).
+  fbaFulfillmentFee Decimal @db.Decimal(12, 4)
+  currency          String  @default("EUR")
+  postedDate        DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, amazonOrderId, orderItemId, sku], map: "StoreOrderFee_item_key")
+  @@index([sku], map: "StoreOrderFee_sku_idx")
+  @@index([amazonOrderId], map: "StoreOrderFee_order_idx")
+  @@schema("product")
+}
+
+/// Stima commissioni Amazon (Fee Preview, max 1 report/giorno).
+/// Referral e fee FBA per SKU; le EFN sono per paese di destinazione.
+model StoreSkuFeeEstimate {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  storeKey String
+  sku      String
+
+  currency            String?
+  referralFeePerUnit  Decimal? @db.Decimal(12, 4)
+  fbaFeeDomestic      Decimal? @db.Decimal(12, 4)
+  /// Chiavi ISO paese (IT, DE, GB, …) → fee FBA EFN per unità.
+  fbaFeeByCountry     Json?
+  estimatedFeeTotal   Decimal? @db.Decimal(12, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku])
+  @@index([sku])
+  @@schema("product")
+}
+
+/// Reso post-spedizione (report FBA o FBM), distinto dagli ordini cancellati.
+model StoreReturnLine {
+  id             String       @id @default(cuid())
+  channel        StoreChannel
+  storeKey       String
+  idempotencyKey String       @unique
+
+  amazonOrderId      String?
+  sku                String
+  asin               String?
+  productName        String?
+  quantity           Int      @default(0)
+  returnDate         DateTime @db.Date
+  /// Codice motivo selezionabile (es. QUALITY_UNACCEPTABLE / Return Reason).
+  reason             String?
+  /// Testo libero descrittivo (FBA: customer-comments).
+  reasonDescription  String?
+  status             String?
+  /// Amazon: FBA o FBM. Null sugli altri canali.
+  amazonFulfillment  String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([sku, returnDate])
+  @@index([storeKey, returnDate])
+  @@schema("product")
+}
+
+/// Snapshot giornaliero del Best Seller Rank (BSR) per ASIN, paese e categoria.
+/// SP-API Catalog Items restituisce solo il rank corrente: lo storico va costruito qui.
+model StoreBsrSnapshot {
+  id         String       @id @default(cuid())
+  channel    StoreChannel
+  /// Amazon: marketplaceId (identifica il paese dello store).
+  storeKey   String
+  /// ISO 3166-1 alpha-2 del paese (IT, DE, FR, …), denormalizzato da storeKey.
+  countryCode String
+  asin       String
+  sku        String?
+  /// Giorno UTC dello snapshot (un punto al giorno per categoria).
+  capturedAt DateTime     @db.Date
+  /// Titolo categoria Amazon (es. "Home & Kitchen").
+  category   String
+  /// classificationId, websiteDisplayGroup o fallback sul titolo.
+  categoryKey String
+  /// `classification` (browse node) o `displayGroup` (reparto vetrina).
+  kind       String
+  rank       Int
+  createdAt  DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, asin, capturedAt, kind, categoryKey], map: "StoreBsrSnapshot_rank_key")
+  @@index([asin, storeKey, capturedAt], map: "StoreBsrSnapshot_asin_store_date")
+  @@index([asin, countryCode, capturedAt], map: "StoreBsrSnapshot_asin_country_date")
+  @@schema("product")
+}
+
+/// Media stelle e conteggio recensioni per ASIN e paese (snapshot giornaliero).
+/// SP-API non espone le recensioni prodotto: le prendiamo dalla scheda pubblica Amazon.
+model StoreReviewSummary {
+  id          String       @id @default(cuid())
+  channel     StoreChannel
+  storeKey    String
+  countryCode String
+  asin        String
+  sku         String?
+  capturedAt  DateTime     @db.Date
+  rating      Decimal      @db.Decimal(2, 1)
+  count       Int
+  /// Percentuali 5→1 stelle, se presenti sulla pagina recensioni.
+  histogram   Json?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, asin, capturedAt], map: "StoreReviewSummary_day_key")
+  @@index([asin, storeKey], map: "StoreReviewSummary_asin_store")
+  @@schema("product")
+}
+
+/// Recensione cliente sulla scheda Amazon, per paese.
+model StoreCustomerReview {
+  id           String       @id @default(cuid())
+  channel      StoreChannel
+  storeKey     String
+  countryCode  String
+  asin         String
+  sku          String?
+  /// Id Amazon (es. R3XXXX).
+  externalId   String
+  rating       Int
+  title        String       @default("")
+  body         String       @default("")
+  author       String?
+  /// Data come mostrata su Amazon (testo localizzato).
+  dateLabel    String       @default("")
+  verified     Boolean      @default(false)
+  capturedAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, externalId], map: "StoreCustomerReview_ext_key")
+  @@index([asin, storeKey, capturedAt], map: "StoreCustomerReview_asin_store")
+  @@schema("product")
+}
+
+/// Job Reports SP-API: watermark e deduplica di createReport (non idempotente).
+model StoreReportJob {
+  id               String            @id @default(cuid())
+  channel          StoreChannel
+  reportType       String
+  storeKey         String
+  dataStart        DateTime          @db.Timestamptz(6)
+  dataEnd          DateTime          @db.Timestamptz(6)
+  externalReportId String?
+  documentId       String?
+  status           StoreReportStatus @default(REQUESTED)
+  importedAt       DateTime?         @db.Timestamptz(6)
+  errorMessage     String?
+  createdAt        DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, reportType, storeKey, dataStart, dataEnd], map: "StoreReportJob_window_key")
+  @@index([status, createdAt])
+  @@schema("product")
+}
+
+/// Cursore paginazione Finances API (listFinancialEvents) per finestra di posted date.
+model StoreFinanceCursor {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  /// Marketplace da cui derivare l'endpoint regionale.
+  storeKey String
+  dataStart DateTime @db.Timestamptz(6)
+  dataEnd   DateTime @db.Timestamptz(6)
+  nextToken String?
+  status    StoreReportStatus @default(REQUESTED)
+  pagesFetched Int @default(0)
+  itemsUpserted Int @default(0)
+  importedAt DateTime? @db.Timestamptz(6)
+  errorMessage String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, dataStart, dataEnd], map: "StoreFinanceCursor_window_key")
+  @@index([status, createdAt], map: "StoreFinanceCursor_status_idx")
+  @@schema("product")
+}
+
 /// Credenziali OAuth Gmail (Workspace) per leggere/rispondere ai messaggi Amazon inoltrati.
 /// La casella deve ricevere il forward del gruppo Google (o essere membro con consegna email).
 model GmailOAuthCredential {
