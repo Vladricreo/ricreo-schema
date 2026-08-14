@@ -1,7 +1,9 @@
 generator client {
   provider        = "prisma-client"
   output          = "../generated/prisma"
-  previewFeatures = ["views"]
+  // relationJoins: un solo SQL (LATERAL JOIN + json_agg) per gli include,
+  // invece di N queryRaw in sequenza (più lento in transazione PrismaPg).
+  previewFeatures = ["views", "relationJoins"]
 }
 
 datasource db {
