@@ -1,7 +1,7 @@
 /// ============================================================================
 /// VIEW MODELS - Schema "inventory_views"
 /// Modelli read-only per le view della dashboard.
-/// Queste view sono create in SQL (vedi prisma/custom_migrations/sql) e mappate qui per tipizzazione.
+/// Queste view sono create in SQL (vedi migrations) e mappate qui per tipizzazione.
 /// Nota: le view in Prisma non possono avere @id.
 /// ============================================================================
 
@@ -357,6 +357,51 @@ view VProductPartConsumptionDemand {
   adjustedDailyConsumption Decimal @map("adjusted_daily_consumption") @db.Decimal(14, 6)
 
   @@map("v_product_part_consumption_demand")
+  @@schema("inventory_views")
+}
+
+/// Grammi residui delle spool ACTIVE (overlay, non è Item.inStock)
+view VItemOpenSpoolGrams {
+  itemId         String  @unique @map("item_id") @db.Uuid
+  specId         String? @map("spec_id") @db.Uuid
+  remainingGrams Decimal @map("remaining_grams") @db.Decimal(14, 2)
+
+  @@map("v_item_open_spool_grams")
+  @@schema("inventory_views")
+}
+
+/// Posizione stock per famiglia ItemSpec: sigillate + grammi aperti, in unità SKU preferito
+view VItemSpecStockPosition {
+  specId              String  @unique @map("spec_id") @db.Uuid
+  preferredItemId     String? @map("preferred_item_id") @db.Uuid
+  itemType            String  @map("item_type")
+  sealedUnits         Int     @map("sealed_units")
+  sealedGrams         Decimal @map("sealed_grams") @db.Decimal(14, 2)
+  openGrams           Decimal @map("open_grams") @db.Decimal(14, 2)
+  preferredWeightG    Decimal @map("preferred_weight_g") @db.Decimal(14, 2)
+  effectiveUnits      Decimal @map("effective_units") @db.Decimal(14, 6)
+  openEquivalentUnits Decimal @map("open_equivalent_units") @db.Decimal(14, 6)
+  weightMissing       Boolean @map("weight_missing")
+
+  @@map("v_item_spec_stock_position")
+  @@schema("inventory_views")
+}
+
+/// Consumo ponderato, domanda produzione/assemblaggio e stagionalità per ItemSpec
+view VItemSpecConsumptionDemand {
+  specId                   String  @unique @map("spec_id") @db.Uuid
+  dailyConsumptionWeighted Decimal @map("daily_consumption_weighted") @db.Decimal(14, 6)
+  dailyConsumptionSimple   Decimal @map("daily_consumption_simple") @db.Decimal(14, 6)
+  isReliable               Boolean @map("is_reliable")
+  movementCount            Int     @map("movement_count")
+  effectiveDays            Int     @map("effective_days")
+  totalConsumption         BigInt  @map("total_consumption")
+  demandFromProduction     Int     @map("demand_from_production")
+  demandFromAssembly       Int     @map("demand_from_assembly")
+  seasonalFactor           Decimal @map("seasonal_factor") @db.Decimal(8, 4)
+  adjustedDailyConsumption Decimal @map("adjusted_daily_consumption") @db.Decimal(14, 6)
+
+  @@map("v_item_spec_consumption_demand")
   @@schema("inventory_views")
 }
 
