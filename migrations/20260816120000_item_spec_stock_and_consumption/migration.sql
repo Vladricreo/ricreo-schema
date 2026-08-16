@@ -221,6 +221,7 @@ required_parts_remaining AS (
         popp."productPartId" AS product_part_id,
         GREATEST(popp.quantity - popp."quantityProduced", 0)::NUMERIC AS part_qty_remaining
     FROM inventory."ProductOrderProductPart" popp
+    JOIN active_product_orders apo ON apo.product_order_id = popp."productOrderId"
     UNION ALL
     SELECT
         apo.product_order_id,
@@ -281,6 +282,7 @@ production_lines AS (
         (mb."usedWeight" * rp.part_qty_remaining)::NUMERIC AS qty,
         mb.priority AS bom_priority
     FROM required_parts_remaining rp
+    JOIN active_product_orders apo ON apo.product_order_id = rp.product_order_id
     JOIN inventory."ProductPart" pp ON pp.id = rp.product_part_id
     JOIN inventory."ProductPartMaterial" mb
       ON mb."productPartId" = rp.product_part_id
