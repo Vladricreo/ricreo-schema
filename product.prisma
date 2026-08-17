@@ -138,6 +138,106 @@ model StoreSalesDaily {
   @@schema("product")
 }
 
+/// Traffico giornaliero Sales and Traffic (sessioni, page view, Buy Box).
+/// `sku = "*"` = totali catalogo per store×giorno (salesAndTrafficByDate).
+model StoreTrafficDaily {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  storeKey String
+  sku      String
+  date     DateTime    @db.Date
+
+  asin       String?
+  parentAsin String?
+
+  sessions               Int     @default(0)
+  pageViews              Int     @default(0)
+  buyBoxPercentage       Decimal? @db.Decimal(7, 4)
+  unitSessionPercentage  Decimal? @db.Decimal(7, 4)
+  unitsOrdered           Int     @default(0)
+  orderedProductSales    Decimal @default(0) @db.Decimal(12, 2)
+  totalOrderItems        Int     @default(0)
+  averageSellingPrice    Decimal? @db.Decimal(12, 2)
+  currency               String  @default("EUR")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, date], map: "StoreTrafficDaily_day_key")
+  @@index([sku, date])
+  @@index([channel, date])
+  @@index([channel, sku, date])
+  @@index([asin, date])
+  @@schema("product")
+}
+
+/// Funnel ricerca Brand Analytics a livello ASIN (Search Catalog Performance).
+model StoreSearchCatalogPeriod {
+  id         String       @id @default(cuid())
+  channel    StoreChannel
+  storeKey   String
+  asin       String
+  periodType String
+  startDate  DateTime     @db.Date
+  endDate    DateTime     @db.Date
+
+  impressionCount    Int      @default(0)
+  clickCount         Int      @default(0)
+  clickRate          Decimal? @db.Decimal(7, 4)
+  cartAddCount       Int      @default(0)
+  purchaseCount      Int      @default(0)
+  conversionRate     Decimal? @db.Decimal(7, 4)
+  searchTrafficSales Decimal  @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, asin, periodType, startDate], map: "StoreSearchCatalog_period_key")
+  @@index([channel, storeKey, startDate])
+  @@index([asin, startDate])
+  @@schema("product")
+}
+
+/// Funnel ricerca Brand Analytics per query × ASIN (Search Query Performance).
+model StoreSearchQueryPeriod {
+  id         String       @id @default(cuid())
+  channel    StoreChannel
+  storeKey   String
+  asin       String
+  searchQuery String
+  periodType String
+  startDate  DateTime     @db.Date
+  endDate    DateTime     @db.Date
+
+  searchQueryScore  Decimal? @db.Decimal(12, 4)
+  searchQueryVolume Int      @default(0)
+
+  totalQueryImpressionCount Int      @default(0)
+  asinImpressionCount       Int      @default(0)
+  asinImpressionShare       Decimal? @db.Decimal(7, 4)
+
+  totalClickCount Int      @default(0)
+  asinClickCount  Int      @default(0)
+  asinClickShare  Decimal? @db.Decimal(7, 4)
+
+  totalCartAddCount Int      @default(0)
+  asinCartAddCount  Int      @default(0)
+  asinCartAddShare  Decimal? @db.Decimal(7, 4)
+
+  totalPurchaseCount Int      @default(0)
+  asinPurchaseCount  Int      @default(0)
+  asinPurchaseShare  Decimal? @db.Decimal(7, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, asin, searchQuery, periodType, startDate], map: "StoreSearchQuery_period_key")
+  @@index([channel, storeKey, startDate])
+  @@index([searchQuery])
+  @@index([asin, startDate])
+  @@schema("product")
+}
+
 /// Riga ordine (FBA e FBM). Serve per paese, canale di fulfillment e ricavi.
 model StoreOrderLine {
   id      String       @id @default(cuid())
@@ -193,8 +293,10 @@ model StoreOrderFee {
   orderItemId   String @default("")
   sku           String
 
-  /// Totale riga addebitato da Amazon (valore assoluto).
+  /// Pick&pack / peso FBA addebitato da Amazon (valore assoluto).
   fbaFulfillmentFee Decimal @db.Decimal(12, 4)
+  /// Commissione di vendita (Commission + closing + digital services).
+  referralFee       Decimal @default(0) @db.Decimal(12, 4)
   currency          String  @default("EUR")
   postedDate        DateTime? @db.Timestamptz(6)
 
@@ -326,12 +428,139 @@ model StoreCustomerReview {
   author       String?
   /// Data come mostrata su Amazon (testo localizzato).
   dateLabel    String       @default("")
+  /// Data recensione parsata dal testo Amazon, se riconoscibile.
+  reviewedAt   DateTime?    @db.Date
+  /// Paese di provenienza del recensore (ISO), se diverso o se le recensioni sono aggregate.
+  originCountryCode String?
+  /// Presa visione: le recensioni nuove restano false fino a conferma in UI.
+  viewed       Boolean      @default(false)
   verified     Boolean      @default(false)
   capturedAt   DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
 
   @@unique([channel, storeKey, externalId], map: "StoreCustomerReview_ext_key")
   @@index([asin, storeKey, capturedAt], map: "StoreCustomerReview_asin_store")
+  @@index([viewed, reviewedAt], map: "StoreCustomerReview_viewed_date")
+  @@schema("product")
+}
+
+/// Snapshot giornaliero di titolo, bullet, descrizione e media per SKU × paese.
+/// Il cron/import popola queste righe: la UI legge da qui invece di richiamare Amazon.
+model StoreListingContentSnapshot {
+  id          String       @id @default(cuid())
+  channel     StoreChannel
+  storeKey    String
+  countryCode String
+  sku         String
+  asin        String?
+  capturedAt  DateTime     @db.Date
+  title       String       @default("")
+  description String       @default("")
+  /// Array JSON di stringhe (punti elenco).
+  bulletPoints Json
+  /// Array JSON di URL immagine.
+  productImages Json
+  mainImageWidth  Int?
+  mainImageHeight Int?
+  hasVideo    Boolean      @default(false)
+  hasAplus    Boolean      @default(false)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, capturedAt], map: "StoreListingContent_day_key")
+  @@index([sku, capturedAt], map: "StoreListingContent_sku_date")
+  @@index([asin, storeKey, capturedAt], map: "StoreListingContent_asin_store_date")
+  @@schema("product")
+}
+
+/// Job resumable per l'import giornaliero qualità (bottone UI o cron).
+model StoreQualityDailyJob {
+  id                 String            @id @default(cuid())
+  channel            StoreChannel
+  capturedAt         DateTime          @db.Date
+  /// listings | reviews | done
+  phase              String            @default("listings")
+  nextAmazonPage     Int               @default(1)
+  processedListings  Int               @default(0)
+  processedReviews   Int               @default(0)
+  totalListings      Int               @default(0)
+  status             StoreReportStatus @default(REQUESTED)
+  lastMessage        String?
+  errorMessage       String?
+  importedAt         DateTime?         @db.Timestamptz(6)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, capturedAt], map: "StoreQualityDailyJob_day_key")
+  @@index([status, capturedAt], map: "StoreQualityDailyJob_status_idx")
+  @@schema("product")
+}
+
+/// Prompt JSON modificabile per i suggerimenti OpenAI sulla scheda qualità.
+model QualityAiPrompt {
+  id String @id @default(cuid())
+  /// Chiave logica, es. `listing-content-suggest`.
+  key String @unique
+  /// JSON: model, system, instructions.
+  prompt Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// Versione di titolo, bullet e descrizione per SKU × paese.
+/// `published` = inviata ad Amazon; il live può tardare giorni.
+model QualityListingContentVersion {
+  id          String       @id @default(cuid())
+  channel     StoreChannel
+  storeKey    String
+  countryCode String
+  sku         String
+  version     Int
+  title       String       @default("")
+  description String       @default("")
+  /// Array JSON di stringhe (punti elenco).
+  bulletPoints Json
+  /// True se questa versione è stata inviata ad Amazon.
+  published   Boolean      @default(false)
+  publishedAt DateTime?    @db.Timestamptz(6)
+  /// deepl | chatgpt | manual
+  source      String?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, version], map: "QualityListingContentVer_ver_key")
+  @@index([sku, storeKey, published], map: "QualityListingContentVer_sku_pub")
+  @@schema("product")
+}
+
+/// Breakdown punteggio listing per paese, calcolato sull'ultimo snapshot + recensioni.
+view VListingQualityScore {
+  id                         String    @unique
+  sku                        String
+  storeKey                   String
+  countryCode                String
+  asin                       String?
+  capturedAt                 DateTime  @db.Date
+  listingScore               Decimal   @db.Decimal(3, 1)
+  scoreKnown                 Int
+  scorePassed                Int
+  titleNoSymbols             Boolean?
+  titleOver150Chars          Boolean?
+  bulletsFiveOrMore          Boolean
+  bulletsOver150CharsEach    Boolean
+  bulletsCapitalizedFirst    Boolean
+  bulletsNotAllCaps          Boolean
+  descriptionOver1000Chars   Boolean
+  mediaCorrectResolution     Boolean?
+  mediaWhiteBackground       Boolean?
+  mediaSevenPlusImages       Boolean
+  mediaHasVideo              Boolean
+  reviewsTwentyPlus          Boolean?
+  reviewsFourPlusRating      Boolean?
+
+  @@map("v_listing_quality_score")
   @@schema("product")
 }
 
@@ -341,6 +570,8 @@ model StoreReportJob {
   channel          StoreChannel
   reportType       String
   storeKey         String
+  /// Distingue opzioni report (es. batch ASIN SQP). I job vendite restano ''.
+  optionKey        String            @default("")
   dataStart        DateTime          @db.Timestamptz(6)
   dataEnd          DateTime          @db.Timestamptz(6)
   externalReportId String?
@@ -351,7 +582,7 @@ model StoreReportJob {
   createdAt        DateTime          @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
 
-  @@unique([channel, reportType, storeKey, dataStart, dataEnd], map: "StoreReportJob_window_key")
+  @@unique([channel, reportType, storeKey, optionKey, dataStart, dataEnd], map: "StoreReportJob_window_key")
   @@index([status, createdAt])
   @@schema("product")
 }
