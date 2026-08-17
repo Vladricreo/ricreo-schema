@@ -55,19 +55,71 @@ model PurchaseOrderLine {
   @@schema("inventory")
 }
 
-/// Definisce un fornitore da cui vengono acquistati gli 'Item'.
+/// Definisce un fornitore da cui vengono acquistati gli 'Item' e le parti BUY.
 model Supplier {
-  id                       String                    @id @default(uuid()) @db.Uuid
-  name                     String                    @unique
-  website                  String?
-  email                    String?
-  leadTime                 Int                       @default(7)
-  apiToken                 String?
-  apiKey                   String?
-  apiSecret                String?
-  apiEndpoint              String?
-  autoReorder              Boolean                   @default(false)
-  associatedItemTypes      ItemType[]                @default([])
+  id   String  @id @default(uuid()) @db.Uuid
+  name String  @unique
+  /// Logo (URL app-relative, es. /files/suppliers/...).
+  logoUrl String?
+  /// Sito web ufficiale / catalogo.
+  website String?
+  email   String?
+  /// Telefono principale.
+  phone String?
+  /// Partita IVA (IT + 11 cifre o equivalente estero).
+  vatNumber String?
+  /// Codice fiscale (ditte individuali / estero).
+  taxCode String?
+  /// PEC per fatturazione elettronica.
+  pec String?
+  /// Codice destinatario SDI (7 caratteri).
+  sdiCode String?
+  /// Referente commerciale.
+  contactName String?
+  /// Ruolo del referente (es. Ufficio vendite).
+  contactRole String?
+  /// Indirizzo sede / magazzino spedizioni.
+  addressLine String?
+  city        String?
+  province    String?
+  postalCode  String?
+  /// Codice ISO paese (default IT).
+  country String? @default("IT")
+  /// Tempo di consegna medio in giorni.
+  leadTime Int @default(7)
+  /// Tempo di consegna minimo in giorni.
+  leadTimeMin Int?
+  /// Tempo di consegna massimo in giorni.
+  leadTimeMax Int?
+  /// Corriere preferito per gli inbound.
+  preferredCarrier String?
+  /// Incoterms (EXW, DAP, DDP...).
+  incoterms String?
+  /// Giorni di pagamento (es. 30 = 30 giorni data fattura).
+  paymentTermsDays Int?
+  /// Metodo di pagamento preferito (bonifico, PayPal, carta...).
+  paymentMethod String?
+  /// Valuta listino (ISO 4217).
+  currency String? @default("EUR")
+  /// Importo minimo d'ordine.
+  minOrderAmount Decimal? @db.Decimal(12, 2)
+  /// Nostro codice cliente presso il fornitore.
+  customerCode String?
+  /// Note operative interne.
+  notes String?
+  /// Colore accento HEX per le card UI (es. #2563EB).
+  accentColor String?
+  /// Fornitore attivo: se false è archiviato e non proposto nei form.
+  isActive Boolean @default(true)
+  /// Payload JSON per integrazioni API (mapping, header extra, webhook).
+  apiPayload Json?
+  apiToken    String?
+  apiKey      String?
+  apiSecret   String?
+  apiEndpoint String?
+  autoReorder Boolean   @default(false)
+  associatedItemTypes ItemType[] @default([])
+
   items                    Item[]
   /// Parti acquistabili collegate a questo fornitore (campo opposto di `ProductPart.supplier`).
   productParts             ProductPart[]             @relation("SupplierProductParts")
@@ -79,6 +131,9 @@ model Supplier {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
+  @@unique([vatNumber])
+  @@index([isActive])
+  @@index([country])
   @@schema("inventory")
 }
 
