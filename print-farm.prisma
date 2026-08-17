@@ -4,7 +4,10 @@ enum PlateType {
   SMOOTH
   SMOOTH_PA
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("plate_type")
+  @@schema("public")
 }
 
 /// File di progetto 3MF per la stampa 3D.
@@ -730,7 +733,10 @@ enum AmsModel {
   AMS_2_PRO
   AMS_HT
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("ams_model")
+  @@schema("public")
 }
 
 /// Fasi consumo AMS.
@@ -978,7 +984,10 @@ enum PrinterStatus {
   SLICING
   ERROR
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("printer_status")
+  @@schema("public")
 }
 
 /// Stato operativo della stampante (persistente, gestito da logica applicativa).
@@ -991,7 +1000,10 @@ enum PrinterOperationalStatus {
   FILAMENT_RUNOUT // Filamento finito durante stampa (richiede ricarica)
   ERROR // Errore bloccante (richiede intervento)
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("printer_operational_status")
+  @@schema("public")
 }
 
 /// Override manuale impostato dall'operatore.
@@ -1001,7 +1013,10 @@ enum PrinterManualOverrideStatus {
   DISABLED
   MANUAL_PRINTING
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("printer_manual_override_status")
+  @@schema("public")
 }
 
 /// Stato di un'assegnazione stampante per un ProductionJob.
@@ -1018,7 +1033,10 @@ enum AssignmentStatus {
   ERROR // Errore
   START_FAILED // Avvio fallito: stampante in errore, serve intervento. Self-heal quando la stampante si riprende.
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("assignment_status")
+  @@schema("public")
 }
 
 /// Assegnazione di una stampante a un ProductionJob.
@@ -1329,7 +1347,10 @@ enum SoftwareType {
   BAMBU_STUDIO
   MAINSAIL
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("software_type")
+  @@schema("public")
 }
 
 enum PrinterBrand {
@@ -1337,7 +1358,10 @@ enum PrinterBrand {
   KLIPPER
   PRUSA
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("printer_brand")
+  @@schema("public")
 }
 
 enum FileStatus {
