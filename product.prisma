@@ -38,6 +38,58 @@ model EtsyOAuthCredential {
   @@schema("product")
 }
 
+/// Credenziali OAuth eBay (user token) per un account seller.
+/// Access token ~2h; refresh token ~18 mesi.
+/// `accessToken` e `refreshToken` sono AES-256-GCM (SETTINGS_ENCRYPTION_KEY).
+model EbayOAuthCredential {
+  id           String   @id @default(cuid())
+  /// Chiave logica dell'account (es. `primary` o username eBay).
+  accountKey   String
+  /// Access token cifrato (payload Settings v1).
+  accessToken  String
+  /// Refresh token cifrato (payload Settings v1).
+  refreshToken String
+  /// Scadenza access token (UTC).
+  expiresAt    DateTime @db.Timestamptz(6)
+  /// Scope concessi (spazio-separati).
+  scopes       String   @default("")
+  ebayUserId   String?
+  ebayUsername String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([accountKey])
+  @@schema("product")
+}
+
+/// Notifica eBay MARKETPLACE_ACCOUNT_DELETION ricevuta dalla Edge Function pubblica.
+/// Identificativi utente e payload sono cifrati con SETTINGS_ENCRYPTION_KEY.
+model EbayAccountDeletion {
+  id              String    @id @default(uuid())
+  /// Id notifica eBay (idempotenza: la stessa notifica può arrivare più volte).
+  notificationId  String
+  topic           String    @default("MARKETPLACE_ACCOUNT_DELETION")
+  eventDate       DateTime? @db.Timestamptz(6)
+  /// Username eBay cifrato (payload Settings v1).
+  usernameEnc     String?
+  /// userId eBay cifrato (payload Settings v1).
+  userIdEnc       String?
+  /// eiasToken cifrato (payload Settings v1).
+  eiasTokenEnc    String?
+  /// Payload JSON completo cifrato (o redacted se manca la chiave).
+  payloadEnc      String
+  signatureValid  Boolean   @default(false)
+  /// Valorizzato quando l'app privata ha elaborato la cancellazione.
+  processedAt     DateTime? @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([notificationId])
+  @@index([processedAt])
+  @@index([createdAt])
+  @@schema("product")
+}
+
 /// Canale store su cui vive uno SKU (stesso SKU su Amazon, Etsy, eBay, Temu).
 enum StoreChannel {
   AMAZON
