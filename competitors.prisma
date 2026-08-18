@@ -22,6 +22,23 @@ enum CompetitorListingStatus {
   @@schema("product")
 }
 
+/// Lato del vettore di matching: nostro catalogo o listing concorrente.
+enum ListingMatchSide {
+  OUR
+  COMPETITOR
+
+  @@schema("product")
+}
+
+/// Esito della revisione umana su un accoppiamento proposto.
+enum CompetitorMatchSuggestionStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+
+  @@schema("product")
+}
+
 /// Anagrafica seller concorrente (non il singolo prodotto).
 model Competitor {
   id        String              @id @default(cuid())
@@ -33,6 +50,8 @@ model Competitor {
   country   String
   status    CompetitorStatus    @default(ACTIVE)
   notes     String?
+  /// Logo seller: URL esterno o path `/files/...` dopo upload.
+  logoUrl   String?
   createdAt DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt DateTime            @updatedAt @db.Timestamptz(6)
 
@@ -57,6 +76,8 @@ model CompetitorChannel {
   storeUrl       String?
   lastFetchedAt  DateTime?    @db.Timestamptz(6)
   lastFetchError String?
+  /// Stato del sync catalogo (snapshot Bright Data, fase, ASIN in coda).
+  lastSyncMeta   Json?
   createdAt      DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
 
@@ -85,12 +106,13 @@ model CompetitorRevenueYear {
   @@schema("product")
 }
 
-/// Prodotto del catalogo concorrente: identità condivisa fra i paesi.
+/// Inserzione del catalogo concorrente. Amazon: un ASIN con offerte per paese.
+/// eBay: una inserzione (item ID). Più listing dello stesso articolo si legano via match.
 model CompetitorProduct {
   id                  String                  @id @default(cuid())
   competitorId        String
   competitorChannelId String
-  /// Chiave di raggruppamento multipaese (ean / sku / asin / group / item).
+  /// Univoca per canale: ASIN/EAN (Amazon) o item listing (eBay).
   identityKey         String
   title               String
   asin                String?
@@ -99,7 +121,13 @@ model CompetitorProduct {
   gtin                String?
   brand               String?
   imageUrl            String?
+  /// Galleria foto (Bright Data / SP-API / eBay additionalImages).
+  imageUrls           Json?
   estimatedUnitsSold  Int?
+  /// Ultimo `bought_past_month` Bright Data (unità dello scorso mese).
+  boughtPastMonth     Int?
+  /// Ultimo `sold` da record Amazon Products Search, se presente.
+  searchSold          Int?
   publishedAt         DateTime?               @db.Timestamptz(6)
   listingUpdatedAt    DateTime?               @db.Timestamptz(6)
   closedAt            DateTime?               @db.Timestamptz(6)
@@ -114,12 +142,15 @@ model CompetitorProduct {
   channel         CompetitorChannel        @relation(fields: [competitorChannelId], references: [id], onDelete: Cascade)
   matchId         String?
   offers          CompetitorListingOffer[]
-  link            CompetitorProductLink?
-  match           CompetitorProductMatch?  @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  links            CompetitorProductLink[]
+  match            CompetitorProductMatch?  @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  matchSuggestions CompetitorListingMatchSuggestion[]
   bsrSnapshots    CompetitorBsrSnapshot[]
   salesDaily      CompetitorSalesDaily[]
-  reviewSummaries CompetitorReviewSummary[]
-  reviews         CompetitorCustomerReview[]
+  monthlySold            CompetitorMonthlySoldSnapshot[]
+  reviewSummaries        CompetitorReviewSummary[]
+  reviews                CompetitorCustomerReview[]
+  fulfillmentSnapshots   CompetitorFulfillmentSnapshot[]
 
   @@unique([competitorChannelId, identityKey])
   @@index([competitorId, status])
@@ -132,26 +163,53 @@ model CompetitorProduct {
   @@schema("product")
 }
 
-/// Identità condivisa: stesso prodotto venduto da più seller, anche prima che lo vendiamo noi.
+/// Identità condivisa: stesso articolo (più listing di store/seller diversi).
+/// I nostri listing si legano per ASIN (Amazon) o item ID (eBay), non per SKU.
 model CompetitorProductMatch {
   id               String   @id @default(cuid())
   title            String
   asin             String?
   ean              String?
   gtin             String?
-  /// Compilato quando iniziamo a venderlo anche noi.
+  /// Primo nostro listing (denormalizzato). La lista completa è in ourListings.
   ourSku           String?
   ourAsin          String?
   ourMarketplaceId String?
+  ourChannel       StoreChannel @default(AMAZON)
+  /// ASIN Amazon o item ID eBay del nostro listing principale.
+  ourExternalId    String?
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 
-  products CompetitorProduct[]
+  products    CompetitorProduct[]
+  ourListings CompetitorProductMatchOurListing[]
 
   @@index([ourSku])
   @@index([ourAsin])
+  @@index([ourExternalId])
   @@index([ean])
   @@index([asin])
+  @@schema("product")
+}
+
+/// Un nostro listing (identità ASIN/item) collegato a un gruppo articolo.
+model CompetitorProductMatchOurListing {
+  id               String       @id @default(cuid())
+  matchId          String
+  ourChannel       StoreChannel
+  /// ASIN Amazon o item ID eBay: chiave di identità, non lo SKU.
+  ourExternalId    String
+  ourAsin          String?
+  ourSku           String?
+  ourMarketplaceId String?
+  createdAt        DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
+
+  match CompetitorProductMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, ourChannel, ourExternalId])
+  @@index([ourChannel, ourExternalId])
+  @@index([ourAsin])
   @@schema("product")
 }
 
@@ -175,11 +233,16 @@ model CompetitorListingOffer {
   closedAt         DateTime?               @db.Timestamptz(6)
   lastFetchedAt    DateTime?               @db.Timestamptz(6)
   status           CompetitorListingStatus @default(ACTIVE)
+  /// Offerta seller gestita da Amazon (FBA / AFN). Null = non ancora osservato.
+  isFba            Boolean?
+  /// Offerta eleggibile Prime. Null = non ancora osservato.
+  isPrime          Boolean?
   createdAt        DateTime                @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime                @updatedAt @db.Timestamptz(6)
 
-  product    CompetitorProduct          @relation(fields: [productId], references: [id], onDelete: Cascade)
-  snapshots  CompetitorPriceSnapshot[]
+  product               CompetitorProduct                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  snapshots             CompetitorPriceSnapshot[]
+  fulfillmentSnapshots  CompetitorFulfillmentSnapshot[]
 
   @@unique([productId, marketplaceKey])
   @@index([countryCode])
@@ -204,20 +267,152 @@ model CompetitorPriceSnapshot {
   @@schema("product")
 }
 
-/// Collegamento a un nostro listing Amazon (SKU/ASIN, senza FK su inventory).
+/// Osservazione giornaliera FBA/Prime dell'offerta seller, nella data di fetch.
+model CompetitorFulfillmentSnapshot {
+  id             String   @id @default(cuid())
+  offerId        String
+  productId      String
+  countryCode    String
+  marketplaceKey String
+  capturedAt     DateTime @db.Date
+  isFba          Boolean?
+  isPrime        Boolean?
+  /// SP_API = offerta del seller; BRIGHTDATA = scrape vetrina/PDP.
+  source         String   @default("SP_API")
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  offer   CompetitorListingOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  product CompetitorProduct      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, capturedAt], map: "CompetitorFulfillmentSnapshot_day_key")
+  @@index([productId, capturedAt], map: "CompetitorFulfillmentSnapshot_product_date")
+  @@schema("product")
+}
+
+/// Collegamento a un nostro listing (identità ASIN/item). Più nostri listing per prodotto.
 model CompetitorProductLink {
-  id               String   @id @default(cuid())
-  productId        String   @unique
-  ourSku           String
+  id               String       @id @default(cuid())
+  productId        String
+  ourSku           String?
   ourAsin          String?
   ourMarketplaceId String?
-  createdAt        DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
+  ourChannel       StoreChannel @default(AMAZON)
+  /// ASIN Amazon o item ID eBay del nostro listing.
+  ourExternalId    String
+  createdAt        DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
 
   product CompetitorProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  @@unique([productId, ourChannel, ourExternalId])
   @@index([ourSku])
   @@index([ourAsin])
+  @@index([ourChannel, ourExternalId])
+  @@schema("product")
+}
+
+/// Snapshot del nostro catalogo vendibile, usato dal matching automatico.
+model OurListingMatchSource {
+  id             String       @id @default(cuid())
+  channel        StoreChannel
+  /// ASIN Amazon o item ID eBay.
+  externalId     String
+  sku            String?
+  asin           String?
+  title          String
+  imageUrl       String?
+  imageUrls      Json?
+  ean            String?
+  marketplaceKey String?
+  /// Totale vita eBay: Item.SellingStatus.QuantitySold da GetMyeBaySelling/GetItem.
+  quantitySold   Int?
+  capturedAt     DateTime     @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, externalId])
+  @@index([channel, sku])
+  @@index([channel, asin])
+  @@index([title])
+  @@schema("product")
+}
+
+/// Cache matching: embedding titolo OpenAI + hash foto locale (niente API immagini).
+model ListingMatchFeature {
+  id              String           @id @default(cuid())
+  side            ListingMatchSide
+  /// OUR: `{channel}:{externalId}` — COMPETITOR: id prodotto.
+  sourceKey       String
+  title           String
+  titleNorm       String
+  /// URL originale della foto usata per download/hash.
+  imageUrl        String?
+  /// Copia WebP nel bucket inventory (`/files/competitors/match/...`).
+  storedImagePath String?
+  /// dHash 16×16 (hex) calcolato con sharp, senza API esterne.
+  imageHash       String?
+  titleEmbedding  Json?
+  /// Legacy Jina: non più scritto. Si può ignorare.
+  imageEmbedding  Json?
+  computedAt      DateTime         @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(6)
+
+  @@unique([side, sourceKey])
+  @@index([side])
+  @@index([imageHash])
+  @@schema("product")
+}
+
+/// Accoppiamento proposto fra un nostro listing e un prodotto concorrente.
+model CompetitorListingMatchSuggestion {
+  id                  String                          @id @default(cuid())
+  ourChannel          StoreChannel
+  ourExternalId       String
+  ourSku              String?
+  ourAsin             String?
+  competitorProductId String
+  identifierScore     Float
+  titleScore          Float
+  titleTokenScore     Float
+  imageScore          Float
+  combinedScore       Float
+  status              CompetitorMatchSuggestionStatus @default(PENDING)
+  reviewedAt          DateTime?                       @db.Timestamptz(6)
+  createdAt           DateTime                        @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                        @updatedAt @db.Timestamptz(6)
+
+  product CompetitorProduct @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
+
+  @@unique([ourChannel, ourExternalId, competitorProductId])
+  @@index([status, combinedScore])
+  @@index([ourChannel, ourExternalId])
+  @@index([competitorProductId])
+  @@schema("product")
+}
+
+/// Job resumable: catalogo nostro → embeddings → scoring.
+model CompetitorMatchJob {
+  id                  String            @id @default(cuid())
+  /// our_catalog | embed | score | done
+  phase               String            @default("our_catalog")
+  status              StoreReportStatus @default(REQUESTED)
+  cursor              Json?
+  processedOur        Int               @default(0)
+  processedCompetitor Int               @default(0)
+  processedEmbed      Int               @default(0)
+  suggestionCount     Int               @default(0)
+  totalOur            Int               @default(0)
+  totalCompetitor     Int               @default(0)
+  lastMessage         String?
+  errorMessage        String?
+  startedAt           DateTime          @default(now()) @db.Timestamptz(6)
+  finishedAt          DateTime?         @db.Timestamptz(6)
+  createdAt           DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt])
   @@schema("product")
 }
 
@@ -264,6 +459,27 @@ model CompetitorSalesDaily {
 
   @@unique([productId, marketplaceKey, soldOn], map: "CompetitorSalesDaily_day_key")
   @@index([productId, soldOn], map: "CompetitorSalesDaily_product_date")
+  @@schema("product")
+}
+
+/// Osservazione mensile unità vendute (Bright Data), salvata nella data di fetch.
+model CompetitorMonthlySoldSnapshot {
+  id              String   @id @default(cuid())
+  productId       String
+  countryCode     String
+  marketplaceKey  String
+  capturedAt      DateTime @db.Date
+  boughtPastMonth Int?
+  sold            Int?
+  /// BRIGHTDATA = scrape live.
+  source          String   @default("BRIGHTDATA")
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  product CompetitorProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, marketplaceKey, capturedAt], map: "CompetitorMonthlySoldSnapshot_day_key")
+  @@index([productId, capturedAt], map: "CompetitorMonthlySoldSnapshot_product_date")
   @@schema("product")
 }
 

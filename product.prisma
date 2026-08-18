@@ -297,6 +297,8 @@ model StoreOrderFee {
   fbaFulfillmentFee Decimal @db.Decimal(12, 4)
   /// Commissione di vendita (Commission + closing + digital services).
   referralFee       Decimal @default(0) @db.Decimal(12, 4)
+  /// Digital Services Fee, già inclusa in referralFee: serve solo allo scorporo in UI.
+  digitalServicesFee Decimal @default(0) @db.Decimal(12, 4)
   currency          String  @default("EUR")
   postedDate        DateTime? @db.Timestamptz(6)
 
@@ -464,12 +466,25 @@ model StoreListingContentSnapshot {
   mainImageHeight Int?
   hasVideo    Boolean      @default(false)
   hasAplus    Boolean      @default(false)
+  /// Data di pubblicazione Amazon (date_first_available o createdDate listing).
+  publishedAt DateTime?    @db.Date
+  /// Categoria Amazon (display group / browse root).
+  amazonCategory    String?
+  amazonCategoryKey String?
+  /// Sottocategoria Amazon (browse node foglia).
+  amazonSubcategory    String?
+  amazonSubcategoryKey String?
+  ean String?
+  /// Collegamento a inventory.Product (stesso ASIN, EAN o SKU).
+  inventoryProductId   String? @db.Uuid
+  inventoryProductName String?
   createdAt   DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
 
   @@unique([channel, storeKey, sku, capturedAt], map: "StoreListingContent_day_key")
   @@index([sku, capturedAt], map: "StoreListingContent_sku_date")
   @@index([asin, storeKey, capturedAt], map: "StoreListingContent_asin_store_date")
+  @@index([inventoryProductId], map: "StoreListingContent_inventory_product")
   @@schema("product")
 }
 
@@ -478,9 +493,11 @@ model StoreQualityDailyJob {
   id                 String            @id @default(cuid())
   channel            StoreChannel
   capturedAt         DateTime          @db.Date
-  /// listings | reviews | done
+  /// listings | extras | reviews | done
   phase              String            @default("listings")
   nextAmazonPage     Int               @default(1)
+  /// Offset nella coda SKU extra (inventory / vendite / snapshot precedenti).
+  nextExtraOffset    Int               @default(0)
   processedListings  Int               @default(0)
   processedReviews   Int               @default(0)
   totalListings      Int               @default(0)
