@@ -278,6 +278,8 @@ model StoreOrderLine {
   @@index([storeKey, purchaseDate])
   @@index([fulfillmentChannel])
   @@index([channel, sku, purchaseDate])
+  // Serve le finestre equal-time delle coorti di lancio (ASIN × data).
+  @@index([channel, asin, purchaseDate], map: "StoreOrderLine_channel_asin_date")
   @@index([amazonOrderId])
   @@schema("product")
 }
@@ -648,5 +650,20 @@ model GmailOAuthCredential {
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([mailboxEmail])
+  @@schema("product")
+}
+
+/// Soglie di classificazione coorti di lancio (una sola riga, id = default).
+model ListingLaunchThreshold {
+  id                 String   @id @default("default")
+  deadMaxUnits       Int      @default(1)
+  weakMaxUnits       Int      @default(4)
+  activatedMinUnits  Int      @default(5)
+  successfulMinUnits Int      @default(10)
+  winnerMinUnits     Int      @default(25)
+  winnerMinRevenue   Decimal  @default(500) @db.Decimal(12, 2)
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+
   @@schema("product")
 }
