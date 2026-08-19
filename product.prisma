@@ -299,6 +299,12 @@ model StoreOrderFee {
   referralFee       Decimal @default(0) @db.Decimal(12, 4)
   /// Digital Services Fee, già inclusa in referralFee: serve solo allo scorporo in UI.
   digitalServicesFee Decimal @default(0) @db.Decimal(12, 4)
+  /// Storno spedizione FBA da Settlement/Finances (valore assoluto).
+  shippingChargeback Decimal @default(0) @db.Decimal(12, 4)
+  /// Commissione sul rimborso (RefundCommission).
+  refundCommission   Decimal @default(0) @db.Decimal(12, 4)
+  /// Altre ItemFees Amazon non classificate (valore assoluto).
+  otherFee           Decimal @default(0) @db.Decimal(12, 4)
   currency          String  @default("EUR")
   postedDate        DateTime? @db.Timestamptz(6)
 
