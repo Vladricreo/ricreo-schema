@@ -246,6 +246,7 @@ model StoreOrderLine {
   /// Chiave idempotente (es. amazonOrderId + orderItemId).
   lineKey  String
 
+  /// ID ordine del canale (Amazon / eBay / Etsy / Temu).
   amazonOrderId String?
   orderItemId   String?
   purchaseDate  DateTime? @db.Timestamptz(6)
@@ -612,6 +613,28 @@ model StoreReportJob {
   @@schema("product")
 }
 
+/// Cursore di sync incrementale per canali non Amazon (eBay / Etsy / Temu).
+model StoreChannelSyncCursor {
+  id            String       @id @default(cuid())
+  channel       StoreChannel
+  storeKey      String
+  /// `orders` oppure `refunds`.
+  kind          String
+  watermark     DateTime?    @db.Timestamptz(6)
+  offset        Int          @default(0)
+  pagesFetched  Int          @default(0)
+  itemsUpserted Int          @default(0)
+  rangeFrom     DateTime?    @db.Timestamptz(6)
+  rangeTo       DateTime?    @db.Timestamptz(6)
+  errorMessage  String?
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, kind], map: "StoreChannelSyncCursor_key")
+  @@index([channel, kind], map: "StoreChannelSyncCursor_channel_kind")
+  @@schema("product")
+}
+
 /// Cursore paginazione Finances API (listFinancialEvents) per finestra di posted date.
 model StoreFinanceCursor {
   id      String       @id @default(cuid())
@@ -653,6 +676,128 @@ model GmailOAuthCredential {
   @@schema("product")
 }
 
+/// Snapshot giornaliero inventario FBA dal ledger Amazon (Summary View).
+/// Una riga Amazon = data + FNSKU + disposition + paese (location COUNTRY).
+model StoreFbaInventoryDaily {
+  id       String       @id @default(cuid())
+  channel  StoreChannel
+  /// Marketplace usato per createReport (storeKey della selling region).
+  storeKey String
+  date     DateTime     @db.Date
+  fnsku    String
+  asin     String
+  msku     String
+  title    String       @default("")
+  /// Es. SELLABLE / UNSSELLABLE. Lo stock vendibile è solo SELLABLE.
+  disposition String
+  /// Paese ISO o FC, a seconda di aggregateByLocation.
+  location String
+
+  startingWarehouseBalance     Int @default(0)
+  inTransitBetweenWarehouses   Int @default(0)
+  receipts                     Int @default(0)
+  customerShipments            Int @default(0)
+  customerReturns              Int @default(0)
+  vendorReturns                Int @default(0)
+  warehouseTransferInOut       Int @default(0)
+  found                        Int @default(0)
+  lost                         Int @default(0)
+  damaged                      Int @default(0)
+  disposed                     Int @default(0)
+  otherEvents                  Int @default(0)
+  endingWarehouseBalance       Int @default(0)
+  unknownEvents                Int @default(0)
+
+  /// Colonne Amazon non mappate: non perdiamo dati se il TSV cambia.
+  extra Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, date, fnsku, disposition, location], map: "StoreFbaInventoryDaily_grain")
+  @@index([asin, date])
+  @@index([msku, date])
+  @@index([endingWarehouseBalance])
+  @@index([channel, storeKey, date])
+  @@schema("product")
+}
+
+/// Catalogo veicoli Amazon (Vehicles API EU) per mappare marca/modello → KTYPE.
+model AmazonVehicle {
+  id             String   @id @default(cuid())
+  marketplaceId  String
+  /// CAR | MOTORBIKE
+  vehicleType    String
+  /// Chiave stabile: KTYPE oppure `amazon:{amazonId}`.
+  identifier     String
+  make           String
+  model          String
+  variantName    String?
+  bodyStyle      String?
+  driveType      String?
+  energy         String?
+  engineKw       Decimal? @db.Decimal(10, 2)
+  engineHp       Decimal? @db.Decimal(10, 2)
+  yearFrom       Int?
+  monthFrom      Int?
+  yearTo         Int?
+  monthTo        Int?
+  /// ACTIVE | DELETED
+  status         String   @default("ACTIVE")
+  ktype          String?
+  amazonId       String?
+  lastProcessedAt DateTime? @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId, vehicleType, identifier], map: "AmazonVehicle_ident_key")
+  @@index([marketplaceId, make, model], map: "AmazonVehicle_make_model")
+  @@index([marketplaceId, ktype], map: "AmazonVehicle_ktype")
+  @@index([marketplaceId, status], map: "AmazonVehicle_status")
+  @@schema("product")
+}
+
+/// Job resumable per scaricare/aggiornare il catalogo veicoli Amazon.
+model AmazonVehicleSyncJob {
+  id            String            @id @default(cuid())
+  marketplaceId String
+  /// CAR | MOTORBIKE | done
+  phase         String            @default("CAR")
+  pageToken     String?
+  processed     Int               @default(0)
+  upserted      Int               @default(0)
+  status        StoreReportStatus @default(REQUESTED)
+  lastMessage   String?
+  errorMessage  String?
+  importedAt    DateTime?         @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId], map: "AmazonVehicleSyncJob_marketplace")
+  @@index([status, updatedAt], map: "AmazonVehicleSyncJob_status")
+  @@schema("product")
+}
+
+/// Stato fitment per SKU × marketplace: KTYPE pubblicati e ultima ricerca GPT.
+model AmazonListingFitment {
+  id                String    @id @default(cuid())
+  marketplaceId     String
+  sku               String
+  asin              String?
+  publishedKtypes   String[]  @default([])
+  publishedCount    Int       @default(0)
+  /// JSON ultima ricerca (veicoli GPT + match KTYPE).
+  lastResearch      Json?
+  lastResearchedAt  DateTime? @db.Timestamptz(6)
+  lastPublishedAt   DateTime? @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId, sku], map: "AmazonListingFitment_sku_key")
+  @@index([marketplaceId, publishedCount], map: "AmazonListingFitment_count")
+  @@schema("product")
+}
+
 /// Soglie di classificazione coorti di lancio (una sola riga, id = default).
 model ListingLaunchThreshold {
   id                 String   @id @default("default")
@@ -665,5 +810,120 @@ model ListingLaunchThreshold {
   createdAt          DateTime @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime @updatedAt @db.Timestamptz(6)
 
+  @@schema("product")
+}
+
+/// Pacco FBA dichiarato/misurato da Amazon per uno SKU, usato dal confronto packaging.
+model AmazonFbaPackageSnapshot {
+  id            String @id @default(cuid())
+  marketplaceId String
+  sku           String
+  asin          String?
+  productType   String?
+  title         String?
+  imageUrl      String?
+
+  catalogLengthCm Decimal? @db.Decimal(12, 2)
+  catalogWidthCm  Decimal? @db.Decimal(12, 2)
+  catalogHeightCm Decimal? @db.Decimal(12, 2)
+  catalogWeightG  Decimal? @db.Decimal(12, 2)
+
+  listingLengthCm Decimal? @db.Decimal(12, 2)
+  listingWidthCm  Decimal? @db.Decimal(12, 2)
+  listingHeightCm Decimal? @db.Decimal(12, 2)
+  listingWeightG  Decimal? @db.Decimal(12, 2)
+
+  fetchedAt DateTime @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId, sku], map: "AmazonFbaPackageSnapshot_sku_key")
+  @@index([marketplaceId, asin], map: "AmazonFbaPackageSnapshot_asin")
+  @@index([marketplaceId, fetchedAt], map: "AmazonFbaPackageSnapshot_fetched")
+  @@schema("product")
+}
+
+/// Paesi attesi e filtri per gli avvisi di copertura dei listing Amazon (singleton).
+model AmazonListingCoverageSetting {
+  id String @id @default("default")
+  /// MarketplaceId in cui ogni listing dovrebbe essere pubblicato e acquistabile.
+  expectedMarketplaceIds String[]
+  /// Se true, le schede padre di variazione non generano avvisi.
+  excludeParentSkus Boolean @default(true)
+  /// Se true, gli SKU FBA sono inclusi negli avvisi.
+  includeFba Boolean @default(true)
+  /// Se true, gli SKU FBM sono inclusi negli avvisi.
+  includeFbm Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// SKU esclusi dagli avvisi di copertura (noti come incompleti di proposito).
+model AmazonListingCoverageSkuExclusion {
+  id  String @id @default(cuid())
+  sku String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([sku], map: "AmazonListingCoverageSkuExclusion_sku")
+  @@schema("product")
+}
+
+/// Tassi di cambio verso EUR da Frankfurter (BCE e altre banche centrali).
+/// `rate` = unità di `currency` per 1 EUR (es. 1 EUR = 0,86 GBP).
+model ExchangeRate {
+  id String @id @default(cuid())
+  /// Valuta quotata (ISO 4217), es. GBP, PLN, SEK.
+  currency String
+  /// Base sempre EUR.
+  base String @default("EUR")
+  /// Quante unità di `currency` equivalgono a 1 EUR.
+  rate Decimal @db.Decimal(18, 8)
+  /// Data della rilevazione pubblicata da Frankfurter.
+  rateDate DateTime @db.Date
+  /// Origine del dato (es. frankfurter).
+  source String @default("frankfurter")
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([currency], map: "ExchangeRate_currency")
+  @@index([rateDate], map: "ExchangeRate_rateDate")
+  @@schema("product")
+}
+
+/// Job resumable per importare dimensioni/peso pacco FBA da Catalog + Listings.
+model AmazonFbaPackageSyncJob {
+  id            String            @id @default(cuid())
+  marketplaceId String
+  cursor        Int               @default(0)
+  processed     Int               @default(0)
+  total         Int               @default(0)
+  status        StoreReportStatus @default(REQUESTED)
+  lastMessage   String?
+  importedAt    DateTime?         @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId], map: "AmazonFbaPackageSyncJob_marketplace")
+  @@index([status, updatedAt], map: "AmazonFbaPackageSyncJob_status")
+  @@schema("product")
+}
+
+/// Template descrizione eBay: JSON strutturato (badge, bullet, testo IT/EN)
+/// da cui si genera l'HTML per la pubblicazione.
+model EbayListingDescription {
+  id        String @id @default(cuid())
+  /// ItemID eBay.
+  listingId String
+  sku       String?
+  /// JSON: title, badges, bulletsIt/En, descriptionIt/En, html.
+  content   Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([listingId], map: "EbayListingDescription_listing")
+  @@index([sku], map: "EbayListingDescription_sku")
   @@schema("product")
 }
