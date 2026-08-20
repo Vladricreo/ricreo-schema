@@ -1980,3 +1980,25 @@ model SchedulerScenarioCandidate {
   @@index([runId, printerId])
   @@schema("print-farm")
 }
+
+/// Monitor TV di corridoio: un kiosk pubblico per aisleCode, con vista proiettata dall'operatore.
+model CorridorMonitor {
+  id          String @id @default(uuid()) @db.Uuid
+  /// Nome mostrato in impostazioni e nell'intestazione del kiosk.
+  name        String
+  /// Corridoio fisico (aisleCode risolto da group/shelf). Un monitor per corridoio.
+  aisleCode   String @unique
+  /// Token opaco usato nell'URL pubblico `/monitor/<token>`.
+  publicToken String @unique
+  /// Vista attiva: default | runout | swap | harvest.
+  activeMode  String @default("default")
+  /// Overlay odette/posizione scelti in bulk harvest (chiave: printerId o assignmentId).
+  harvestPlan Json?
+  /// Ultimo click su Proietta.
+  projectedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("print-farm")
+}
