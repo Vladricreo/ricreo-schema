@@ -8,6 +8,8 @@ model TemuGoodsMapping {
   goodsId         String
   /// SKU esterni associati alla create (convenience).
   externalSkuIds  String[] @default([])
+  /// skuId Temu del primo SKU, usato per `bg.local.goods.priceorder.change.sku.price`.
+  temuSkuId       String?
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
@@ -29,7 +31,7 @@ model EtsyOAuthCredential {
   refreshToken String
   /// Scadenza access token (UTC).
   expiresAt    DateTime @db.Timestamptz(6)
-  /// Scope concessi (spazio-separati), es. `listings_r listings_w shops_r`.
+  /// Scope concessi (spazio-separati), es. `listings_r listings_w shops_r transactions_r`.
   scopes       String   @default("")
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
@@ -401,13 +403,15 @@ model StoreBsrSnapshot {
   @@schema("product")
 }
 
-/// Media stelle e conteggio recensioni per ASIN e paese (snapshot giornaliero).
-/// SP-API non espone le recensioni prodotto: le prendiamo dalla scheda pubblica Amazon.
+/// Media stelle (o feedback eBay) e conteggio per listing e paese (snapshot giornaliero).
+/// `asin` è l'id listing del canale: ASIN Amazon, ItemID eBay, listing_id Etsy, goodsId Temu.
+/// Amazon: scrape scheda pubblica. Etsy: getReviewsByShop. eBay: GetFeedback (positivo/neutro/negativo).
 model StoreReviewSummary {
   id          String       @id @default(cuid())
   channel     StoreChannel
   storeKey    String
   countryCode String
+  /// Id listing del marketplace (ASIN / ItemID / listing_id / goodsId).
   asin        String
   sku         String?
   capturedAt  DateTime     @db.Date
@@ -423,17 +427,20 @@ model StoreReviewSummary {
   @@schema("product")
 }
 
-/// Recensione cliente sulla scheda Amazon, per paese.
+/// Recensione o feedback cliente per listing e paese.
 model StoreCustomerReview {
   id           String       @id @default(cuid())
   channel      StoreChannel
   storeKey     String
   countryCode  String
+  /// Id listing del marketplace (ASIN / ItemID / listing_id / goodsId).
   asin         String
   sku          String?
-  /// Id Amazon (es. R3XXXX).
+  /// Id esterno (Amazon R3…, eBay FeedbackID, Etsy review id).
   externalId   String
   rating       Int
+  /// eBay: POSITIVE / NEUTRAL / NEGATIVE. Null sulle recensioni a stelle.
+  sentiment    String?
   title        String       @default("")
   body         String       @default("")
   author       String?
@@ -456,21 +463,24 @@ model StoreCustomerReview {
 }
 
 /// Snapshot giornaliero di titolo, bullet, descrizione e media per SKU × paese.
-/// Il cron/import popola queste righe: la UI legge da qui invece di richiamare Amazon.
+/// Il cron/import popola queste righe: la UI legge da qui invece di richiamare il marketplace.
 model StoreListingContentSnapshot {
   id          String       @id @default(cuid())
   channel     StoreChannel
   storeKey    String
   countryCode String
   sku         String
+  /// Id listing del marketplace (ASIN / ItemID / listing_id / goodsId).
   asin        String?
   capturedAt  DateTime     @db.Date
   title       String       @default("")
   description String       @default("")
-  /// Array JSON di stringhe (punti elenco).
+  /// Array JSON di stringhe (punti elenco Amazon, o vuoto sugli altri canali).
   bulletPoints Json
   /// Array JSON di URL immagine.
   productImages Json
+  /// Metadati qualità per eBay/Etsy/Temu (tag, specifics, listingId, conteggi foto).
+  qualityMeta Json?
   mainImageWidth  Int?
   mainImageHeight Int?
   hasVideo    Boolean      @default(false)

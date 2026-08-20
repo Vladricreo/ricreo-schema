@@ -1,0 +1,113 @@
+/// Hub listings crossplatform: presenza SKU, regole prezzo, ignore list, default pubblicazione.
+/// Schema Postgres `product`: di proprietà di Product Console.
+
+enum CrossplatformPriceAdjustmentType {
+  PERCENT
+  FIXED
+
+  @@schema("product")
+}
+
+/// Indice di presenza: una riga per SKU × canale × store (marketplace Amazon, eBay, …).
+model CrossplatformListingLink {
+  id          String       @id @default(cuid())
+  sku         String
+  channel     StoreChannel
+  /// Amazon: marketplaceId. eBay: EBAY_IT. Etsy: shopId. Temu: TEMU_EU.
+  storeKey    String
+  /// ISO 3166-1 alpha-2 quando noto (IT, DE, FR, …).
+  countryCode String?
+  /// ASIN / ItemID eBay / listingId Etsy / goodsId Temu.
+  externalId  String
+  /// skuId Temu, necessario per l'API di cambio prezzo.
+  temuSkuId   String?
+  title       String       @default("")
+  imageUrl    String?
+  price       Decimal?     @db.Decimal(12, 2)
+  currency    String?
+  status      String?
+  lastSyncedAt DateTime    @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([sku, channel, storeKey], map: "CrossplatformListingLink_sku_store")
+  @@index([channel, storeKey], map: "CrossplatformListingLink_channel")
+  @@index([sku], map: "CrossplatformListingLink_sku")
+  @@schema("product")
+}
+
+/// Delta prezzo rispetto all'offerta Amazon Italia (una riga per canale target).
+model CrossplatformPriceRule {
+  id               String                            @id @default(cuid())
+  targetChannel    StoreChannel
+  adjustmentType   CrossplatformPriceAdjustmentType
+  /// PERCENT: -20 = 20% in meno. FIXED: -5.00 = 5 EUR in meno.
+  adjustmentValue  Decimal                           @db.Decimal(12, 4)
+  isActive         Boolean                           @default(true)
+  createdAt        DateTime                          @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime                          @updatedAt @db.Timestamptz(6)
+
+  @@unique([targetChannel], map: "CrossplatformPriceRule_channel")
+  @@schema("product")
+}
+
+/// SKU esclusi dagli avvisi di pubblicazione crossplatform mancante.
+model CrossplatformIgnoredSku {
+  id        String   @id @default(cuid())
+  sku       String
+  reason    String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([sku], map: "CrossplatformIgnoredSku_sku")
+  @@schema("product")
+}
+
+/// Default venditore per precompilare il wizard di pubblicazione (singleton).
+model CrossplatformPublishDefaults {
+  id String @id @default("default")
+
+  ebaySite            String  @default("Italy")
+  ebayCategoryId      String  @default("")
+  ebayConditionId     String  @default("1000")
+  ebayPostalCode      String  @default("")
+  ebayCountry         String  @default("IT")
+  ebayCurrency        String  @default("EUR")
+  ebayDispatchTimeMax Int     @default(3)
+  ebayReturnsAccepted Boolean @default(true)
+  ebayReturnsWithin   String  @default("Days_30")
+  ebayShippingCost    Decimal @default(0) @db.Decimal(12, 2)
+  ebayShippingService String  @default("IT_PriorityShipping")
+  ebayVatPercent      Decimal @default(22) @db.Decimal(5, 2)
+
+  etsyWhoMade           String @default("someone_else")
+  etsyWhenMade          String @default("made_to_order")
+  etsyTaxonomyId        Int?
+  etsyShippingProfileId Int?
+  etsyReadinessStateId  Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// Job resumable per sincronizzare la presenza SKU sui marketplace.
+model CrossplatformSyncJob {
+  id           String            @id @default("default")
+  /// amazon | ebay | etsy | temu | done
+  phase        String            @default("amazon")
+  pageToken    String?
+  offset       Int               @default(0)
+  processed    Int               @default(0)
+  upserted     Int               @default(0)
+  status       StoreReportStatus @default(REQUESTED)
+  lastMessage  String?
+  errorMessage String?
+  importedAt   DateTime?         @db.Timestamptz(6)
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@index([status, updatedAt], map: "CrossplatformSyncJob_status")
+  @@schema("product")
+}
