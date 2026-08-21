@@ -1,0 +1,134 @@
+/// Origine di un task di miglioramento prodotto.
+enum ImprovementTaskSource {
+  NEGATIVE_REVIEWS
+  GENERAL_PRODUCT
+  OTHER
+
+  @@schema("product")
+}
+
+/// Stato di avanzamento di un task di miglioramento.
+enum ImprovementTaskStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@schema("product")
+}
+
+/// Tipo di evento registrato in un point in time.
+enum PointInTimeKind {
+  LISTING_CHANGE
+  PRODUCT_CHANGE
+  PHOTO_CHANGE
+  INFOGRAPHIC_CHANGE
+  CUSTOMER_REVIEW
+  SUPPLY_ISSUE
+  FBA_STOCK_ZERO
+  IMPROVEMENT_COMPLETED
+  OTHER
+
+  @@schema("product")
+}
+
+/// Oggetto a cui è agganciato il point in time.
+enum PointInTimeScope {
+  LISTING
+  STORE
+  ASIN
+  PRODUCT
+
+  @@schema("product")
+}
+
+/// Task di miglioramento su un prodotto inventario.
+/// Completando il task (progresso 100%) nasce un PointInTime.
+model ImprovementTask {
+  id     String @id @default(cuid())
+  /// UUID del Product in inventory (niente FK: inventory è read-only).
+  productId String @db.Uuid
+  title       String
+  description String @default("")
+  source      ImprovementTaskSource
+  status      ImprovementTaskStatus @default(OPEN)
+  /// 0–100. A 100 il task viene chiuso e nasce un point in time.
+  progressPercent Int @default(0)
+  /// Aree e note di miglioramento (es. geometria, foto, listing).
+  characteristics Json?
+  completedAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  assignees    ImprovementTaskAssignee[]
+  reviews      ImprovementTaskReview[]
+  pointsInTime PointInTime[]
+
+  @@index([productId])
+  @@index([status, updatedAt])
+  @@index([source])
+  @@schema("product")
+}
+
+/// Persona incaricata di un task di miglioramento.
+model ImprovementTaskAssignee {
+  id     String          @id @default(cuid())
+  taskId String
+  /// ID User in public.users (niente FK: public è condiviso).
+  userId Int
+  task   ImprovementTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([taskId, userId])
+  @@index([userId])
+  @@schema("product")
+}
+
+/// Recensione cliente (di solito negativa) da cui deriva il task.
+model ImprovementTaskReview {
+  id       String          @id @default(cuid())
+  taskId   String
+  /// ID StoreCustomerReview (niente FK per non accoppiare il sync recensioni).
+  reviewId String
+  task     ImprovementTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([taskId, reviewId])
+  @@index([reviewId])
+  @@schema("product")
+}
+
+/// Evento datato su listing, store, ASIN o prodotto (prima/dopo in `payload`).
+model PointInTime {
+  id          String           @id @default(cuid())
+  occurredAt  DateTime         @db.Timestamptz(6)
+  periodStart DateTime?        @db.Date
+  periodEnd   DateTime?        @db.Date
+  kind        PointInTimeKind
+  scope       PointInTimeScope
+  title       String
+  description String           @default("")
+  /// JSON: { changes: [{ field, label, before, after }], extra? }
+  payload     Json
+  destinationCountry String?
+  channel     StoreChannel?
+  storeKey    String?
+  asin        String?
+  sku         String?
+  listingId   String?
+  productId   String?          @db.Uuid
+  sourceTaskId String?
+  sourceTask   ImprovementTask? @relation(fields: [sourceTaskId], references: [id], onDelete: SetNull)
+  createdByUserId Int?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([occurredAt])
+  @@index([kind, occurredAt])
+  @@index([scope, occurredAt])
+  @@index([productId, occurredAt])
+  @@index([asin, occurredAt])
+  @@index([sku, occurredAt])
+  @@index([sourceTaskId])
+  @@schema("product")
+}
