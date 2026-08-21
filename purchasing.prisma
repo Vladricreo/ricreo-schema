@@ -37,6 +37,8 @@ model PurchaseOrderLine {
   itemId        String?  @db.Uuid
   productPartId String?  @db.Uuid
   quantity      Int
+  /// Se true, Generate non sovrascrive la quantità (bump manuale del buyer).
+  quantityLocked Boolean @default(false)
   /// MIGLIORIA: Decimal per prezzo riga
   pricePaid     Decimal? @db.Decimal(12, 2)
 
