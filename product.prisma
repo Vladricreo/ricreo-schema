@@ -852,6 +852,35 @@ model SalesMarginThreshold {
   @@schema("product")
 }
 
+/// Costo spedizione FBM di default, per paese di destinazione (unitario).
+/// Usato sugli ordini quando non c'è un'etichetta reale in inventory.Shipment.
+model ShippingPrice {
+  /// Codice ISO-2 (UK già normalizzato in GB).
+  countryCode String   @id @db.VarChar(2)
+  /// Costo corriere per un pezzo verso quel paese.
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("EUR") @db.VarChar(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// Media unitaria FBM da inventory.Shipment: ultimi 30 giorni se c'è storico,
+/// altrimenti tutte le spedizioni disponibili per quel paese.
+view VCountryShippingCost {
+  countryCode        String   @unique @map("country_code")
+  unitCost           Decimal  @map("unit_cost") @db.Decimal(12, 2)
+  shipmentCount      Int      @map("shipment_count")
+  windowDays         Int      @map("window_days")
+  usedLatestFallback Boolean  @map("used_latest_fallback")
+  sampleFrom         DateTime @map("sample_from") @db.Timestamptz(6)
+  sampleTo           DateTime @map("sample_to") @db.Timestamptz(6)
+
+  @@map("v_country_shipping_cost")
+  @@schema("product")
+}
+
 /// Pacco FBA dichiarato/misurato da Amazon per uno SKU, usato dal confronto packaging.
 model AmazonFbaPackageSnapshot {
   id            String @id @default(cuid())

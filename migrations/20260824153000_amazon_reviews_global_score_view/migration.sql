@@ -19,14 +19,14 @@ DROP INDEX IF EXISTS "product"."StoreCustomerReview_ext_key";
 CREATE UNIQUE INDEX "StoreCustomerReview_ext_key"
   ON "product"."StoreCustomerReview" ("channel", "externalId");
 
--- 2) Un riassunto Amazon per ASIN: tiene il count più alto, poi riallinea storeKey.
--- Prima si cancellano i duplicati, poi si aggiorna il keeper (evita unique violation).
+-- 2) Un riassunto Amazon per ASIN e giorno: tiene il count più alto,
+-- poi riallinea storeKey. Prima si cancellano i duplicati (evita unique violation).
 WITH ranked AS (
   SELECT
     id,
     ROW_NUMBER() OVER (
-      PARTITION BY upper(btrim(asin))
-      ORDER BY count DESC, "capturedAt" DESC, id
+      PARTITION BY upper(btrim(asin)), "capturedAt"
+      ORDER BY count DESC, id
     ) AS rn
   FROM "product"."StoreReviewSummary"
   WHERE channel = 'AMAZON'
@@ -48,6 +48,18 @@ SET
   "countryCode" = '',
   asin = upper(btrim(asin))
 WHERE channel = 'AMAZON';
+
+-- Placeholder a 0: se l'ASIN ha già un conteggio reale, il 0 non deve vincere.
+DELETE FROM "product"."StoreReviewSummary" s
+WHERE s.channel = 'AMAZON'
+  AND s.count = 0
+  AND EXISTS (
+    SELECT 1
+    FROM "product"."StoreReviewSummary" o
+    WHERE o.channel = 'AMAZON'
+      AND o.asin = s.asin
+      AND o.count > 0
+  );
 
 -- 3) Punteggio: recensioni agganciate all'ASIN (count più alto), non allo storefront
 DROP VIEW IF EXISTS "product"."v_listing_quality_score";
