@@ -522,12 +522,64 @@ model StoreListingContentSnapshot {
   @@schema("product")
 }
 
+/// Snapshot giornaliero dello stato Amazon (BUYABLE / DISCOVERABLE) per SKU × paese.
+/// Amazon non espone lo storico di inattività: lo ricostruiamo da queste osservazioni.
+model StoreListingActivitySnapshot {
+  id             String       @id @default(cuid())
+  channel        StoreChannel
+  storeKey       String
+  countryCode    String
+  sku            String
+  asin           String?
+  capturedAt     DateTime     @db.Date
+  /// Istante reale dell'osservazione (orario dell'import).
+  observedAt     DateTime     @db.Timestamptz(6)
+  isPublished    Boolean
+  isBuyable      Boolean
+  isDiscoverable Boolean
+  /// Stati Amazon grezzi (`BUYABLE`, `DISCOVERABLE`).
+  statuses       String[]     @default([])
+  quantity       Int?
+  /// `lastUpdatedDate` Amazon sul listing, se presente.
+  amazonUpdatedAt DateTime?   @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, capturedAt], map: "StoreListingActivity_day_key")
+  @@index([sku, storeKey, capturedAt], map: "StoreListingActivity_sku_date")
+  @@schema("product")
+}
+
+/// Periodo in cui il listing non era acquistabile in un paese.
+/// `endedAt` null = ancora inattivo al momento dell'ultima osservazione.
+model StoreListingInactivityPeriod {
+  id              String       @id @default(cuid())
+  channel         StoreChannel
+  storeKey        String
+  countryCode     String
+  sku             String
+  asin            String?
+  startedAt       DateTime     @db.Timestamptz(6)
+  endedAt         DateTime?    @db.Timestamptz(6)
+  /// NOT_BUYABLE | NOT_DISCOVERABLE | OUT_OF_STOCK | ABSENT
+  reason          String
+  statuses        String[]     @default([])
+  quantity        Int?
+  amazonUpdatedAt DateTime?    @db.Timestamptz(6)
+  createdAt       DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@index([channel, storeKey, sku, startedAt], map: "StoreListingInactivity_sku_start")
+  @@index([sku, storeKey, endedAt], map: "StoreListingInactivity_open")
+  @@schema("product")
+}
+
 /// Job resumable per l'import giornaliero qualità (bottone UI o cron).
 model StoreQualityDailyJob {
   id                 String            @id @default(cuid())
   channel            StoreChannel
   capturedAt         DateTime          @db.Date
-  /// listings | extras | reviews | done
+  /// listings | extras | reviews | refresh | refresh_reviews | done
   phase              String            @default("listings")
   nextAmazonPage     Int               @default(1)
   /// Offset nella coda SKU extra (inventory / vendite / snapshot precedenti).
@@ -852,12 +904,66 @@ model SalesMarginThreshold {
   @@schema("product")
 }
 
-/// Costo spedizione FBM di default, per paese di destinazione (unitario).
+/// Snapshot prezzo listing e commissioni Amazon per SKU × marketplace (pagina Profitto).
+/// FBA: referral, digital services e pick&pack da Product Fees (salvati qui).
+/// FBM: le commissioni Amazon restano qui; il costo corriere arriva da ShippingPrice.
+model ListingProfitEstimate {
+  id         String       @id @default(cuid())
+  channel    StoreChannel
+  storeKey   String
+  countryCode String      @db.VarChar(2)
+  sku        String
+  asin       String?
+  /// FBA | FBM
+  fulfillment String?
+  listingPrice      Decimal? @db.Decimal(12, 2)
+  /// Spedizione addebitata al cliente (offerta Amazon), se presente.
+  customerShipping  Decimal? @db.Decimal(12, 2)
+  currency          String   @default("EUR") @db.VarChar(3)
+  referralFee         Decimal? @db.Decimal(12, 4)
+  digitalServicesFee  Decimal? @db.Decimal(12, 4)
+  fbaFee              Decimal? @db.Decimal(12, 4)
+  importedAt DateTime @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku], map: "ListingProfitEstimate_sku_store")
+  @@index([sku], map: "ListingProfitEstimate_sku")
+  @@index([channel, sku], map: "ListingProfitEstimate_channel_sku")
+  @@schema("product")
+}
+
+/// Job resumable per importare prezzi listing e commissioni Product Fees.
+model ListingProfitImportJob {
+  id               String            @id @default(cuid())
+  channel          StoreChannel
+  capturedAt       DateTime          @db.Date
+  /// Indice del marketplace seller in elaborazione.
+  marketplaceIndex Int               @default(0)
+  nextAmazonPage   Int               @default(1)
+  extraOffset      Int               @default(0)
+  /// listings | extras | done
+  phase            String            @default("listings")
+  processed        Int               @default(0)
+  total            Int               @default(0)
+  status           StoreReportStatus @default(REQUESTED)
+  lastMessage      String?
+  errorMessage     String?
+  importedAt       DateTime?         @db.Timestamptz(6)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, capturedAt], map: "ListingProfitImportJob_day")
+  @@index([status, updatedAt], map: "ListingProfitImportJob_status")
+  @@schema("product")
+}
+
+/// Costo spedizione FBM di default, per paese di destinazione (per riga ordine).
 /// Usato sugli ordini quando non c'è un'etichetta reale in inventory.Shipment.
 model ShippingPrice {
   /// Codice ISO-2 (UK già normalizzato in GB).
   countryCode String   @id @db.VarChar(2)
-  /// Costo corriere per un pezzo verso quel paese.
+  /// Costo corriere per una riga verso quel paese (non si moltiplica per i pezzi).
   amount      Decimal  @db.Decimal(12, 2)
   currency    String   @default("EUR") @db.VarChar(3)
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
@@ -976,6 +1082,122 @@ model AmazonFbaPackageSyncJob {
 
   @@unique([marketplaceId], map: "AmazonFbaPackageSyncJob_marketplace")
   @@index([status, updatedAt], map: "AmazonFbaPackageSyncJob_status")
+  @@schema("product")
+}
+
+/// Stato di un reclamo per unità FBA non ricevute.
+enum FbaMissingUnitClaimStatus {
+  IN_PROGRESS
+  WAITING
+  REFUNDED
+
+  @@schema("product")
+}
+
+/// Snapshot spedito/ricevuto per MSKU × spedizione inbound (SP-API v0 getShipmentItems).
+/// Vive in `product` perché inventory.FbaShipmentReceiptItem è di un'altra app.
+model FbaInboundReceiptItem {
+  id String @id @default(cuid())
+  /// UUID di inventory.FbaShipment (solo riferimento, no FK cross-schema).
+  shipmentId String @db.Uuid
+  amazonShipmentId String?
+  shipmentConfirmationId String
+  marketplaceId String
+  sku String
+  fnsku String?
+  asin String?
+  title String @default("")
+  quantityShipped Int @default(0)
+  quantityReceived Int @default(0)
+  /// Data spedizione (createdAt piano/spedizione o readyToShip Amazon).
+  shippedAt DateTime? @db.Timestamptz(6)
+  syncedAt DateTime @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([shipmentConfirmationId, sku], map: "FbaInboundReceiptItem_ship_sku")
+  @@index([sku], map: "FbaInboundReceiptItem_sku")
+  @@index([asin], map: "FbaInboundReceiptItem_asin")
+  @@index([shipmentId], map: "FbaInboundReceiptItem_shipment")
+  @@schema("product")
+}
+
+/// Job a passi per sincronizzare le ricevute inbound da SP-API.
+model FbaInboundReceiptSyncJob {
+  id           String            @id @default("default")
+  cursor       Int               @default(0)
+  processed    Int               @default(0)
+  total        Int               @default(0)
+  status       StoreReportStatus @default(REQUESTED)
+  lastMessage  String?
+  importedAt   DateTime?         @db.Timestamptz(6)
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// SKU esclusi dal reclamo (di solito 1–2 unità, non vale la richiesta).
+model FbaMissingUnitIgnore {
+  id        String   @id @default(cuid())
+  sku       String
+  reason    String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([sku], map: "FbaMissingUnitIgnore_sku")
+  @@schema("product")
+}
+
+/// Reclamo rimborso per unità mancanti su una spedizione inbound.
+model FbaMissingUnitClaim {
+  id String @id @default(cuid())
+  sku String
+  asin String?
+  fnsku String?
+  sellerId String
+  status FbaMissingUnitClaimStatus @default(IN_PROGRESS)
+  shipmentId String? @db.Uuid
+  shipmentConfirmationId String
+  amazonShipmentId String?
+  quantityShipped Int @default(0)
+  quantityReceived Int @default(0)
+  quantityMissing Int @default(0)
+  caseId String?
+  caseOpenedAt DateTime? @db.Timestamptz(6)
+  refundedQuantity Int?
+  refundedAt DateTime? @db.Timestamptz(6)
+  excelGeneratedAt DateTime? @db.Timestamptz(6)
+  lastMessageSyncAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  messages FbaMissingUnitClaimMessage[]
+
+  @@unique([sku, shipmentConfirmationId], map: "FbaMissingUnitClaim_sku_ship")
+  @@index([sku], map: "FbaMissingUnitClaim_sku")
+  @@index([status], map: "FbaMissingUnitClaim_status")
+  @@index([caseId], map: "FbaMissingUnitClaim_case")
+  @@schema("product")
+}
+
+/// Evento/messaggio di un case Amazon (rimborsi SP-API o nota operatore).
+model FbaMissingUnitClaimMessage {
+  id String @id @default(cuid())
+  claimId String
+  claim FbaMissingUnitClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  caseId String?
+  /// reimbursement | receipt | manual | system
+  source String
+  /// inbound | outbound | system
+  direction String @default("system")
+  title String?
+  body String
+  occurredAt DateTime @db.Timestamptz(6)
+  raw Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([claimId, occurredAt], map: "FbaMissingUnitClaimMessage_claim")
   @@schema("product")
 }
 
