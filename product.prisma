@@ -287,6 +287,21 @@ model StoreOrderLine {
   @@schema("product")
 }
 
+/// Alias paese libero (Etsy e altri) → ISO-2, per IVA di destinazione.
+model StoreCountryAlias {
+  id String @id @default(cuid())
+  /// Stringa grezza normalizzata (trim + lower), unica.
+  rawName String
+  /// Codice ISO-3166-1 alpha-2 (GB, non UK).
+  countryCode String @db.Char(2)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([rawName])
+  @@index([countryCode])
+  @@schema("product")
+}
+
 /// Pick&pack FBA reale da Finances API (non Fee Preview).
 /// Una riga per ordine + item; l'analytics la somma sul periodo.
 model StoreOrderFee {
@@ -403,9 +418,9 @@ model StoreBsrSnapshot {
   @@schema("product")
 }
 
-/// Media stelle (o feedback eBay) e conteggio per listing e paese (snapshot giornaliero).
+/// Media stelle (o feedback eBay) e conteggio per listing.
 /// `asin` è l'id listing del canale: ASIN Amazon, ItemID eBay, listing_id Etsy, goodsId Temu.
-/// Amazon: scrape scheda pubblica. Etsy: getReviewsByShop. eBay: GetFeedback (positivo/neutro/negativo).
+/// Amazon: una riga prodotto (`storeKey` = AMAZON), non per paese. Etsy/eBay restano per store.
 model StoreReviewSummary {
   id          String       @id @default(cuid())
   channel     StoreChannel
@@ -427,7 +442,7 @@ model StoreReviewSummary {
   @@schema("product")
 }
 
-/// Recensione o feedback cliente per listing e paese.
+/// Recensione o feedback cliente. Amazon: una riga per `externalId` (prodotto), non per paese.
 model StoreCustomerReview {
   id           String       @id @default(cuid())
   channel      StoreChannel
@@ -456,7 +471,7 @@ model StoreCustomerReview {
   capturedAt   DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
 
-  @@unique([channel, storeKey, externalId], map: "StoreCustomerReview_ext_key")
+  @@unique([channel, externalId], map: "StoreCustomerReview_ext_key")
   @@index([asin, storeKey, capturedAt], map: "StoreCustomerReview_asin_store")
   @@index([viewed, reviewedAt], map: "StoreCustomerReview_viewed_date")
   @@schema("product")
@@ -819,6 +834,20 @@ model ListingLaunchThreshold {
   winnerMinRevenue   Decimal  @default(500) @db.Decimal(12, 2)
   createdAt          DateTime @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// Soglie colore del margine in analytics vendite (una sola riga, id = default).
+/// Rosso se margine < lowMaxPercent; verde se >= goodMinPercent; arancione in mezzo.
+model SalesMarginThreshold {
+  id             String   @id @default("default")
+  /// Sotto questa % il margine è basso (rosso).
+  lowMaxPercent  Decimal  @default(30) @db.Decimal(5, 2)
+  /// Da questa % in su il margine è buono (verde).
+  goodMinPercent Decimal  @default(45) @db.Decimal(5, 2)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
 
   @@schema("product")
 }
