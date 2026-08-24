@@ -87,6 +87,8 @@ model FilamentProfile {
   warnDryOpenedSpoolBeforePrint Boolean              @default(false) // Avvisa se una bobina aperta va asciugata prima della stampa
   requireHeatedAmsForPrint      Boolean              @default(false) // Usa dryingTemp per distinguere AMS 2 Pro (<=65°C) e AMS HT (<=85°C)
   requireAmsHtForPrint          Boolean              @default(false) // Vincolo esplicito: stampa esclusivamente tramite AMS HT
+  // Traccia/asciuga in AMS HT, ma carico e stampa usano la spool esterna del nozzle del file (come TPU, senza forzare sinistra).
+  trackOnAmsHtPrintFromExternal Boolean              @default(false)
 
   // Riscaldamento mantenuto durante la stampa (non e' un ciclo di asciugatura):
   // il backend lo avvia allo start sull'unita' che alimenta la stampa.
