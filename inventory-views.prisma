@@ -894,7 +894,6 @@ view VProductPricingSummary {
   energyCostPerKwh          Decimal  @map("energy_cost_per_kwh") @db.Decimal(12, 4)
   avgRunPowerW              Decimal  @map("avg_run_power_w") @db.Decimal(12, 3)
   peakPowerW                Decimal  @map("peak_power_w") @db.Decimal(12, 3)
-  shippingCost              Decimal  @map("shipping_cost") @db.Decimal(12, 2)
   totalCost                 Decimal  @map("total_cost") @db.Decimal(12, 4)
   suggestedPrice            Decimal  @map("suggested_price") @db.Decimal(12, 2)
 
