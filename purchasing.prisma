@@ -113,7 +113,8 @@ model Supplier {
   accentColor String?
   /// Fornitore attivo: se false è archiviato e non proposto nei form.
   isActive Boolean @default(true)
-  /// Payload JSON per integrazioni API (mapping, header extra, webhook).
+  /// Payload JSON per integrazioni API (mapping, header extra, webhook)
+  /// e per l'esportazione automatica ordini (`orderExport`: CSV codice+quantità).
   apiPayload Json?
   apiToken    String?
   apiKey      String?
