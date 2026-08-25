@@ -66,6 +66,13 @@ model User {
   /// Preferenze notifiche Print Farm per questo utente.
   printFarmNotificationPreferences PrintFarmNotificationPreference[]
 
+  /// Notifiche Product Console create da questo utente (audit/actor).
+  consoleNotificationsCreated ConsoleNotification[] @relation("ConsoleNotificationCreatedBy")
+  /// Stato inbox Product Console per questo utente.
+  consoleNotificationRecipients ConsoleNotificationRecipient[]
+  /// Preferenze inbox Product Console per questo utente.
+  consoleNotificationPreferences ConsoleNotificationPreference[]
+
   /// Override di spec approvati da questo utente (audit).
   approvedItemSpecOverrides ItemSpecOverride[] @relation("ApprovedItemSpecOverrides")
 

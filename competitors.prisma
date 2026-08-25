@@ -55,9 +55,10 @@ model Competitor {
   createdAt DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt DateTime            @updatedAt @db.Timestamptz(6)
 
-  channels CompetitorChannel[]
-  revenues CompetitorRevenueYear[]
-  products CompetitorProduct[]
+  channels             CompetitorChannel[]
+  revenues             CompetitorRevenueYear[]
+  products             CompetitorProduct[]
+  consoleNotifications ConsoleNotification[]
 
   @@index([status])
   @@index([name])
@@ -151,6 +152,7 @@ model CompetitorProduct {
   reviewSummaries        CompetitorReviewSummary[]
   reviews                CompetitorCustomerReview[]
   fulfillmentSnapshots   CompetitorFulfillmentSnapshot[]
+  consoleNotifications   ConsoleNotification[]
 
   @@unique([competitorChannelId, identityKey])
   @@index([competitorId, status])
@@ -523,7 +525,8 @@ model CompetitorCustomerReview {
   createdAt         DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
 
-  product CompetitorProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product              CompetitorProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  consoleNotifications ConsoleNotification[]
 
   @@unique([productId, marketplaceKey, externalId], map: "CompetitorCustomerReview_ext_key")
   @@index([productId, reviewedAt], map: "CompetitorCustomerReview_product_date")

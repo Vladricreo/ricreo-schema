@@ -1,0 +1,211 @@
+/// Inbox di Product Console: solo schema `product`.
+/// Non usa `public.Notification` (condiviso con altre app) né le tabelle Print Farm.
+
+/// Severità per UI, filtri e preferenze.
+enum ConsoleNotificationSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+
+  @@schema("product")
+}
+
+/// Argomento di dominio: ogni valore ha deep-link diversi.
+enum ConsoleNotificationTopic {
+  SYSTEM
+  QUALITY_REVIEW
+  QUALITY_LISTING
+  COMPETITOR
+  COMPETITOR_LISTING
+  COMPETITOR_REVIEW
+  AMAZON_CLAIM
+  PROFIT
+  LISTING
+  PRODUCT
+  SALES
+  FBA_INVENTORY
+  IMPROVEMENT
+  CROSSPLATFORM
+  MESSAGING
+
+  @@schema("product")
+}
+
+/// Tipo di entità collegata (riga in ConsoleNotificationLink).
+enum ConsoleNotificationEntityKind {
+  LISTING
+  PRODUCT
+  REVIEW
+  INACTIVITY_PERIOD
+  COMPETITOR
+  COMPETITOR_LISTING
+  COMPETITOR_REVIEW
+  AMAZON_CLAIM
+  PROFIT_ESTIMATE
+  IMPROVEMENT_TASK
+  POINT_IN_TIME
+  SALES_ORDER
+  FBA_INVENTORY
+  CROSSPLATFORM_LINK
+
+  @@schema("product")
+}
+
+/// Notifica persistita di Product Console (contenuto + anteprima + FK tipizzate).
+/// I collegamenti extra (listing + recensione + prodotto nello stesso evento)
+/// stanno in `ConsoleNotificationLink`.
+model ConsoleNotification {
+  id String @id @default(cuid())
+
+  topic    ConsoleNotificationTopic
+  severity ConsoleNotificationSeverity @default(INFO)
+
+  title String
+  body  String?
+
+  /// Deep-link principale (path interno dashboard).
+  url String?
+
+  /// Anteprima card: foto listing/prodotto, paese, stelle, autore.
+  imageUrl    String?
+  countryCode String?
+  countryName String?
+  channel     StoreChannel?
+  storeKey    String?
+  sku         String?
+  asin        String?
+  marketplaceId String?
+  /// ItemID eBay / listing_id Etsy / goodsId Temu quando diverso da ASIN.
+  listingId   String?
+  rating      Int?
+  author      String?
+
+  /// UUID `inventory.Product` (niente FK: inventory è read-only).
+  inventoryProductId String? @db.Uuid
+
+  reviewId             String?
+  inactivityPeriodId   String?
+  competitorId         String?
+  competitorProductId  String?
+  competitorReviewId   String?
+  claimId              String?
+  profitEstimateId     String?
+  improvementTaskId    String?
+  crossplatformLinkId  String?
+  pointInTimeId        String?
+
+  review            StoreCustomerReview?           @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+  inactivityPeriod  StoreListingInactivityPeriod?  @relation(fields: [inactivityPeriodId], references: [id], onDelete: SetNull)
+  competitor        Competitor?                    @relation(fields: [competitorId], references: [id], onDelete: SetNull)
+  competitorProduct CompetitorProduct?             @relation(fields: [competitorProductId], references: [id], onDelete: SetNull)
+  competitorReview  CompetitorCustomerReview?      @relation(fields: [competitorReviewId], references: [id], onDelete: SetNull)
+  claim             FbaMissingUnitClaim?           @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  profitEstimate    ListingProfitEstimate?         @relation(fields: [profitEstimateId], references: [id], onDelete: SetNull)
+  improvementTask   ImprovementTask?               @relation(fields: [improvementTaskId], references: [id], onDelete: SetNull)
+  crossplatformLink CrossplatformListingLink?      @relation(fields: [crossplatformLinkId], references: [id], onDelete: SetNull)
+  pointInTime       PointInTime?                   @relation(fields: [pointInTimeId], references: [id], onDelete: SetNull)
+
+  createdByUserId Int?
+  createdBy       User? @relation("ConsoleNotificationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Payload libero (testo recensione, motivo inattività, diff, …).
+  data Json?
+
+  /// Idempotenza: stessa recensione / stesso periodo inattivo = una sola riga.
+  dedupeKey String? @unique
+
+  expiresAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  recipients ConsoleNotificationRecipient[]
+  links      ConsoleNotificationLink[]
+
+  @@index([topic])
+  @@index([severity])
+  @@index([createdAt(sort: Desc)])
+  @@index([createdByUserId])
+  @@index([expiresAt])
+  @@index([channel, sku])
+  @@index([asin])
+  @@index([inventoryProductId])
+  @@schema("product")
+}
+
+/// Collegamento tipizzato a un'entità Product Console (o prodotto inventario via id).
+/// Una notifica può avere più link: recensione + listing + prodotto + concorrente.
+model ConsoleNotificationLink {
+  id             String @id @default(cuid())
+  notificationId String
+  notification   ConsoleNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  kind     ConsoleNotificationEntityKind
+  entityId String
+  /// Se true è il link su cui clicca la card.
+  isPrimary Boolean @default(false)
+
+  label    String?
+  url      String?
+  imageUrl String?
+
+  channel       StoreChannel?
+  storeKey      String?
+  sku           String?
+  asin          String?
+  marketplaceId String?
+  countryCode   String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([notificationId])
+  @@index([kind, entityId])
+  @@schema("product")
+}
+
+/// Stato per-utente (letto / archiviato). Broadcast: una riga per ogni utente attivo.
+model ConsoleNotificationRecipient {
+  id String @id @default(cuid())
+
+  notificationId String
+  notification   ConsoleNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  isRead     Boolean   @default(false)
+  readAt     DateTime? @db.Timestamptz(6)
+  archivedAt DateTime? @db.Timestamptz(6)
+  deliveredAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([notificationId, userId])
+  @@index([userId, isRead])
+  @@index([userId, archivedAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([notificationId])
+  @@schema("product")
+}
+
+/// Preferenze inbox Product Console (opt-in/out per argomento).
+model ConsoleNotificationPreference {
+  id String @id @default(cuid())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  topic     ConsoleNotificationTopic
+  enabled   Boolean @default(true)
+  minSeverity ConsoleNotificationSeverity @default(INFO)
+  inApp     Boolean @default(true)
+  email     Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, topic])
+  @@index([userId])
+  @@schema("product")
+}

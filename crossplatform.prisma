@@ -30,6 +30,8 @@ model CrossplatformListingLink {
   createdAt   DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
 
+  consoleNotifications ConsoleNotification[]
+
   @@unique([sku, channel, storeKey], map: "CrossplatformListingLink_sku_store")
   @@index([channel, storeKey], map: "CrossplatformListingLink_channel")
   @@index([sku], map: "CrossplatformListingLink_sku")

@@ -60,9 +60,10 @@ model ImprovementTask {
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
 
-  assignees    ImprovementTaskAssignee[]
-  reviews      ImprovementTaskReview[]
-  pointsInTime PointInTime[]
+  assignees            ImprovementTaskAssignee[]
+  reviews              ImprovementTaskReview[]
+  pointsInTime         PointInTime[]
+  consoleNotifications ConsoleNotification[]
 
   @@index([productId])
   @@index([status, updatedAt])
@@ -122,6 +123,7 @@ model PointInTime {
   createdByUserId Int?
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  consoleNotifications ConsoleNotification[]
 
   @@index([occurredAt])
   @@index([kind, occurredAt])

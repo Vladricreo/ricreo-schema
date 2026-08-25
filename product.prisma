@@ -471,6 +471,8 @@ model StoreCustomerReview {
   capturedAt   DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
 
+  consoleNotifications ConsoleNotification[]
+
   @@unique([channel, externalId], map: "StoreCustomerReview_ext_key")
   @@index([asin, storeKey, capturedAt], map: "StoreCustomerReview_asin_store")
   @@index([viewed, reviewedAt], map: "StoreCustomerReview_viewed_date")
@@ -568,6 +570,8 @@ model StoreListingInactivityPeriod {
   amazonUpdatedAt DateTime?    @db.Timestamptz(6)
   createdAt       DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime     @updatedAt @db.Timestamptz(6)
+
+  consoleNotifications ConsoleNotification[]
 
   @@index([channel, storeKey, sku, startedAt], map: "StoreListingInactivity_sku_start")
   @@index([sku, storeKey, endedAt], map: "StoreListingInactivity_open")
@@ -927,6 +931,8 @@ model ListingProfitEstimate {
   createdAt  DateTime @default(now()) @db.Timestamptz(6)
   updatedAt  DateTime @updatedAt @db.Timestamptz(6)
 
+  consoleNotifications ConsoleNotification[]
+
   @@unique([channel, storeKey, sku], map: "ListingProfitEstimate_sku_store")
   @@index([sku], map: "ListingProfitEstimate_sku")
   @@index([channel, sku], map: "ListingProfitEstimate_channel_sku")
@@ -1172,7 +1178,8 @@ model FbaMissingUnitClaim {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  messages FbaMissingUnitClaimMessage[]
+  messages             FbaMissingUnitClaimMessage[]
+  consoleNotifications ConsoleNotification[]
 
   @@unique([sku, shipmentConfirmationId], map: "FbaMissingUnitClaim_sku_ship")
   @@index([sku], map: "FbaMissingUnitClaim_sku")
