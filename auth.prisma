@@ -82,6 +82,9 @@ model User {
   /// Resi creati da questo utente (audit).
   customerReturns CustomerReturn[]
 
+  /// Storico riempimenti odette segnati da questo operatore.
+  odetteFillHistories OdetteFillHistory[]
+
   @@index([isActive]) /// Indice pratico per filtri frequenti
   @@schema("public") ///  la tabella degli utenti
 }

@@ -344,8 +344,10 @@ model ProductPart {
   /// Distinta base (BOM) della parte: materiali e grammi per singola parte.
   materialBreakdown        ProductPartMaterial[]
 
-  OdetteContent OdetteContent[]
-  pickingLines  PickingLine[]
+  OdetteContent       OdetteContent[]
+  pickingLines        PickingLine[]
+  /// Snapshot di riempimento odette in cui questa parte era il contenuto principale
+  odetteFillHistories OdetteFillHistory[]
 
   // Relazioni Print Farm
   projectParts        ProjectPart[]
@@ -711,8 +713,10 @@ model Category {
   name               String
   associatedItemType ItemType
   items              Item[]
-  odetteTypes        OdetteType[]
-  warehouseRows      WarehouseRow[]
+  odetteTypes         OdetteType[]
+  warehouseRows       WarehouseRow[]
+  /// Storico riempimenti odette filtrabili per questa categoria dimensionale
+  odetteFillHistories OdetteFillHistory[]
 
   /// Stampanti che preferiscono questa categoria materiale (solo per ItemType.MATERIAL)
   printerPreferences PrinterPreferredMaterialCategory[]

@@ -375,6 +375,9 @@ model Odette {
   /// Log di pulizia/svuotamento
   cleaningLogs OdetteCleaningLog[]
 
+  /// Storico riempimenti (snapshot pezzi quando diventa FULL a DB)
+  fillHistories OdetteFillHistory[]
+
   /// Metadati prenotazione contenitore (per job di produzione)
   reservedLotId String?        @db.Uuid
   reservedLot   ProductionLot? @relation(fields: [reservedLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
@@ -545,6 +548,52 @@ model OdetteCleaningLog {
   @@schema("inventory")
 }
 
+/// Snapshot di riempimento: quanti pezzi c'erano nell'odette quando è diventata FULL a DB.
+/// Si registra dopo lo scarico (non al click "Segna piena"), così il conteggio include
+/// gli ultimi pezzi ancora scaricati nella stessa odette.
+model OdetteFillHistory {
+  id String @id @default(uuid()) @db.Uuid
+
+  odetteId String @db.Uuid
+  odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Codice odette al momento del riempimento (l'odette può essere riusata)
+  odetteCode String
+
+  odetteTypeId   String?     @db.Uuid
+  odetteType     OdetteType? @relation(fields: [odetteTypeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  odetteTypeName String?
+
+  /// Categoria dimensionale del tipo (es. S, M, L) per filtrare lo storico capienza
+  categoryId   String?   @db.Uuid
+  category     Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  categoryName String?
+
+  /// Pezzi presenti nell'odette dopo lo scarico, quando diventa FULL a DB
+  pieceCount Int
+
+  /// Parte principale presente (la riga con più pezzi), utile per capire "quanti ce ne stanno"
+  partId   String?      @db.Uuid
+  part     ProductPart? @relation(fields: [partId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  partName String?
+
+  markedFullAt       DateTime @default(now()) @db.Timestamptz(6)
+  markedFullByUserId Int?
+  markedFullBy       User?    @relation(fields: [markedFullByUserId], references: [id], onDelete: SetNull)
+
+  /// HARVEST = dopo scarico; MANUAL = cambio stato da gestione odette; CAPACITY = capienza raggiunta
+  source String @default("HARVEST")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([categoryId, markedFullAt])
+  @@index([odetteTypeId, markedFullAt])
+  @@index([odetteId])
+  @@index([markedFullByUserId])
+  @@index([markedFullAt])
+  @@schema("inventory")
+}
+
 /// Definisce un tipo di odette con dimensioni/capacità e vincoli d'uso.
 model OdetteType {
   id                String        @id @default(uuid()) @db.Uuid
@@ -571,6 +620,8 @@ model OdetteType {
   stackable         Boolean       @default(true)
   /// Odettes appartenenti a questo tipo
   odettes           Odette[]
+  /// Storico riempimenti registrati su odette di questo tipo
+  fillHistories     OdetteFillHistory[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
