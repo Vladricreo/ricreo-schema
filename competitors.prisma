@@ -58,6 +58,7 @@ model Competitor {
   channels             CompetitorChannel[]
   revenues             CompetitorRevenueYear[]
   products             CompetitorProduct[]
+  storeResearches      CompetitorStoreResearch[]
   consoleNotifications ConsoleNotification[]
 
   @@index([status])
@@ -87,6 +88,24 @@ model CompetitorChannel {
 
   @@unique([competitorId, channel, storeId])
   @@index([channel, storeId])
+  @@schema("product")
+}
+
+/// Ultima ricerca ChatGPT di uno store su un marketplace non ancora in anagrafica.
+model CompetitorStoreResearch {
+  id           String       @id @default(cuid())
+  competitorId String
+  channel      StoreChannel
+  /// Store nuovi proposti (0 = nessun risultato).
+  foundCount   Int
+  searchedAt   DateTime     @db.Timestamptz(6)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@unique([competitorId, channel])
+  @@index([competitorId, searchedAt])
   @@schema("product")
 }
 
@@ -340,7 +359,7 @@ model OurListingMatchSource {
   @@schema("product")
 }
 
-/// Cache matching: embedding titolo OpenAI + hash foto locale (niente API immagini).
+/// Cache matching: embedding titolo OpenAI + hash foto locale + caption vision.
 model ListingMatchFeature {
   id              String           @id @default(cuid())
   side            ListingMatchSide
@@ -352,10 +371,10 @@ model ListingMatchFeature {
   imageUrl        String?
   /// Copia WebP nel bucket inventory (`/files/competitors/match/...`).
   storedImagePath String?
-  /// dHash 16×16 (hex) calcolato con sharp, senza API esterne.
+  /// Fingerprint v3: dHash + pHash + colori + silhouette, calcolato con sharp.
   imageHash       String?
   titleEmbedding  Json?
-  /// Legacy Jina: non più scritto. Si può ignorare.
+  /// Caption vision + embedding testuale (`{ v, caption, vec }`). Stesso oggetto, foto diverse.
   imageEmbedding  Json?
   computedAt      DateTime         @db.Timestamptz(6)
   createdAt       DateTime         @default(now()) @db.Timestamptz(6)
