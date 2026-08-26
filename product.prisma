@@ -894,6 +894,22 @@ model ListingLaunchThreshold {
   @@schema("product")
 }
 
+/// Commissioni di vendita eBay / Etsy / Temu (una sola riga, id = default).
+/// Percentuali in punti (15 = 15%). Quota fissa in EUR.
+model ChannelSaleFeeSetting {
+  id           String   @id @default("default")
+  ebayPercent  Decimal  @default(12.8) @db.Decimal(5, 2)
+  ebayFixedEur Decimal  @default(0.35) @db.Decimal(8, 2)
+  etsyPercent  Decimal  @default(10.5) @db.Decimal(5, 2)
+  etsyFixedEur Decimal  @default(0.30) @db.Decimal(8, 2)
+  temuPercent  Decimal  @default(15) @db.Decimal(5, 2)
+  temuFixedEur Decimal  @default(0) @db.Decimal(8, 2)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
 /// Soglie colore del margine in analytics vendite (una sola riga, id = default).
 /// Rosso se margine < lowMaxPercent; verde se >= goodMinPercent; arancione in mezzo.
 model SalesMarginThreshold {
