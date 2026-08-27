@@ -546,6 +546,10 @@ model Printer {
   assignmentDryingPlans  AssignmentDryingPlan[]     @relation("DryingPlanPrinter")
   /// Cicli di asciugatura bobina (manuali o avviati con le stampe).
   spoolDryingSessions    SpoolDryingSession[]       @relation("PrinterSpoolDryingSessions")
+  /// Bozze scarico precompilate (UI, TV corridoio, voce).
+  harvestDrafts          HarvestDraft[]
+  /// Bozze swap/runout precompilate (preparazione + voce).
+  spoolSwapDrafts        SpoolSwapDraft[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -1093,6 +1097,8 @@ model PrinterAssignment {
 
   /// Operazioni di raccolta pezzi associate a questa assegnazione
   harvests PrinterHarvest[]
+  /// Bozza scarico corrente (una per assignment attivo).
+  harvestDraft HarvestDraft?
 
   /// Righe contenuto odette associate (opzionale, per scarico/unplanned).
   odetteContents OdetteContent[]
@@ -1994,11 +2000,167 @@ model CorridorMonitor {
   activeMode  String @default("default")
   /// Overlay odette/posizione scelti in bulk harvest (chiave: printerId o assignmentId).
   harvestPlan Json?
+  /// Overlay vocale corrente (trascritto, azione, esito, conferma pendente).
+  voiceOverlay Json?
   /// Ultimo click su Proietta.
   projectedAt DateTime? @db.Timestamptz(6)
+  /// Microfoni Raspberry associati a questo monitor.
+  voiceDevices VoiceDevice[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
+  @@schema("print-farm")
+}
+
+/// Bozza scarico precompilata: unica fonte di verità per lista, TV e voce.
+model HarvestDraft {
+  id String @id @default(uuid()) @db.Uuid
+
+  assignmentId String            @unique @db.Uuid
+  assignment   PrinterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  aisleCode String
+
+  partsAccepted Int
+  partsRejected Int @default(0)
+
+  odetteId String? @db.Uuid
+  odette   Odette? @relation(fields: [odetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// ASSIGNED | SUGGESTED | VOICE | MANUAL
+  odetteSource String @default("SUGGESTED")
+
+  targetLocationId String?            @db.Uuid
+  targetLocation   WarehouseLocation? @relation("HarvestDraftTargetLocation", fields: [targetLocationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  markOdetteFull Boolean @default(false)
+  rejectReason   String?
+  setMaintenance Boolean @default(false)
+  note           String?
+
+  assignmentUpdatedAt DateTime @db.Timestamptz(6)
+  computedSignature   String
+  /// DRAFT | CONFIRMED | STALE | CANCELLED
+  state               String   @default("DRAFT")
+  /// VOICE | UI | AUTO
+  lastTouchedBy       String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerId])
+  @@index([aisleCode, state])
+  @@index([odetteId])
+  @@schema("print-farm")
+}
+
+/// Bozza swap/runout: lista di prelievo, confermata in voce solo con tag.
+model SpoolSwapDraft {
+  id String @id @default(uuid()) @db.Uuid
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  aisleCode String
+  /// Chiave riga preparazione (slot/runout) per non collidere su dual-nozzle.
+  rowKey    String
+
+  /// RUNOUT | SWAP
+  trigger String @default("SWAP")
+
+  fromSpoolId String?        @db.Uuid
+  fromSpool   FilamentSpool? @relation("SpoolSwapDraftFrom", fields: [fromSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  toSpoolId   String?        @db.Uuid
+  toSpool     FilamentSpool? @relation("SpoolSwapDraftTo", fields: [toSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  toTagCode   String?
+
+  unloadTargetLocationId String?            @db.Uuid
+  unloadTargetLocation   WarehouseLocation? @relation("SpoolSwapDraftUnloadLocation", fields: [unloadTargetLocationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  computedSignature String
+  /// DRAFT | CONFIRMED | STALE | CANCELLED
+  state             String @default("DRAFT")
+  lastTouchedBy     String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerId, rowKey])
+  @@index([aisleCode, state])
+  @@schema("print-farm")
+}
+
+/// Microfono Raspberry per corridoio: token device e operatore predefinito.
+model VoiceDevice {
+  id      String @id @default(uuid()) @db.Uuid
+  name    String
+  aisleCode String
+  deviceToken String @unique
+  boundOperatorId Int?
+  boundOperator   User? @relation("VoiceDeviceBoundOperator", fields: [boundOperatorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  enabled     Boolean   @default(true)
+  lastSeenAt  DateTime? @db.Timestamptz(6)
+  corridorMonitorId String?          @db.Uuid
+  corridorMonitor   CorridorMonitor? @relation(fields: [corridorMonitorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  sessions VoiceSession[]
+  logs     VoiceCommandLog[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([aisleCode])
+  @@index([boundOperatorId])
+  @@schema("print-farm")
+}
+
+/// Turno vocale su un dispositivo (operatore + snapshot handle).
+model VoiceSession {
+  id         String      @id @default(uuid()) @db.Uuid
+  deviceId   String      @db.Uuid
+  device     VoiceDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  operatorId Int
+  operator   User        @relation("VoiceSessionOperator", fields: [operatorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  snapshot      Json     @default("{}")
+  turns         Json     @default("[]")
+  pendingIntent Json?
+  expiresAt     DateTime @db.Timestamptz(6)
+
+  logs VoiceCommandLog[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([deviceId, expiresAt])
+  @@index([operatorId])
+  @@schema("print-farm")
+}
+
+/// Log di un turno vocale: audit, idempotenza e tuning prompt.
+model VoiceCommandLog {
+  id              String        @id @default(uuid()) @db.Uuid
+  sessionId       String?       @db.Uuid
+  session         VoiceSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  deviceId        String        @db.Uuid
+  device          VoiceDevice   @relation(fields: [deviceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  operatorId      Int
+  operator        User          @relation("VoiceCommandLogOperator", fields: [operatorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  transcript      String
+  tool            String?
+  args            Json?
+  /// EXECUTED | REJECTED | FAILED | FOLLOWUP | DRY_RUN
+  status          String
+  errorMessage    String?
+  latencyMs       Int?
+  replyText       String?
+  idempotencyKey  String        @unique
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([deviceId, createdAt])
+  @@index([operatorId, createdAt])
+  @@index([status, createdAt])
   @@schema("print-farm")
 }

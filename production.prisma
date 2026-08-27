@@ -388,6 +388,8 @@ model Odette {
 
   /// Operazioni di raccolta pezzi in questa odette
   printerHarvests PrinterHarvest[]
+  /// Bozze scarico che puntano a questa odette.
+  harvestDrafts HarvestDraft[]
 
   createdAt DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt DateTime   @default(now()) @updatedAt @db.Timestamptz(6)
