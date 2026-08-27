@@ -253,6 +253,11 @@ model StoreOrderLine {
   orderItemId   String?
   purchaseDate  DateTime? @db.Timestamptz(6)
 
+  /// Username acquirente sul canale (eBay `BuyerUserID`). Serve a collegare
+  /// una conversazione di messaggistica all'ordine: eBay non espone l'order id
+  /// nei messaggi, solo l'inserzione e lo username.
+  buyerUsername String?
+
   /// Amazon: FBA / FBM. Null sugli altri canali.
   fulfillmentChannel String?
   salesChannel       String?
@@ -284,6 +289,7 @@ model StoreOrderLine {
   // Serve le finestre equal-time delle coorti di lancio (ASIN × data).
   @@index([channel, asin, purchaseDate], map: "StoreOrderLine_channel_asin_date")
   @@index([amazonOrderId])
+  @@index([channel, buyerUsername])
   @@schema("product")
 }
 
@@ -739,10 +745,10 @@ model StoreFinanceCursor {
 }
 
 /// Credenziali OAuth Gmail (Workspace) per leggere/rispondere ai messaggi Amazon inoltrati.
-/// La casella deve ricevere il forward del gruppo Google (o essere membro con consegna email).
+/// mailboxEmail è il gruppo/alias Amazon; OAuth avviene con un utente membro (GMAIL_OAUTH_EMAIL).
 model GmailOAuthCredential {
   id           String   @id @default(cuid())
-  /// Indirizzo della casella autorizzata (es. amazon@tuodominio.it).
+  /// Indirizzo del gruppo/alias (es. store-messages@tuodominio.it).
   mailboxEmail String
   accessToken  String
   refreshToken String
@@ -1238,5 +1244,26 @@ model EbayListingDescription {
 
   @@unique([listingId], map: "EbayListingDescription_listing")
   @@index([sku], map: "EbayListingDescription_sku")
+  @@schema("product")
+}
+
+/// Stato letto di una conversazione Amazon (inbox Gmail gruppo).
+/// Di default è da leggere: la riga nasce solo quando qualcuno segna letto o risponde.
+model AmazonBuyerConversationRead {
+  id                   String    @id @default(cuid())
+  /// Chiave raggruppamento acquirente (`buyer:…` / `name:…` / `thread:…`).
+  conversationId       String
+  isRead               Boolean   @default(true)
+  readAt               DateTime? @db.Timestamptz(6)
+  /// Utente autenticato che ha segnato letto o inviato la risposta.
+  readByUserId         Int?
+  readByName           String?
+  /// Ultimo inbound visto al momento della lettura: un nuovo inbound riapre "da leggere".
+  lastInboundMessageId String?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([conversationId], map: "AmazonBuyerConversationRead_conv")
+  @@index([isRead], map: "AmazonBuyerConversationRead_read")
   @@schema("product")
 }

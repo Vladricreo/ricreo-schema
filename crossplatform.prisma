@@ -65,6 +65,32 @@ model CrossplatformIgnoredSku {
   @@schema("product")
 }
 
+/// Store target esclusi da tutto l'hub: niente fetch live né avviso mancante.
+model CrossplatformExcludedStore {
+  id        String       @id @default(cuid())
+  channel   StoreChannel
+  reason    String?
+  createdAt DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel], map: "CrossplatformExcludedStore_channel")
+  @@schema("product")
+}
+
+/// Store escluso per un singolo SKU (niente avviso mancante su quel canale).
+model CrossplatformSkuStoreExclusion {
+  id        String       @id @default(cuid())
+  sku       String
+  channel   StoreChannel
+  reason    String?
+  createdAt DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([sku, channel], map: "CrossplatformSkuStoreExclusion_sku_channel")
+  @@index([sku], map: "CrossplatformSkuStoreExclusion_sku")
+  @@schema("product")
+}
+
 /// Default venditore per precompilare il wizard di pubblicazione (singleton).
 model CrossplatformPublishDefaults {
   id String @id @default("default")
@@ -84,9 +110,10 @@ model CrossplatformPublishDefaults {
 
   etsyWhoMade           String @default("someone_else")
   etsyWhenMade          String @default("made_to_order")
-  etsyTaxonomyId        Int?
-  etsyShippingProfileId Int?
-  etsyReadinessStateId  Int?
+  /// ID Etsy (shipping_profile_id / readiness_state_id) superano INTEGER Postgres.
+  etsyTaxonomyId        BigInt?
+  etsyShippingProfileId BigInt?
+  etsyReadinessStateId  BigInt?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
