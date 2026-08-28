@@ -85,6 +85,13 @@ model User {
   /// Storico riempimenti odette segnati da questo operatore.
   odetteFillHistories OdetteFillHistory[]
 
+  /// Microfoni di corridoio con questo operatore predefinito.
+  boundVoiceDevices VoiceDevice[] @relation("VoiceDeviceBoundOperator")
+  /// Sessioni vocali aperte da questo operatore.
+  voiceSessions     VoiceSession[] @relation("VoiceSessionOperator")
+  /// Comandi vocali attribuiti a questo operatore.
+  voiceCommandLogs  VoiceCommandLog[] @relation("VoiceCommandLogOperator")
+
   @@index([isActive]) /// Indice pratico per filtri frequenti
   @@schema("public") ///  la tabella degli utenti
 }

@@ -328,6 +328,10 @@ model WarehouseLocation {
 
   /// Tag fisiche assegnate a questa posizione (casa)
   spoolTags SpoolTag[] @relation("TagLocation")
+  /// Bozze scarico con destinazione in questa posizione.
+  harvestDrafts HarvestDraft[] @relation("HarvestDraftTargetLocation")
+  /// Bozze swap con scarico bobina verso questa posizione.
+  spoolSwapDrafts SpoolSwapDraft[] @relation("SpoolSwapDraftUnloadLocation")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

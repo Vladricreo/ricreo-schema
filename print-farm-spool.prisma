@@ -195,6 +195,10 @@ model FilamentSpool {
   assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanSpool")
   /// Cicli di asciugatura avviati sulla bobina (non legati a un assignment).
   dryingSessions        SpoolDryingSession[]   @relation("SpoolDryingSessions")
+  /// Bozze swap in cui questa bobina è quella da smontare.
+  swapDraftsFrom SpoolSwapDraft[] @relation("SpoolSwapDraftFrom")
+  /// Bozze swap in cui questa bobina è quella da montare.
+  swapDraftsTo   SpoolSwapDraft[] @relation("SpoolSwapDraftTo")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
