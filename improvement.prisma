@@ -17,6 +17,15 @@ enum ImprovementTaskStatus {
   @@schema("product")
 }
 
+/// Stato di un passaggio operativo del task.
+enum ImprovementTaskStepStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+
+  @@schema("product")
+}
+
 /// Tipo di evento registrato in un point in time.
 enum PointInTimeKind {
   LISTING_CHANGE
@@ -62,6 +71,7 @@ model ImprovementTask {
 
   assignees            ImprovementTaskAssignee[]
   reviews              ImprovementTaskReview[]
+  steps                ImprovementTaskStep[]
   pointsInTime         PointInTime[]
   consoleNotifications ConsoleNotification[]
 
@@ -82,6 +92,43 @@ model ImprovementTaskAssignee {
 
   @@unique([taskId, userId])
   @@index([userId])
+  @@schema("product")
+}
+
+/// Passaggio operativo da seguire. Più persone possono eseguirlo in sequenza.
+model ImprovementTaskStep {
+  id          String                    @id @default(cuid())
+  taskId      String
+  sortOrder   Int
+  title       String
+  description String                    @default("")
+  status      ImprovementTaskStepStatus @default(PENDING)
+  completedAt DateTime?                 @db.Timestamptz(6)
+  createdAt   DateTime                  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime                  @updatedAt @db.Timestamptz(6)
+
+  task      ImprovementTask              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  assignees ImprovementTaskStepAssignee[]
+
+  @@index([taskId, sortOrder])
+  @@schema("product")
+}
+
+/// Persona incaricata di un passaggio, in ordine di turno.
+model ImprovementTaskStepAssignee {
+  id          String              @id @default(cuid())
+  stepId      String
+  /// ID User in public.users (niente FK: public è condiviso).
+  userId      Int
+  sortOrder   Int                 @default(0)
+  completedAt DateTime?           @db.Timestamptz(6)
+  createdAt   DateTime            @default(now()) @db.Timestamptz(6)
+
+  step ImprovementTaskStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@unique([stepId, userId])
+  @@index([userId])
+  @@index([stepId, sortOrder])
   @@schema("product")
 }
 

@@ -39,6 +39,46 @@ enum CompetitorMatchSuggestionStatus {
   @@schema("product")
 }
 
+/// Job giornaliero sui concorrenti gestito da cron.
+enum CompetitorCronJob {
+  /// Importa solo le inserzioni eBay che ci mancano.
+  EBAY_LISTINGS
+  /// Rilegge QuantitySold delle inserzioni eBay già in archivio.
+  EBAY_SOLD
+  /// BSR e prezzo per paese dei listing Amazon via SP-API.
+  AMAZON_LISTINGS
+
+  @@schema("product")
+}
+
+/// Avanzamento del giro odierno di una cron concorrenti.
+/// Una riga per giorno: `cursor` permette di riprendere dove il passo si è fermato.
+model CompetitorCronRun {
+  id    String            @id @default(cuid())
+  job   CompetitorCronJob
+  runOn DateTime          @db.Date
+
+  /// Ultimo elemento completato: `competitorId::storeId` (canale) o id offerta/prodotto.
+  cursor    String?
+  processed Int     @default(0)
+  total     Int     @default(0)
+  /// Elementi saltati perché già allineati o sopra soglia.
+  skipped   Int     @default(0)
+  /// Elementi con una modifica reale (nuovo listing, vendita, snapshot).
+  changed   Int     @default(0)
+  complete  Boolean @default(false)
+  message   String?
+  /// Errori del giro: `[{ at, message, context }]`.
+  errors    Json?
+
+  startedAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([job, runOn])
+  @@index([job, runOn(sort: Desc)])
+  @@schema("product")
+}
+
 /// Anagrafica seller concorrente (non il singolo prodotto).
 model Competitor {
   id        String              @id @default(cuid())

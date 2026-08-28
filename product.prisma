@@ -677,6 +677,100 @@ view VListingQualityScore {
   @@schema("product")
 }
 
+/// Stato corrente listing per la dashboard salute (ultimo snapshot + inattività).
+view VListingHealthCurrent {
+  id                   String       @unique
+  channel              StoreChannel
+  storeKey             String
+  countryCode          String
+  sku                  String
+  asin                 String?
+  title                String
+  inventoryProductId   String?      @db.Uuid
+  inventoryProductName String?
+  capturedAt           DateTime     @db.Date
+  isBuyable            Boolean?
+  isDiscoverable       Boolean?
+  isPublished          Boolean?
+  quantity             Int?
+  activityCapturedAt   DateTime?    @db.Date
+  inactivityReason     String?
+  inactivityStartedAt  DateTime?    @db.Timestamptz(6)
+  listingScore         Decimal?     @db.Decimal(3, 1)
+  listingPrice         Decimal?     @db.Decimal(12, 2)
+  currency             String?
+
+  @@map("v_listing_health_current")
+  @@schema("product")
+}
+
+/// Vendite e resi 30 giorni vs 30 precedenti, per SKU × store.
+view VListingSalesReturns30d {
+  id               String       @unique
+  channel          StoreChannel
+  storeKey         String
+  sku              String
+  asin             String?
+  productName      String?
+  units30          Int
+  unitsPrev30      Int
+  revenue30        Decimal      @db.Decimal(12, 2)
+  returns30        Int
+  returnsPrev30    Int
+  returnRate30     Decimal      @db.Decimal(8, 2)
+  returnRatePrev30 Decimal      @db.Decimal(8, 2)
+  topReturnReason  String?
+
+  @@map("v_listing_sales_returns_30d")
+  @@schema("product")
+}
+
+/// Trend BSR Amazon: rank primario corrente vs baseline (~7 giorni).
+view VListingBsrTrend {
+  id               String       @unique
+  channel          StoreChannel
+  storeKey         String
+  countryCode      String
+  asin             String
+  sku              String?
+  capturedAt       DateTime     @db.Date
+  rank             Int
+  category         String
+  categoryKey      String
+  prevRank         Int?
+  prevCapturedAt   DateTime?    @db.Date
+  rankDelta        Int?
+  rankDeltaPercent Decimal?     @db.Decimal(8, 2)
+
+  @@map("v_listing_bsr_trend")
+  @@schema("product")
+}
+
+/// Recensioni ≤3★ ultimi 180 giorni, con id interno e collegamento inventario.
+view VListingReviewAlert {
+  id                   String       @unique
+  channel              StoreChannel
+  storeKey             String
+  countryCode          String
+  asin                 String
+  sku                  String?
+  externalId           String
+  rating               Int
+  reviewTitle          String
+  reviewBody           String
+  author               String?
+  viewed               Boolean
+  verified             Boolean
+  reviewedAt           DateTime?    @db.Date
+  capturedAt           DateTime     @db.Timestamptz(6)
+  inventoryProductId   String?      @db.Uuid
+  inventoryProductName String?
+  listingTitle         String
+
+  @@map("v_listing_review_alert")
+  @@schema("product")
+}
+
 /// Job Reports SP-API: watermark e deduplica di createReport (non idempotente).
 model StoreReportJob {
   id               String            @id @default(cuid())
@@ -1244,6 +1338,120 @@ model EbayListingDescription {
 
   @@unique([listingId], map: "EbayListingDescription_listing")
   @@index([sku], map: "EbayListingDescription_sku")
+  @@schema("product")
+}
+
+/// Aggregato mensile ordini (materialized view). DDL: scripts/sql/order-seasonality-materialized-view.sql
+view MvOrderSeasonality {
+  year        Int
+  month       Int
+  channel     String
+  sku         String
+  asin        String?
+  productName String?
+  orderCount  BigInt
+  units       BigInt
+  revenue     Decimal @db.Decimal(14, 2)
+
+  @@unique([year, month, channel, sku])
+  @@map("mv_order_seasonality")
+  @@schema("product")
+}
+
+/// Singleton: ultimo refresh della vista stagionalità ordini.
+model OrderSeasonalityRefresh {
+  id          Int      @id @default(1)
+  refreshedAt DateTime @db.Timestamptz(6)
+  rowCount    Int      @default(0)
+  durationMs  Int      @default(0)
+
+  @@schema("product")
+}
+
+/// Costo unitario e anagrafica SKU per la panoramica (matview, refresh via cron).
+view VOverviewSkuMeta {
+  sku         String   @unique
+  unitCostEur Decimal? @map("unit_cost_eur") @db.Decimal(12, 4)
+  productName String?  @map("product_name")
+  imageUrl    String?  @map("image_url")
+  asin        String?
+
+  @@map("mv_overview_sku_meta")
+  @@schema("product")
+}
+
+/// Vendite e profitto aggregati per giorno e canale (matview, finestra 730 giorni).
+view VOverviewSalesDaily {
+  day                 DateTime @db.Date
+  channel             String
+  orders              Int
+  units               Int
+  grossEur            Decimal  @map("gross_eur") @db.Decimal(16, 4)
+  vatEur              Decimal  @map("vat_eur") @db.Decimal(16, 4)
+  netRevenueEur       Decimal  @map("net_revenue_eur") @db.Decimal(16, 4)
+  referralEur         Decimal  @map("referral_eur") @db.Decimal(16, 4)
+  digitalEur          Decimal  @map("digital_eur") @db.Decimal(16, 4)
+  fbaFeeEur           Decimal  @map("fba_fee_eur") @db.Decimal(16, 4)
+  chargebackEur       Decimal  @map("chargeback_eur") @db.Decimal(16, 4)
+  otherFeeEur         Decimal  @map("other_fee_eur") @db.Decimal(16, 4)
+  refundCommissionEur Decimal  @map("refund_commission_eur") @db.Decimal(16, 4)
+  fbmShippingEur      Decimal  @map("fbm_shipping_eur") @db.Decimal(16, 4)
+  cogsEur             Decimal  @map("cogs_eur") @db.Decimal(16, 4)
+  cogsKnownUnits      Int      @map("cogs_known_units")
+  refundUnits         Int      @map("refund_units")
+  refundAmountEur     Decimal  @map("refund_amount_eur") @db.Decimal(16, 4)
+  refundVatEur        Decimal  @map("refund_vat_eur") @db.Decimal(16, 4)
+  refundReferralEur   Decimal  @map("refund_referral_eur") @db.Decimal(16, 4)
+  recoveredCogsEur    Decimal  @map("recovered_cogs_eur") @db.Decimal(16, 4)
+  returnFeeEur        Decimal  @map("return_fee_eur") @db.Decimal(16, 4)
+  profitEur           Decimal  @map("profit_eur") @db.Decimal(16, 4)
+
+  @@unique([day, channel])
+  @@map("mv_overview_sales_daily")
+  @@schema("product")
+}
+
+/// Vendite e profitto aggregati per giorno, canale e SKU (matview, finestra 730 giorni).
+view VOverviewSkuDaily {
+  day           DateTime @db.Date
+  channel       String
+  sku           String
+  asin          String?
+  productName   String?  @map("product_name")
+  units         Int
+  grossEur      Decimal  @map("gross_eur") @db.Decimal(16, 4)
+  netRevenueEur Decimal  @map("net_revenue_eur") @db.Decimal(16, 4)
+  refundUnits   Int      @map("refund_units")
+  profitEur     Decimal  @map("profit_eur") @db.Decimal(16, 4)
+
+  @@unique([day, channel, sku])
+  @@map("mv_overview_sku_daily")
+  @@schema("product")
+}
+
+/// Ricavo e profitto per giorno e canale logistico FBA/FBM (matview, finestra 730 giorni).
+view VOverviewFulfillmentDaily {
+  day           DateTime @db.Date
+  fulfillment   String
+  units         Int
+  netRevenueEur Decimal  @map("net_revenue_eur") @db.Decimal(16, 4)
+  profitEur     Decimal  @map("profit_eur") @db.Decimal(16, 4)
+
+  @@unique([day, fulfillment])
+  @@map("mv_overview_fulfillment_daily")
+  @@schema("product")
+}
+
+/// Ricavo e profitto per giorno e paese di destinazione (matview, finestra 730 giorni).
+view VOverviewCountryDaily {
+  day           DateTime @db.Date
+  countryCode   String   @map("country_code")
+  units         Int
+  netRevenueEur Decimal  @map("net_revenue_eur") @db.Decimal(16, 4)
+  profitEur     Decimal  @map("profit_eur") @db.Decimal(16, 4)
+
+  @@unique([day, countryCode])
+  @@map("mv_overview_country_daily")
   @@schema("product")
 }
 
