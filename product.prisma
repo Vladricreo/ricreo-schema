@@ -677,7 +677,7 @@ view VListingQualityScore {
   @@schema("product")
 }
 
-/// Stato corrente listing per la dashboard salute (ultimo snapshot + inattività).
+/// Stato corrente listing per la dashboard salute (view live; la dashboard usa la matview).
 view VListingHealthCurrent {
   id                   String       @unique
   channel              StoreChannel
@@ -704,7 +704,34 @@ view VListingHealthCurrent {
   @@schema("product")
 }
 
-/// Vendite e resi 30 giorni vs 30 precedenti, per SKU × store.
+/// Snapshot materializzato di `v_listing_health_current` (refresh cron 30 min).
+view MvListingHealthCurrent {
+  id                   String       @unique
+  channel              StoreChannel
+  storeKey             String
+  countryCode          String
+  sku                  String
+  asin                 String?
+  title                String
+  inventoryProductId   String?      @db.Uuid
+  inventoryProductName String?
+  capturedAt           DateTime     @db.Date
+  isBuyable            Boolean?
+  isDiscoverable       Boolean?
+  isPublished          Boolean?
+  quantity             Int?
+  activityCapturedAt   DateTime?    @db.Date
+  inactivityReason     String?
+  inactivityStartedAt  DateTime?    @db.Timestamptz(6)
+  listingScore         Decimal?     @db.Decimal(3, 1)
+  listingPrice         Decimal?     @db.Decimal(12, 2)
+  currency             String?
+
+  @@map("mv_listing_health_current")
+  @@schema("product")
+}
+
+/// Vendite e resi 30 giorni vs 30 precedenti (view live; la dashboard usa la matview).
 view VListingSalesReturns30d {
   id               String       @unique
   channel          StoreChannel
@@ -725,7 +752,28 @@ view VListingSalesReturns30d {
   @@schema("product")
 }
 
-/// Trend BSR Amazon: rank primario corrente vs baseline (~7 giorni).
+/// Snapshot materializzato di `v_listing_sales_returns_30d` (refresh cron 30 min).
+view MvListingSalesReturns30d {
+  id               String       @unique
+  channel          StoreChannel
+  storeKey         String
+  sku              String
+  asin             String?
+  productName      String?
+  units30          Int
+  unitsPrev30      Int
+  revenue30        Decimal      @db.Decimal(12, 2)
+  returns30        Int
+  returnsPrev30    Int
+  returnRate30     Decimal      @db.Decimal(8, 2)
+  returnRatePrev30 Decimal      @db.Decimal(8, 2)
+  topReturnReason  String?
+
+  @@map("mv_listing_sales_returns_30d")
+  @@schema("product")
+}
+
+/// Trend BSR Amazon: rank primario corrente vs baseline (view live; la dashboard usa la matview).
 view VListingBsrTrend {
   id               String       @unique
   channel          StoreChannel
@@ -746,7 +794,28 @@ view VListingBsrTrend {
   @@schema("product")
 }
 
-/// Recensioni ≤3★ ultimi 180 giorni, con id interno e collegamento inventario.
+/// Snapshot materializzato di `v_listing_bsr_trend` (refresh cron 30 min).
+view MvListingBsrTrend {
+  id               String       @unique
+  channel          StoreChannel
+  storeKey         String
+  countryCode      String
+  asin             String
+  sku              String?
+  capturedAt       DateTime     @db.Date
+  rank             Int
+  category         String
+  categoryKey      String
+  prevRank         Int?
+  prevCapturedAt   DateTime?    @db.Date
+  rankDelta        Int?
+  rankDeltaPercent Decimal?     @db.Decimal(8, 2)
+
+  @@map("mv_listing_bsr_trend")
+  @@schema("product")
+}
+
+/// Recensioni ≤3★ ultimi 180 giorni (view live; la dashboard usa la matview).
 view VListingReviewAlert {
   id                   String       @unique
   channel              StoreChannel
@@ -768,6 +837,68 @@ view VListingReviewAlert {
   listingTitle         String
 
   @@map("v_listing_review_alert")
+  @@schema("product")
+}
+
+/// Snapshot materializzato di `v_listing_review_alert` (refresh cron 30 min).
+view MvListingReviewAlert {
+  id                   String       @unique
+  channel              StoreChannel
+  storeKey             String
+  countryCode          String
+  asin                 String
+  sku                  String?
+  externalId           String
+  rating               Int
+  reviewTitle          String
+  reviewBody           String
+  author               String?
+  viewed               Boolean
+  verified             Boolean
+  reviewedAt           DateTime?    @db.Date
+  capturedAt           DateTime     @db.Timestamptz(6)
+  inventoryProductId   String?      @db.Uuid
+  inventoryProductName String?
+  listingTitle         String
+
+  @@map("mv_listing_review_alert")
+  @@schema("product")
+}
+
+/// KPI e problemi aggregati per store (matview, refresh cron 30 min).
+view MvListingHealthStoreStats {
+  storeKey       String
+  channel        StoreChannel
+  countryCode    String
+  monitored      Int
+  inactive       Int
+  avgScore       Decimal? @db.Decimal(8, 2)
+  lowScore       Int
+  units30        Int
+  returns30      Int
+  unitsPrev30    Int
+  returnsPrev30  Int
+  returnsAlert   Int
+  bsrDown        Int
+  reviews30      Int
+  reviewsPrev30  Int
+  reviews90      Int
+  reviewsPrev90  Int
+  reviews365     Int
+  reviewsPrev365 Int
+
+  @@unique([channel, storeKey])
+  @@map("mv_listing_health_store_stats")
+  @@schema("product")
+}
+
+/// Singleton: ultimo refresh della dashboard salute listing.
+model ListingHealthRefresh {
+  id          Int      @id @default(1)
+  refreshedAt DateTime @db.Timestamptz(6)
+  rowCount    Int      @default(0)
+  durationMs  Int      @default(0)
+
   @@schema("product")
 }
 
@@ -1452,6 +1583,89 @@ view VOverviewCountryDaily {
 
   @@unique([day, countryCode])
   @@map("mv_overview_country_daily")
+  @@schema("product")
+}
+
+/// Snapshot inbox CS: reso / annullamento / rimborso persistito da import o cron.
+/// La pagina Richieste legge solo da qui; le API marketplace girano in background.
+model AfterSalesRequest {
+  id                 String       @id @default(cuid())
+  /// Chiave stabile canale:tipo:id marketplace (es. AMAZON:cancel:123).
+  externalKey        String       @unique
+  channel            StoreChannel
+  /// return | cancel | refund
+  kind               String
+  /// open | pending | in_progress | closed
+  status             String
+  statusLabel        String       @default("")
+  previousStatus     String?
+  statusChangedAt    DateTime?    @db.Timestamptz(6)
+  orderId            String       @default("")
+  sku                String       @default("")
+  asin               String?
+  listingId          String?
+  title              String       @default("")
+  imageUrl           String       @default("")
+  quantity           Int          @default(0)
+  reason             String?
+  reasonDescription  String?
+  requestedAt        DateTime     @db.Timestamptz(6)
+  dueAt              DateTime?    @db.Timestamptz(6)
+  marketplaceUrl     String?
+  /// Amazon: solo FBM in inbox. Null sugli altri canali.
+  fulfillment        String?
+  shipCountry        String?
+  shipCountryName    String?
+  afterSalesSn       String?
+  parentAfterSalesSn String?
+  firstSeenAt        DateTime     @default(now()) @db.Timestamptz(6)
+  lastSeenAt         DateTime     @db.Timestamptz(6)
+  createdAt          DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @db.Timestamptz(6)
+  statusChanges      AfterSalesRequestStatusChange[]
+
+  @@index([channel, status, requestedAt], map: "AfterSalesRequest_channel_status")
+  @@index([channel, kind, requestedAt], map: "AfterSalesRequest_channel_kind")
+  @@index([orderId], map: "AfterSalesRequest_order")
+  @@index([afterSalesSn], map: "AfterSalesRequest_after_sn")
+  @@schema("product")
+}
+
+/// Storico cambi stato di una richiesta (import/cron o azione seller).
+model AfterSalesRequestStatusChange {
+  id         String            @id @default(cuid())
+  requestId  String
+  request    AfterSalesRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fromStatus String
+  toStatus   String
+  fromLabel  String?
+  toLabel    String?
+  changedAt  DateTime          @default(now()) @db.Timestamptz(6)
+
+  @@index([requestId, changedAt], map: "AfterSalesRequestStatusChange_req")
+  @@schema("product")
+}
+
+/// Job giornaliero import richieste (settings + cron). Un passo = un canale.
+model AfterSalesImportJob {
+  id            String            @id @default(cuid())
+  capturedAt    DateTime          @db.Date
+  /// amazon | ebay | temu | etsy | done
+  phase         String            @default("amazon")
+  status        StoreReportStatus @default(REQUESTED)
+  lastMessage   String?
+  errorMessage  String?
+  /// Errori per-canale dell'ultimo giro (JSON AfterSalesChannelError[]).
+  channelErrors Json?
+  upserted      Int               @default(0)
+  createdCount  Int               @default(0)
+  statusChanges Int               @default(0)
+  importedAt    DateTime?         @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([capturedAt], map: "AfterSalesImportJob_day_key")
+  @@index([status, capturedAt], map: "AfterSalesImportJob_status_idx")
   @@schema("product")
 }
 
