@@ -334,12 +334,27 @@ model StoreOrderFee {
   currency          String  @default("EUR")
   postedDate        DateTime? @db.Timestamptz(6)
 
+  /// Stime usate finché il canale non pubblica i costi reali.
+  provisionalReferralFee        Decimal @default(0) @db.Decimal(12, 4)
+  provisionalDigitalServicesFee Decimal @default(0) @db.Decimal(12, 4)
+  provisionalFbaFee             Decimal @default(0) @db.Decimal(12, 4)
+  provisionalShippingChargeback Decimal @default(0) @db.Decimal(12, 4)
+  provisionalFbmShipping        Decimal @default(0) @db.Decimal(12, 4)
+  /// listing | fee_preview | channel_settings
+  provisionalFeeSource      String?
+  /// shipping_price | shipping_average
+  provisionalShippingSource String?
+  provisionalAt             DateTime? @db.Timestamptz(6)
+  /// True quando le colonne reali sono state popolate dal canale.
+  realCosts                 Boolean @default(false)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([channel, amazonOrderId, orderItemId, sku], map: "StoreOrderFee_item_key")
   @@index([sku], map: "StoreOrderFee_sku_idx")
   @@index([amazonOrderId], map: "StoreOrderFee_order_idx")
+  @@index([channel, realCosts], map: "StoreOrderFee_channel_real_idx")
   @@schema("product")
 }
 
@@ -898,6 +913,19 @@ model ListingHealthRefresh {
   refreshedAt DateTime @db.Timestamptz(6)
   rowCount    Int      @default(0)
   durationMs  Int      @default(0)
+
+  @@schema("product")
+}
+
+/// Singleton: ultimo refresh delle matview della pagina Vendite, così la UI
+/// può dire quanto sono vecchi i dati invece di mostrarli come se fossero live.
+model SalesAnalyticsRefresh {
+  id          Int      @id @default(1)
+  refreshedAt DateTime @db.Timestamptz(6)
+  rowCount    Int      @default(0)
+  durationMs  Int      @default(0)
+  /// `cron` o `ui`: distingue il giro schedulato dal bottone Aggiorna.
+  source      String   @default("cron")
 
   @@schema("product")
 }
@@ -1586,6 +1614,66 @@ view VOverviewCountryDaily {
   @@schema("product")
 }
 
+/// Vendite per giorno con tutte le dimensioni filtrabili dalla lista Vendite
+/// (canale, store, SKU, fulfillment, paese) in chiave: l'app aggrega su periodi
+/// arbitrari con un GROUP BY sku. Nessuna finestra temporale, il filtro "tutto"
+/// deve restare esatto. Le voci di costo sono già reali o provvisorie secondo
+/// StoreOrderFee.realCosts; referralEur include la DSF, digitalEur è dettaglio.
+view VSalesAnalyticsDaily {
+  day                    DateTime @db.Date
+  channel                String
+  storeKey               String   @map("store_key")
+  salesChannel           String   @map("sales_channel")
+  sku                    String
+  fulfillment            String
+  shipCountry            String   @map("ship_country")
+  asin                   String?
+  productName            String?  @map("product_name")
+  imageUrl               String?  @map("image_url")
+  unitCostEur            Decimal? @map("unit_cost_eur") @db.Decimal(12, 4)
+  units                  Int
+  grossEur               Decimal  @map("gross_eur") @db.Decimal(16, 4)
+  vatEur                 Decimal  @map("vat_eur") @db.Decimal(16, 4)
+  /// Spedizione incassata dal cliente, al netto dello sconto spedizione.
+  customerShippingEur    Decimal  @map("customer_shipping_eur") @db.Decimal(16, 4)
+  customerShippingTaxEur Decimal  @map("customer_shipping_tax_eur") @db.Decimal(16, 4)
+  referralEur            Decimal  @map("referral_eur") @db.Decimal(16, 4)
+  digitalEur             Decimal  @map("digital_eur") @db.Decimal(16, 4)
+  fbaFeeEur              Decimal  @map("fba_fee_eur") @db.Decimal(16, 4)
+  chargebackEur          Decimal  @map("chargeback_eur") @db.Decimal(16, 4)
+  otherFeeEur            Decimal  @map("other_fee_eur") @db.Decimal(16, 4)
+  refundCommissionEur    Decimal  @map("refund_commission_eur") @db.Decimal(16, 4)
+  fbmShippingEur         Decimal  @map("fbm_shipping_eur") @db.Decimal(16, 4)
+  cogsEur                Decimal  @map("cogs_eur") @db.Decimal(16, 4)
+  hasFeeEstimate         Boolean  @map("has_fee_estimate")
+  realCostUnits          Int      @map("real_cost_units")
+  provisionalCostUnits   Int      @map("provisional_cost_units")
+
+  @@unique([day, channel, storeKey, salesChannel, sku, fulfillment, shipCountry])
+  @@map("mv_sales_analytics_daily")
+  @@schema("product")
+}
+
+/// Resi per giorno di reso, stessa grana filtrabile della lista Vendite.
+view VSalesAnalyticsRefundDaily {
+  day               DateTime @db.Date
+  channel           String
+  storeKey          String   @map("store_key")
+  sku               String
+  refundUnits       Int      @map("refund_units")
+  refundAmountEur   Decimal  @map("refund_amount_eur") @db.Decimal(16, 4)
+  refundVatEur      Decimal  @map("refund_vat_eur") @db.Decimal(16, 4)
+  refundReferralEur Decimal  @map("refund_referral_eur") @db.Decimal(16, 4)
+  /// Unità rientrate ancora vendibili: il COGS si recupera solo su queste.
+  sellableUnits     Int      @map("sellable_units")
+  recoveredCogsEur  Decimal  @map("recovered_cogs_eur") @db.Decimal(16, 4)
+  returnFeeEur      Decimal  @map("return_fee_eur") @db.Decimal(16, 4)
+
+  @@unique([day, channel, storeKey, sku])
+  @@map("mv_sales_analytics_refund_daily")
+  @@schema("product")
+}
+
 /// Snapshot inbox CS: reso / annullamento / rimborso persistito da import o cron.
 /// La pagina Richieste legge solo da qui; le API marketplace girano in background.
 model AfterSalesRequest {
@@ -1687,5 +1775,50 @@ model AmazonBuyerConversationRead {
 
   @@unique([conversationId], map: "AmazonBuyerConversationRead_conv")
   @@index([isRead], map: "AmazonBuyerConversationRead_read")
+  @@schema("product")
+}
+
+/// Gate di quota API condiviso tra processi, cron e bottoni (niente burst).
+/// Una riga = provider × credenziale/store × gruppo operazione.
+model ExternalApiQuotaGate {
+  id             String    @id @default(cuid())
+  /// amazon | ebay | etsy | temu
+  provider       String
+  /// Seller, shop o account (es. sellerId|eu).
+  scope          String
+  /// Gruppo che condivide la stessa quota (es. createReport, sell-rest).
+  operationGroup String
+  /// Prossimo slot concedibile (leaky bucket, 1 token).
+  nextSlotAt     DateTime  @db.Timestamptz(6)
+  /// Cooldown globale dopo 429 / Retry-After.
+  cooldownUntil  DateTime? @db.Timestamptz(6)
+  /// Rate (rps) allineato all'header del provider, se presente.
+  rate           Float     @default(1)
+  lastGrantedAt  DateTime? @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([provider, scope, operationGroup], map: "ExternalApiQuotaGate_key")
+  @@index([nextSlotAt], map: "ExternalApiQuotaGate_slot")
+  @@schema("product")
+}
+
+/// Lease di esecuzione per un passo di import (cron / UI / continue).
+/// Scade da solo: un processo morto non blocca gli altri.
+model ImportExecutionLease {
+  id        String       @id @default(cuid())
+  /// sales | quality | profit | after-sales | kpi | fba-inventory | oauth-refresh
+  pipeline  String
+  channel   StoreChannel
+  storeKey  String       @default("")
+  /// Intervallo o giorno (es. 2026-08-01|2026-08-30).
+  rangeKey  String       @default("")
+  ownerId   String
+  expiresAt DateTime     @db.Timestamptz(6)
+  createdAt DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([pipeline, channel, storeKey, rangeKey], map: "ImportExecutionLease_key")
+  @@index([expiresAt], map: "ImportExecutionLease_expires")
   @@schema("product")
 }

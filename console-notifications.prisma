@@ -28,6 +28,7 @@ enum ConsoleNotificationTopic {
   IMPROVEMENT
   CROSSPLATFORM
   MESSAGING
+  IMPORT
 
   @@schema("product")
 }
