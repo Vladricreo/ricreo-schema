@@ -2134,6 +2134,7 @@ model VoiceSession {
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([deviceId, expiresAt])
+  @@index([expiresAt])
   @@index([operatorId])
   @@schema("print-farm")
 }
@@ -2162,5 +2163,6 @@ model VoiceCommandLog {
   @@index([deviceId, createdAt])
   @@index([operatorId, createdAt])
   @@index([status, createdAt])
+  @@index([createdAt])
   @@schema("print-farm")
 }
