@@ -420,6 +420,8 @@ enum ShipmentLabelStatus {
   GENERATED
   PRINTED
   CANCELLED
+  /// Stampa inviata a CUPS ma non confermata (`completed`). Si può ristampare.
+  ERROR
 
   @@schema("inventory")
 }
