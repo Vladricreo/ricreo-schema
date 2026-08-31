@@ -262,6 +262,17 @@ model StoreOrderLine {
   fulfillmentChannel String?
   salesChannel       String?
   shipCountry        String?
+  /// Destinatario e indirizzo (PII). Etsy `getShopReceipts`; eBay Fulfillment/Trading;
+  /// Amazon all-orders di solito solo città / CAP / stato. Telefono: Etsy non lo espone.
+  shipRecipientName    String?
+  shipAddressLine1     String?
+  shipAddressLine2     String?
+  shipCity             String?
+  shipState            String?
+  shipPostalCode       String?
+  shipFormattedAddress String?
+  shipPhone            String?
+  buyerEmail           String?
 
   sku         String
   asin        String?
