@@ -1,0 +1,259 @@
+/// Stato locale di un ordine Sendcloud nella workstation di spedizione.
+enum SendcloudOrderStatus {
+  TO_SHIP
+  LABEL_CREATED
+  ERROR
+  ARCHIVED
+  CANCELLED
+
+  @@schema("inventory")
+}
+
+/// Stato di un gruppo di unione ordini (stesso destinatario).
+enum SendcloudMergeGroupStatus {
+  PROPOSED
+  CONFIRMED
+  DISCARDED
+  SHIPPED
+
+  @@schema("inventory")
+}
+
+/// Ruolo di un ordine all'interno di un pacco unito.
+enum SendcloudParcelOrderRole {
+  PRIMARY
+  SECONDARY
+
+  @@schema("inventory")
+}
+
+/// Esito della consolidazione remota su Sendcloud (etichetta primaria / status secondario).
+enum SendcloudConsolidationStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  SKIPPED
+
+  @@schema("inventory")
+}
+
+/// Esito della conferma tracking Amazon SP-API per un ordine coperto dal pacco.
+enum AmazonShipmentConfirmStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  SKIPPED
+
+  @@schema("inventory")
+}
+
+/// Specchio locale di un ordine Sendcloud (Incoming Orders).
+/// La Single Source of Truth dello stock resta `Shipment`/`Movement`:
+/// questi record rappresentano il flusso pre-etichetta.
+model SendcloudOrder {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// ID interno Sendcloud (`order.id`).
+  sendcloudId String @unique
+  /// ID ordine del negozio/marketplace (`order.order_id`).
+  orderId     String
+  /// Numero ordine visibile (`order.order_number`).
+  orderNumber String
+  /// ID integrazione Sendcloud da cui proviene l'ordine.
+  integrationId   Int
+  integrationName String?
+
+  /// ID marketplace (es. Amazon `xxx-xxxxxxx-xxxxxxx`) se diverso da `orderNumber`.
+  marketplaceOrderId String?
+  salesChannel       ShipmentSalesChannel?
+
+  tags          String[]
+  statusCode    String?
+  statusMessage String?
+
+  /// Nome destinatario cifrato a riposo (AES-256-GCM).
+  recipientName     String?
+  /// Blind index HMAC-SHA256 del nome normalizzato (merge + ricerca).
+  recipientNameHash String? @db.VarChar(64)
+  /// Indirizzo completo formattato, cifrato.
+  fullAddress       String?
+  /// Blind index dell'indirizzo normalizzato (via + civico + CAP + città).
+  addressHash       String? @db.VarChar(64)
+  email             String?
+  phone             String?
+  notes             String?
+
+  /// Campi in chiaro per filtri, quote e raggruppamento.
+  countryCode        String?
+  city               String?
+  postalCode         String?
+  postalCodePrefix   String?
+  stateProvinceCode  String?
+  /// Snapshot strutturato dell'indirizzo (cifrato JSON).
+  addressJson        String?
+
+  totalPrice           Decimal? @db.Decimal(12, 2)
+  currency             String?  @db.VarChar(3)
+  customerShippingCost Decimal? @db.Decimal(12, 2)
+  /// Costo corriere che pagheremmo per l'opzione preselezionata da Sendcloud.
+  carrierShippingCost     Decimal? @db.Decimal(12, 2)
+  carrierShippingCurrency String?  @db.VarChar(3)
+  weightGrams          Int?
+  shippingOptionCode   String?
+  shippingOptionName   String?
+  contractId           Int?
+  senderAddressId      Int?
+  incoterm             String?
+  insuredValue         Decimal? @db.Decimal(12, 2)
+  isCashOnDelivery     Boolean  @default(false)
+
+  localStatus        SendcloudOrderStatus @default(TO_SHIP)
+  addressValidation  Json?
+  lastError          String?
+  orderCreatedAt     DateTime?            @db.Timestamptz(6)
+  syncedAt           DateTime             @db.Timestamptz(6)
+  raw                Json
+
+  mergeGroupId String?             @db.Uuid
+  mergeGroup   SendcloudMergeGroup? @relation(fields: [mergeGroupId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Gruppi in cui questo ordine è stato scelto come primario.
+  primaryForMergeGroups SendcloudMergeGroup[] @relation("SendcloudMergeGroupPrimary")
+
+  lines        SendcloudOrderLine[]
+  parcelLinks  SendcloudParcelOrder[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([orderId, integrationId])
+  @@index([localStatus])
+  @@index([integrationId])
+  @@index([countryCode])
+  @@index([orderCreatedAt])
+  @@index([recipientNameHash])
+  @@index([addressHash])
+  @@index([mergeGroupId])
+  @@index([marketplaceOrderId])
+  @@index([salesChannel])
+  @@schema("inventory")
+}
+
+/// Riga prodotto di un ordine Sendcloud.
+model SendcloudOrderLine {
+  id      String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  order   SendcloudOrder @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  skuCodeSnapshot String?
+  ean             String?
+  name            String?
+  quantity        Int     @default(1)
+  unitPrice       Decimal? @db.Decimal(12, 2)
+  weightGrams     Int?
+  remoteImageUrl  String?
+
+  /// Collegamento opzionale al catalogo interno: foto e stock locali.
+  skuId String? @db.Uuid
+  sku   Sku?    @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([orderId])
+  @@index([skuId])
+  @@schema("inventory")
+}
+
+/// Gruppo di ordini unibili (stesso destinatario + stesso indirizzo).
+model SendcloudMergeGroup {
+  id String @id @default(uuid()) @db.Uuid
+
+  recipientNameHash String  @db.VarChar(64)
+  addressHash       String  @db.VarChar(64)
+  countryCode       String
+  status            SendcloudMergeGroupStatus @default(PROPOSED)
+  createdByUserId   Int?
+  createdBy         User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Ordine Sendcloud da cui viene creata l'unica etichetta.
+  primaryOrderId String?         @db.Uuid
+  primaryOrder   SendcloudOrder? @relation("SendcloudMergeGroupPrimary", fields: [primaryOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  orders SendcloudOrder[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([recipientNameHash, addressHash, countryCode])
+  @@index([createdByUserId])
+  @@index([primaryOrderId])
+  @@schema("inventory")
+}
+
+/// Pacco / etichetta creata su Sendcloud, collegata allo stock locale.
+model SendcloudParcel {
+  id String @id @default(uuid()) @db.Uuid
+
+  sendcloudParcelId   String? @unique
+  sendcloudShipmentId String?
+  carrierCode         String?
+  shippingOptionCode  String?
+  shippingOptionName  String?
+  trackingNumber      String?
+  trackingUrl         String?
+  priceAmount         Decimal? @db.Decimal(12, 2)
+  priceCurrency       String?  @db.VarChar(3)
+  weightGrams         Int?
+  lengthMm            Int?
+  widthMm             Int?
+  heightMm            Int?
+  announcementStatus  String?
+  errors              Json?
+  /// Path oggetto su Supabase Storage (PDF etichetta).
+  labelObjectPath     String?
+
+  shipmentId String?   @db.Uuid
+  shipment   Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  orderLinks SendcloudParcelOrder[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([shipmentId])
+  @@index([sendcloudShipmentId])
+  @@index([trackingNumber])
+  @@schema("inventory")
+}
+
+/// Relazione N:N tra un pacco Sendcloud e gli ordini coperti (merge).
+/// Fonte di verità locale: un tracking → tutti gli ordini marketplace coperti.
+model SendcloudParcelOrder {
+  id String @id @default(uuid()) @db.Uuid
+
+  parcelId String         @db.Uuid
+  parcel   SendcloudParcel @relation(fields: [parcelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  orderId  String         @db.Uuid
+  order    SendcloudOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  role SendcloudParcelOrderRole @default(PRIMARY)
+  /// Snapshot dell'ordine al momento dell'etichetta (il numero Sendcloud resta unico).
+  orderNumberSnapshot        String?
+  marketplaceOrderIdSnapshot String?
+
+  sendcloudConsolidationStatus SendcloudConsolidationStatus @default(PENDING)
+  sendcloudConsolidationError  String?
+
+  amazonConfirmStatus    AmazonShipmentConfirmStatus @default(PENDING)
+  amazonConfirmAttempts  Int                         @default(0)
+  amazonConfirmLastError String?
+  amazonConfirmedAt      DateTime?                   @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([parcelId, orderId])
+  @@index([orderId])
+  @@index([amazonConfirmStatus])
+  @@index([sendcloudConsolidationStatus])
+  @@schema("inventory")
+}

@@ -39,6 +39,16 @@ enum SettingsName {
   /// Indirizzo mittente di default per le spedizioni inbound FBA (Amazon SP-API).
   /// Valore JSON con shape AddressInput: { name, phoneNumber, addressLine1, addressLine2?, city, postalCode, countryCode, stateOrProvinceCode? }.
   FBA_INBOUND_SOURCE_ADDRESS
+  /// Credenziali API Sendcloud (cifrate a DB) usate per la workstation spedizioni.
+  SENDCLOUD_API_CREDENTIALS
+  /// Finestra temporale (in giorni) per la sync degli ordini Sendcloud.
+  SENDCLOUD_SYNC_DAYS
+  /// ID indirizzo mittente Sendcloud predefinito (scelto da UI).
+  /// Valore JSON: { senderAddressId: number }.
+  SENDCLOUD_DEFAULT_SENDER_ADDRESS_ID
+  /// Corriere Sendcloud predefinito per paese (validazione indirizzo / fallback).
+  /// Valore JSON: { byCountry: { IT: { carrierCode, carrierName?, contractId? } } }.
+  SENDCLOUD_DEFAULT_CARRIERS_BY_COUNTRY
   /// DEPRECATO: tempo base per pezzo dei prodotti senza dati di assemblaggio.
   /// Non più usato né scritto: senza campioni il costo manodopera è 0 e il prodotto
   /// risulta "mai calcolato". Il valore resta nell'enum perché rimuoverlo richiede

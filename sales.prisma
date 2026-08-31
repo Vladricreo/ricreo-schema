@@ -53,6 +53,7 @@ model Sku {
   /// Righe ordini Amazon collegate a questo SKU (collegamento opzionale da `AmazonOrderItem.skuId`).
   amazonOrderItems    AmazonOrderItem[]
   shipmentLines       ShipmentLine[]
+  sendcloudOrderLines SendcloudOrderLine[]
   movements           Movement[]
   finishedAllocations FinishedAllocation[]
   OdetteReservation   OdetteReservation[]
@@ -306,7 +307,8 @@ model Shipment {
   /// Note spedizione cifrate a riposo con AES-256-GCM.
   notes              String?
 
-  customerReturns CustomerReturn[]
+  customerReturns  CustomerReturn[]
+  sendcloudParcels SendcloudParcel[]
 
   @@index([productId])
   @@index([movementId])
