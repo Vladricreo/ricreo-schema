@@ -1337,6 +1337,19 @@ model AmazonListingCoverageSkuExclusion {
   @@schema("product")
 }
 
+/// SKU dismessi: fuori da import catalogo (qualità, profitto, KPI) e dashboard listing.
+/// Lo storico ordini/P&L resta invariato.
+model ListingIgnoredSku {
+  id        String   @id @default(cuid())
+  sku       String
+  reason    String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([sku], map: "ListingIgnoredSku_sku")
+  @@schema("product")
+}
+
 /// Tassi di cambio verso EUR da Frankfurter (BCE e altre banche centrali).
 /// `rate` = unità di `currency` per 1 EUR (es. 1 EUR = 0,86 GBP).
 model ExchangeRate {
