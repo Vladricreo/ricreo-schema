@@ -213,3 +213,36 @@ model CupsPrintProfile {
   @@index([labelFormatId])
   @@schema("inventory")
 }
+
+/// Prompt OpenAI modificabile per categoria (import item, import documento).
+/// Una riga per chiave: modello, reasoning e punti di istruzione usati a ogni chiamata.
+model AiPromptConfig {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Chiave categoria: item-import | document-import.
+  key String @unique
+
+  /// ID modello OpenAI (es. gpt-5.6-terra).
+  model String
+
+  /// Livello di reasoning: none | low | medium | high | xhigh | max.
+  reasoningEffort String
+
+  /// Testo introduttivo del system prompt.
+  intro String @db.Text
+
+  /// Schema JSON che il modello deve restituire.
+  schemaText String @db.Text
+
+  /// Punti regola modificabili: [{ id: string, text: string }].
+  points Json
+
+  /// Istruzione finale del messaggio utente (dopo catalogo/contesto).
+  userInstruction String @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("AiPromptConfig")
+  @@schema("inventory")
+}
