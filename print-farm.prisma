@@ -2166,3 +2166,37 @@ model VoiceCommandLog {
   @@index([createdAt])
   @@schema("print-farm")
 }
+
+/// Audit delle azioni di bonifica dalla pagina Validazione Dati.
+model DataValidationFixLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  checkId     String
+  action      String
+  targetIds   String[]
+  affected    Int      @default(0)
+  dryRun      Boolean  @default(false)
+  performedBy String
+  metadata    Json?    @db.JsonB
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([checkId, createdAt])
+  @@index([createdAt])
+  @@schema("print-farm")
+}
+
+/// Snapshot periodico dei conteggi di validazione (trend F0).
+model DataValidationSnapshot {
+  id         String   @id @default(uuid()) @db.Uuid
+  capturedAt DateTime @default(now()) @db.Timestamptz(6)
+  windowDays Int?
+  checkId    String
+  family     String
+  title      String
+  count      Int
+  sampleSize Int?
+  severity   String
+
+  @@index([capturedAt])
+  @@index([checkId, capturedAt])
+  @@schema("print-farm")
+}
