@@ -74,11 +74,16 @@ SELECT
       END
     ELSE i."inactivityReason"
   END AS "inactivityReason",
-  CASE
-    WHEN a."isBuyable" IS TRUE THEN NULL
-    WHEN a."isBuyable" IS FALSE THEN COALESCE(i."inactivityStartedAt", a."activityCapturedAt")
-    ELSE i."inactivityStartedAt"
-  END AS "inactivityStartedAt",
+  -- Cast esplicito: COALESCE/CASE altrimenti promuove a timestamptz senza
+  -- precisione e CREATE OR REPLACE VIEW fallisce (42P16) sulla colonna esistente
+  -- timestamp(6) with time zone.
+  (
+    CASE
+      WHEN a."isBuyable" IS TRUE THEN NULL
+      WHEN a."isBuyable" IS FALSE THEN COALESCE(i."inactivityStartedAt", a."activityCapturedAt")
+      ELSE i."inactivityStartedAt"
+    END
+  )::timestamptz(6) AS "inactivityStartedAt",
   q."listingScore",
   p."listingPrice",
   p."currency"
