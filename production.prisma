@@ -185,6 +185,15 @@ model AssemblyOperation {
   endedAt         DateTime? @db.Timestamptz(6)
   durationSeconds Int? // Calcolato alla fine (utile per costo manodopera)
 
+  // --- ATTIVITÀ / HEARTBEAT (regole idle Fase 2) ---
+  /// Ultima attività lavorativa timbrata sulla sessione "tab" (creazione,
+  /// incrementi stage, picking). Evita di rileggere il diario a ogni chiusura;
+  /// per le righe precedenti alla Fase 2 (NULL) resta il fallback journal/picking.
+  lastActivityAt  DateTime? @db.Timestamptz(6)
+  /// Ultimo heartbeat di presenza del tablet (interazione utente recente a
+  /// pagina visibile). Conta come segnale di attività nella chiusura idle.
+  lastHeartbeatAt DateTime? @db.Timestamptz(6)
+
   // --- QUANTITÀ DELLA SESSIONE ---
   quantityInput    Int @default(0) // Quanti pezzi stavo lavorando in questa sessione?
   quantityProduced Int @default(0) // Quanti pezzi BUONI ho finito in questa sessione?
@@ -218,6 +227,7 @@ model AssemblyOperation {
   @@index([lotId])
   @@index([assemblyStageId])
   @@index([operatorId, excludedFromLaborStats])
+  @@index([endedAt, lastActivityAt])
   @@schema("inventory")
 }
 

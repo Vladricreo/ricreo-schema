@@ -54,6 +54,15 @@ enum SettingsName {
   /// risulta "mai calcolato". Il valore resta nell'enum perché rimuoverlo richiede
   /// di ricreare il tipo e tutte le view che dipendono da `Settings.name`.
   ASSEMBLY_BASE_TIME_PER_PIECE
+  /// Soglia di inattività (minuti) oltre la quale una sessione "tab" di
+  /// assemblaggio si considera abbandonata (default applicativo: 45).
+  ASSEMBLY_LABOR_IDLE_GAP_MINUTES
+  /// Tetto (minuti) per una sessione "tab" senza alcuna attività registrata
+  /// (default applicativo: 15).
+  ASSEMBLY_LABOR_NO_ACTIVITY_CAP_MINUTES
+  /// Intervallo (secondi) del heartbeat di presenza del tablet.
+  /// Riservato: il client usa per ora la costante 120s (knob per uso futuro).
+  ASSEMBLY_LABOR_HEARTBEAT_SECONDS
 
   @@schema("inventory")
 }
