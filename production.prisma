@@ -26,6 +26,12 @@ model ProductOrder {
   /// Scadenza operativa opzionale. Se assente lo scheduler non inventa SLA:
   /// il canale/SKU non espone ancora una policy affidabile e versionata.
   dueDate           DateTime?        @db.Timestamptz(6)
+  /// Provenienza della `dueDate` (motore di copertura / kit / manuale).
+  /// NULL finché la data non è valorizzata o arriva da codice precedente a F2/F3.
+  dueDateOrigin     ProductOrderDueDateOrigin?
+  /// Corsia operativa dell'ordine (modello a corsie, piano §5).
+  /// NULL finché la generazione con corsia (F3) non è attiva.
+  lane              ProductOrderLane?
   finishedAt        DateTime?        @db.Timestamptz(6)
   cost              Decimal?         @db.Decimal(12, 2)
   priority          Int              @default(1) /// 1=low, 2=medium, 3=high, 4=critical
@@ -676,6 +682,25 @@ enum ProductionStatus {
   PRODUCING
   CANCELLED
   NEED_SUPPLIES
+
+  @@schema("inventory")
+}
+
+/// Provenienza della data di scadenza di un ordine di produzione (piano §14.2).
+enum ProductOrderDueDateOrigin {
+  COVERAGE /// Calcolata dal motore di copertura (stock/velocità/lead time)
+  KIT /// Derivata dallo slot di assemblaggio di un kit da completare
+  MANUAL /// Decisa dall'utente ordine per ordine
+
+  @@schema("inventory")
+}
+
+/// Corsia operativa di un ordine di produzione (modello a corsie, piano §5).
+enum ProductOrderLane {
+  COMPLETAMENTO_KIT /// Parte mancante che sblocca un assemblaggio pianificato
+  COPERTURA_FBM /// Copertura stock vendita diretta (FBM)
+  REINTEGRO_FBA /// Riassortimento del magazzino Amazon (FBA)
+  MANUALE /// Ordine manuale / campionatura / reso da rilavorare
 
   @@schema("inventory")
 }
