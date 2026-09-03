@@ -1666,6 +1666,12 @@ enum GanttTaskStatus {
 /// Rappresenta un'esecuzione del Gantt Scheduler (snapshot pianificazione).
 /// Ogni volta che il cron o l'operatore ricalcola il piano, viene creato un nuovo GanttPlan
 /// e il precedente viene marcato come SUPERSEDED.
+///
+/// INVARIANTE SQL (audit 2026-09, DB16): esiste l'indice parziale
+/// "GanttPlan_single_active_idx" = UNIQUE (status) WHERE status = 'ACTIVE'
+/// (migrazioni 20260731203000_scheduler_f6_gantt_source e 20260904001000_f0_invariants).
+/// NON dichiarabile come @@unique([status]) (bloccherebbe più piani SUPERSEDED/FAILED)
+/// e NON va droppato: è l'ultima barriera contro due piani ACTIVE simultanei.
 model GanttPlan {
   id String @id @default(uuid()) @db.Uuid
 
