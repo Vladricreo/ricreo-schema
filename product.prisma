@@ -1640,7 +1640,7 @@ view VOverviewCountryDaily {
 
 /// Vendite per giorno con tutte le dimensioni filtrabili dalla lista Vendite
 /// (canale, store, SKU, fulfillment, paese) in chiave: l'app aggrega su periodi
-/// arbitrari con un GROUP BY sku. Nessuna finestra temporale, il filtro "tutto"
+/// arbitrari con un GROUP BY sku, fulfillment. Nessuna finestra temporale, il filtro "tutto"
 /// deve restare esatto. Le voci di costo sono già reali o provvisorie secondo
 /// StoreOrderFee.realCosts; referralEur include la DSF, digitalEur è dettaglio.
 view VSalesAnalyticsDaily {
@@ -1844,5 +1844,30 @@ model ImportExecutionLease {
 
   @@unique([pipeline, channel, storeKey, rangeKey], map: "ImportExecutionLease_key")
   @@index([expiresAt], map: "ImportExecutionLease_expires")
+  @@schema("product")
+}
+
+/// Coda prioritaria del tick vendite (cron 30s): un task per canale/kind/paese.
+model SyncTaskSchedule {
+  id           String       @id @default(uuid())
+  pipeline     String
+  channel      StoreChannel
+  kind         String
+  scopeKey     String       @default("")
+  priority     Int          @default(100)
+  intervalMs   Int
+  nextRunAt    DateTime     @default(now()) @db.Timestamptz(6)
+  runningUntil DateTime?    @db.Timestamptz(6)
+  ownerId      String?
+  lastRunAt    DateTime?    @db.Timestamptz(6)
+  lastOkAt     DateTime?    @db.Timestamptz(6)
+  failures     Int          @default(0)
+  lastMessage  String?
+  enabled      Boolean      @default(true)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([pipeline, channel, kind, scopeKey], map: "SyncTaskSchedule_key")
+  @@index([enabled, nextRunAt, priority], map: "SyncTaskSchedule_due")
   @@schema("product")
 }
