@@ -1889,6 +1889,54 @@ model SchedulerInterventionLog {
 }
 
 // ============================================================================
+// OPERATOR PRESENCE (calendario operatore 4.6, gate F1 avvii non presidiati)
+// ============================================================================
+
+/// Presenza extra ad-hoc di un utente fuori turno (PIANO-AZIONE 4.6):
+/// dichiarazione leggera "domani ci sono 2h" che si AGGIUNGE alle finestre
+/// WorkShift − WorkAbsence nello snapshot di presenza
+/// (`client/src/lib/scheduler/operator-presence.ts`). La capacità è condivisa
+/// e i ruoli fluidi (MODELLO-DOMANDA): conta la dichiarazione, non il ruolo.
+model OperatorExtraPresence {
+  id     String @id @default(uuid()) @db.Uuid
+  userId Int
+  /// Giorno della presenza extra (solo data, convenzione `@db.Date` come WorkAbsence).
+  date DateTime @db.Date
+  /// Inizio in minuti dalla mezzanotte LOCALE (es. 1200 = 20:00).
+  fromMinute Int @db.SmallInt
+  /// Fine in minuti dalla mezzanotte locale; <= fromMinute = overnight (chiude il giorno dopo).
+  toMinute Int @db.SmallInt
+  note     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([date])
+  @@schema("print-farm")
+}
+
+/// Chiusura aziendale di un giorno (festività, ponte, chiusura estiva).
+/// In quel giorno i turni ricorrenti non producono presenza per NESSUN
+/// operatore; una presenza extra dichiarata esplicitamente resta valida.
+/// Scelta modellistica 4.6: tabella dedicata invece del riuso di WorkAbsence
+/// (che è per-utente e richiederebbe N righe allineate a ogni cambio organico).
+model CompanyHoliday {
+  id String @id @default(uuid()) @db.Uuid
+  /// Giorno di chiusura (solo data).
+  date DateTime @db.Date
+  note String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([date])
+  @@schema("print-farm")
+}
+
+// ============================================================================
 // SCHEDULER CONFIG & SCENARIO ANALYSIS
 // ============================================================================
 

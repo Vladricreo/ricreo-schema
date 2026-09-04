@@ -42,6 +42,8 @@ model User {
   workShifts                WorkShift[]
   /// Giorni di assenza puntuali (ferie, malattia, ecc.): in quel giorno capacità = 0 in distribuzione.
   workAbsences              WorkAbsence[]
+  /// Presenze extra ad-hoc fuori turno dichiarate da questo utente (print-farm, 4.6).
+  operatorExtraPresences    OperatorExtraPresence[]
   performedOperations       AssemblyOperation[]
   /// Operazioni di assemblaggio registrate nel diario (per il revert).
   assemblyJournalEntries    AssemblyJournalEntry[]
