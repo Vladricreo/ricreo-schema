@@ -574,7 +574,12 @@ view VMovementByLot {
 
 /// Upstream materiale/produzione per lotto (link ESATTI via FK): stampa 3D,
 /// stampante, bobina filamento e lotto materiale acquistato usato per stamparla.
-/// Una riga per ogni PrintRun collegato al ProductionLot del lotto.
+/// LEDGER-FIRST (Ondata 7, migration `20260904053000_lot_traceability_ledger`):
+/// una riga per ogni (PrintRun × bobina) risolta dal ledger
+/// `PrintRunSpoolConsumption`, con fallback su `PrintRun.spoolId` per le run
+/// pre-ledger. `printRunId` da solo NON è unico (stessa run su più InventoryLot
+/// dello stesso ProductionLot, e più bobine per run): la chiave univoca è
+/// (lotId, printRunId, spoolId).
 view VLotUpstreamMaterial {
   lotId                   String    @map("lot_id") @db.Uuid
   lotCode                 String    @map("lot_code")
@@ -582,7 +587,7 @@ view VLotUpstreamMaterial {
   productionLotCode       String?   @map("production_lot_code")
   productionJobId         String?   @map("production_job_id") @db.Uuid
   productionJobNumber     BigInt?   @map("production_job_number")
-  printRunId              String    @unique @map("print_run_id") @db.Uuid
+  printRunId              String    @map("print_run_id") @db.Uuid
   printRunNumber          BigInt    @map("print_run_number")
   printStartedAt          DateTime? @map("print_started_at") @db.Timestamptz(6)
   printFinishedAt         DateTime? @map("print_finished_at") @db.Timestamptz(6)
@@ -596,6 +601,7 @@ view VLotUpstreamMaterial {
   materialSupplierName    String?   @map("material_supplier_name")
   materialSupplierLotCode String?   @map("material_supplier_lot_code")
 
+  @@unique([lotId, printRunId, spoolId])
   @@map("v_lot_upstream_material")
   @@schema("inventory_views")
 }

@@ -2145,6 +2145,11 @@ model SpoolSwapDraft {
   toSpool     FilamentSpool? @relation("SpoolSwapDraftTo", fields: [toSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   toTagCode   String?
 
+  /// Override operatore sulla bobina suggerita: { override: true, reason?,
+  /// fromSuggestedSpoolId, toSpoolId, brandBreak, partialCoverage }.
+  /// NULL quando la bozza riflette il piano senza scelta manuale.
+  override    Json?
+
   unloadTargetLocationId String?            @db.Uuid
   unloadTargetLocation   WarehouseLocation? @relation("SpoolSwapDraftUnloadLocation", fields: [unloadTargetLocationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
