@@ -133,6 +133,11 @@ model ProjectFileMaterial {
   materialId String? @db.Uuid
   material   Item?   @relation("FileMaterialUsage", fields: [materialId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Spec/famiglia logica del materiale (default di matching F6, backfill da `Item.itemSpecId`).
+  /// `materialId` (brand/variant) RESTA: diventa preferenza o vincolo forte quando il file lo richiede.
+  materialSpecId String?   @db.Uuid
+  materialSpec   ItemSpec? @relation("FileMaterialSpec", fields: [materialSpecId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   usedWeight Decimal @db.Decimal(12, 2) // Grammi usati nel file (per quel filamento)
   colorUsed  String? // Colore usato (tipicamente il colore del filamento nel file)
 
@@ -142,6 +147,7 @@ model ProjectFileMaterial {
   @@unique([fileId, fileFilamentIndex]) // Un filamento (indice) una sola volta per file
   @@index([fileId])
   @@index([materialId])
+  @@index([materialSpecId])
   @@schema("print-farm")
 }
 
@@ -1823,6 +1829,11 @@ model SchedulerOrderEtaSnapshot {
   forecastAt DateTime @default(now()) @db.Timestamptz(6)
   etaP50     DateTime @db.Timestamptz(6)
   etaP80     DateTime @db.Timestamptz(6)
+  /// Scenario avverso P95 (piano §13). Nullable: assente negli snapshot precedenti a F4.1.
+  etaP95 DateTime? @db.Timestamptz(6)
+  /// Tier di rischio §13 (NORMALE/A_RISCHIO/CRITICO/IN_RITARDO) da dueDate + P50/P80/P95.
+  /// NULL onesto quando manca la dueDate o uno dei quantili: mai stimato.
+  riskTier String?
   confidence Float
   source     String
   coverage   Float
