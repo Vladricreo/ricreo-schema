@@ -796,8 +796,8 @@ view VAssemblyOrderOdetteStageBalance {
 /// ============================================================================
 
 /// Statistiche tempi di lavoro per prodotto (mediana, media totale, media mensile)
-/// Sorgente: sessioni tab correlate a qty stage; IQR + min 10s + cap 6h; winsor P5–P95 (code basse/alte).
-/// recent_* = ultimi 90gg (NULL se <3 campioni nel periodo recente pulito).
+/// Sorgente: sample ufficiali a chiusura ordine (totale sessioni tab / quantityAssembled);
+/// IQR + min 10s + cap 6h; winsor P5–P95. recent_* = ultimi 90gg (NULL se <3 campioni).
 view VProductLaborTimeStats {
   productId                  String   @unique @map("product_id") @db.Uuid
   medianSecondsPerUnit       Decimal  @map("median_seconds_per_unit") @db.Decimal(12, 2)
@@ -818,7 +818,8 @@ view VProductLaborTimeStats {
   @@schema("inventory_views")
 }
 
-/// Breakdown tempi/costi lavoro per prodotto e operatore (audit; stessa logica sessione-tab)
+/// Breakdown tempi/costi per prodotto e operatore: stesso tempo/pezzo ufficiale
+/// dell'ordine (non qty di stage mid-order); quota tempo = sessioni dell'operatore.
 view VProductLaborByOperator {
   productId            String   @map("product_id") @db.Uuid
   operatorId           Int      @map("operator_id")
