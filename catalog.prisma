@@ -154,6 +154,9 @@ model ItemSpec {
   items     Item[]
   overrides ItemSpecOverride[]
 
+  /// Righe file-materiale Print Farm che puntano a questa spec (default di matching F6).
+  projectFileMaterials ProjectFileMaterial[] @relation("FileMaterialSpec")
+
   /// BOM: il prodotto richiede una spec (non un item specifico)
   productComponents ProductToComponent[]
   productPackages   ProductToPackage[]

@@ -19,6 +19,8 @@ model ProductOrder {
   eta               DateTime?        @db.Timestamptz(6)
   /// Quantile conservativo P80 dello stesso modello ETA.
   etaP80            DateTime?        @db.Timestamptz(6)
+  /// Scenario avverso P95 dello stesso modello ETA (piano §13). Nullable: popolato dal primo ciclo Gantt dopo F4.1.
+  etaP95            DateTime?        @db.Timestamptz(6)
   /// Confidenza numerica 0..1; componenti e penalità sono spiegati in etaBreakdown.
   etaConfidence     Float?
   /// Spiegazione tipizzata serializzata: fonti, copertura, attese, rework e blocker.
