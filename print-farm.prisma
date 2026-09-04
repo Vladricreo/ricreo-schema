@@ -319,6 +319,9 @@ model PrintRun {
   filaments          Item[]
   spoolId            String?        @db.Uuid // Bobina usata per questa run
   spool              FilamentSpool? @relation(fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Ledger consumo per-bobina di questa run (grammi netti per spool+source).
+  /// Preferire questo a `spoolId` (singolo, last-write) per la tracciabilità materiale.
+  spoolConsumptions  PrintRunSpoolConsumption[] @relation("SpoolConsumptionLedger")
   notes              String?
 
   failureLogs PrintFailureLog[]

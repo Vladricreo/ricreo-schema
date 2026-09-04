@@ -173,6 +173,9 @@ model FilamentSpool {
 
   printRuns PrintRun[] // Storico stampe fatte con questa bobina
 
+  /// Ledger consumo per-run di questa bobina (grammi netti per run+source).
+  consumptionLedger PrintRunSpoolConsumption[] @relation("SpoolConsumptionLedger")
+
   /// Operazioni di carico filamento in cui è stata usata questa bobina
   filamentLoads PrinterFilamentLoad[]
 
@@ -219,6 +222,44 @@ enum SpoolStatus {
   DEPLETED // Finita (0g o scarto)
   ARCHIVED // Rimossa e non più tracciata (es. buttata parziale o persa)
 
+  @@schema("print-farm")
+}
+
+/// Ledger consumo run↔spool (Ondata 7, tracciabilità — audit TRACCIABILITA.md gap #1).
+/// Una riga per (printRunId, spoolId, source) con i grammi NETTI attribuiti a quella
+/// bobina su quella run: i writer fanno UPSERT accumulando il delta, quindi un revert
+/// harvest scala la stessa riga verso zero invece di creare contro-righe.
+/// Il consumo per-bobina della run = SUM(gramsUsed) su tutte le source.
+///
+/// Source note (TEXT aperta di proposito, niente enum: il backend tracker aggiungerà
+/// la sua senza migration):
+/// - 'harvest-reconcile'  → riconciliazione a harvest / revert (client)
+/// - 'harvest-checkpoint' → congelamento consumo prima di uno swap a metà stampa
+/// - 'run-start'          → bobina presente all'avvio run (gramsUsed=0, marcatore)
+/// - 'manual'             → correzioni da operatore
+/// - 'tracker-snapshot'   → (FUTURO, backend) deduzioni live da snapshot
+///
+/// FK: run in CASCADE (il ledger è un dettaglio della run, come PrintRunMetrics);
+/// spool in RESTRICT (la bobina deve sopravvivere per tracciabilità: si archivia,
+/// non si cancella — coerente con FilamentSpool.itemId già Restrict).
+model PrintRunSpoolConsumption {
+  id         String        @id @default(uuid()) @db.Uuid
+  printRunId String        @db.Uuid
+  printRun   PrintRun      @relation("SpoolConsumptionLedger", fields: [printRunId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  spoolId    String        @db.Uuid
+  spool      FilamentSpool @relation("SpoolConsumptionLedger", fields: [spoolId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// Grammi netti attribuiti (accumulati via upsert sul delta; negativo solo su ripristino).
+  gramsUsed  Decimal       @default(0) @db.Decimal(12, 2)
+  /// Sorgente dell'attribuzione (vedi header del modello).
+  source     String
+  createdAt  DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printRunId, spoolId, source])
+  /// "Cosa ha stampato questa bobina?" (vista per-bobina).
+  @@index([spoolId])
+  /// "Quali bobine ha consumato questa run?" (vista per-run).
+  @@index([printRunId])
   @@schema("print-farm")
 }
 
