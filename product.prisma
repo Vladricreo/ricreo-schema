@@ -127,6 +127,7 @@ model StoreSalesDaily {
   unitsOrdered        Int     @default(0)
   unitsRefunded       Int     @default(0)
   unitsShipped        Int     @default(0)
+  /// Ricavo merce IVA inclusa (Amazon EU/UK: item-price già con IVA).
   orderedProductSales Decimal @default(0) @db.Decimal(12, 2)
   currency            String  @default("EUR")
 
@@ -284,8 +285,15 @@ model StoreOrderLine {
   /// Spedizione addebitata al cliente (non il costo seller).
   shippingPrice Decimal? @db.Decimal(12, 2)
   shippingTax   Decimal? @db.Decimal(12, 2)
+  /// Gift wrap addebitato al cliente (Amazon all-orders, IVA inclusa).
+  giftWrapPrice Decimal? @db.Decimal(12, 2)
+  giftWrapTax   Decimal? @db.Decimal(12, 2)
   itemPromotionDiscount Decimal? @db.Decimal(12, 2)
   shipPromotionDiscount Decimal? @db.Decimal(12, 2)
+  /// Prezzo merce IVA esclusa (fallback se itemTax è NULL/0).
+  vatExclusiveItemPrice Decimal? @db.Decimal(12, 2)
+  /// Spedizione IVA esclusa (fallback se shippingTax è NULL/0).
+  vatExclusiveShippingPrice Decimal? @db.Decimal(12, 2)
   itemStatus  String?
   currency    String?
 
