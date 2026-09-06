@@ -3,6 +3,11 @@
 Captured via `pg_get_viewdef` / `pg_get_indexdef` before applying
 `20260906180000_overview_sold_vat_refund_fixes`.
 
+> **Nota:** questa cartella NON sta in `migrations/`. Prisma tratta ogni
+> sottocartella di `migrations/` come una migration e richiede
+> `migration.sql` (errore P3015 se manca). Gli snapshot restano qui
+> solo come documentazione.
+
 ## Pre-change 30d (CURRENT_DATE-29 .. CURRENT_DATE)
 
 - KPI profit (sales_daily): €22,262.56
