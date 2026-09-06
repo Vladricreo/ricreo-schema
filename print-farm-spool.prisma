@@ -1,3 +1,65 @@
+/// Tag fisico riutilizzabile (es. clip stampata 3D con NFC + QR code).
+/// Codice univoco stampato sulla tag (es. "S001", "S002").
+/// Flusso:
+/// 1. Si stampano N tag con codice progressivo e si registrano nel DB.
+/// 2. Quando una bobina parziale va a magazzino, si attacca una tag LIBERA.
+/// 3. Scansionando QR o NFC si identifica immediatamente la spool associata.
+/// 4. Quando la bobina finisce o viene rimontata, si stacca la tag → torna LIBERA.
+model SpoolTag {
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique /// Codice stampato sulla tag: "S001", "S002", ecc.
+
+  nfcUid String? @unique /// UID fisico del chip NFC (opzionale, letto dal reader)
+
+  status SpoolTagStatus @default(FREE)
+
+  /// Spool attualmente associata (null = tag libera)
+  currentSpoolId String?        @unique @db.Uuid
+  currentSpool   FilamentSpool? @relation("TaggedSpool", fields: [currentSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Storico di tutte le associazioni passate e presente
+  assignments SpoolTagAssignment[]
+
+  /// Posizione "casa" della tag sullo spool rack (dove sta quando è libera)
+  locationId String?            @db.Uuid
+  location   WarehouseLocation? @relation("TagLocation", fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  notes String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([locationId])
+  @@schema("print-farm")
+}
+
+enum SpoolTagStatus {
+  FREE /// Disponibile, non associata a nessuna spool
+  ASSIGNED /// Attualmente associata a una spool
+  RETIRED /// Ritirata/rotta, non più utilizzabile
+
+  @@schema("print-farm")
+}
+
+/// Storico delle associazioni tag ↔ spool.
+/// Ogni volta che si attacca o stacca una tag, si crea/chiude un record.
+model SpoolTagAssignment {
+  id String @id @default(uuid()) @db.Uuid
+
+  tagId String   @db.Uuid
+  tag   SpoolTag @relation(fields: [tagId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  spoolId String        @db.Uuid
+  spool   FilamentSpool @relation("TagAssignments", fields: [spoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  assignedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  unassignedAt DateTime? @db.Timestamptz(6)
+
+  @@index([tagId])
+  @@index([spoolId])
+  @@schema("print-farm")
+}
+
 /// Profilo tecnico di un filamento (collegato a Item di tipo MATERIAL).
 /// Contiene tutte le specifiche per la stampa: temperature, codici BambuLab, etc.
 model FilamentProfile {
@@ -7,8 +69,9 @@ model FilamentProfile {
   itemId String @unique @db.Uuid
   item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  // Codici esterni per integrazione
-  bambuCode String? @unique // Es. "GFA00", "GFB00", "GFL99"
+  // tray_info_idx Bambu (es. "GFA00", "GFL99"): tipo filamento, non SKU.
+  // Piu' materiali (colori/brand) possono condividere lo stesso codice.
+  bambuCode String?
 
   // Temperature di stampa (°C)
   printTempMin Int? // Es. 190
@@ -17,8 +80,20 @@ model FilamentProfile {
   bedTempMax   Int? // Es. 60
 
   // Essiccazione
-  dryingTemp      Int? // Es. 55
-  dryingTimeHours Int? // Es. 8
+  dryingTemp                    Int? // Es. 55
+  dryingTimeHours               Int? // Es. 8
+  dryingPolicy                  FilamentDryingPolicy @default(NONE) // Policy esplicita: distinta dal vincolo sul percorso di stampa
+  dryingFreshnessHours          Int? // Validità dell'asciugatura completata; null usa il default scheduler
+  warnDryOpenedSpoolBeforePrint Boolean              @default(false) // Avvisa se una bobina aperta va asciugata prima della stampa
+  requireHeatedAmsForPrint      Boolean              @default(false) // Usa dryingTemp per distinguere AMS 2 Pro (<=65°C) e AMS HT (<=85°C)
+  requireAmsHtForPrint          Boolean              @default(false) // Vincolo esplicito: stampa esclusivamente tramite AMS HT
+  // Traccia/asciuga in AMS HT, ma carico e stampa usano la spool esterna del nozzle del file (come TPU, senza forzare sinistra).
+  trackOnAmsHtPrintFromExternal Boolean              @default(false)
+
+  // Riscaldamento mantenuto durante la stampa (non e' un ciclo di asciugatura):
+  // il backend lo avvia allo start sull'unita' che alimenta la stampa.
+  keepAmsHeatedDuringPrint Boolean @default(false)
+  amsHeatDuringPrintTempC  Int? // Temperatura mantenuta durante la stampa (<=65°C su AMS 2 Pro, <=85°C su AMS HT)
 
   // Proprietà fisiche
   density  Decimal? @db.Decimal(5, 3) // g/cm³ per calcolo peso
@@ -32,6 +107,17 @@ model FilamentProfile {
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([bambuCode])
+  @@schema("print-farm")
+}
+
+/// Policy di asciugatura del materiale prima della stampa.
+/// Non descrive il percorso di alimentazione: `requireAmsHtForPrint` resta un vincolo separato.
+enum FilamentDryingPolicy {
+  NONE
+  RECOMMENDED
+  REQUIRED
 
   @@schema("print-farm")
 }
@@ -64,17 +150,20 @@ model FilamentSpool {
   inventoryLotId String?       @db.Uuid
   inventoryLot   InventoryLot? @relation("InventoryLotFilamentSpools", fields: [inventoryLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  /// ID del gettone RFID/NFC fisico associato temporaneamente.
-  /// FLUSSO "GETTONE RIUTILIZZABILE":
-  /// 1. Si usa un set di gettoni fisici (es. clip stampate con tag NFC).
-  /// 2. Quando una bobina parziale viene messa a magazzino, si attacca un gettone libero.
-  /// 3. Si associa l'ID del gettone a questa FilamentSpool (nfcTagId = "TOKEN-123").
-  /// 4. Quando la bobina viene rimontata o finisce, si stacca il gettone (nfcTagId = null).
-  /// 5. Il gettone torna nel cesto pronto per un'altra bobina.
-  nfcTagId String? @unique
+  /// Tag fisica riutilizzabile associata (relazione inversa da SpoolTag)
+  tag            SpoolTag?            @relation("TaggedSpool")
+  tagAssignments SpoolTagAssignment[] @relation("TagAssignments")
 
-  openedAt   DateTime  @default(now()) @db.Timestamptz(6) // Per scadenza/umidità
-  finishedAt DateTime? @db.Timestamptz(6)
+  openedAt    DateTime  @default(now()) @db.Timestamptz(6) // Per scadenza/umidità
+  /// Ultima asciugatura confermata/osservata.
+  /// Il default coincide con l'apertura: una bobina sigillata appena aperta è
+  /// già asciutta per tutta la finestra di validità del materiale.
+  lastDriedAt DateTime? @default(now()) @db.Timestamptz(6)
+  /// Quando valorizzato, l'orologio di validità è fermo: la bobina è in una AMS
+  /// che asciuga (HT / 2 Pro). Si azzera e si sposta `lastDriedAt` in avanti
+  /// quando torna in rack o in un'AMS senza asciugatura.
+  freshnessPausedAt DateTime? @db.Timestamptz(6)
+  finishedAt  DateTime? @db.Timestamptz(6)
 
   // Dove si trova?
   mountedOnId String?  @db.Uuid // ID Stampante se montata
@@ -83,6 +172,9 @@ model FilamentSpool {
   activeOnPrinters Printer[] @relation("ActiveSpool")
 
   printRuns PrintRun[] // Storico stampe fatte con questa bobina
+
+  /// Ledger consumo per-run di questa bobina (grammi netti per run+source).
+  consumptionLedger PrintRunSpoolConsumption[] @relation("SpoolConsumptionLedger")
 
   /// Operazioni di carico filamento in cui è stata usata questa bobina
   filamentLoads PrinterFilamentLoad[]
@@ -96,11 +188,32 @@ model FilamentSpool {
   /// Se presente, indica che la spool è in uno slot AMS specifico.
   amsSlot PrinterAmsSlot? @relation("AmsSlotSpool")
 
+  /// Spool esterna (`vt_tray`) montata su un nozzle. Per single-nozzle è il `currentSpool` legacy.
+  /// Per dual-nozzle, distingue Right (extruderId=0) e Left (extruderId=1).
+  externalSpool PrinterExternalSpool? @relation("ExternalSpool")
+
+  /// Righe di piano scheduler che useranno questa bobina.
+  assignmentSpoolPlans  AssignmentSpoolPlan[]  @relation("AssignmentSpoolPlans")
+  /// Cicli JIT pianificati per questa bobina fisica.
+  assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanSpool")
+  /// Cicli di asciugatura avviati sulla bobina (non legati a un assignment).
+  dryingSessions        SpoolDryingSession[]   @relation("SpoolDryingSessions")
+  /// Bozze swap in cui questa bobina è quella da smontare.
+  swapDraftsFrom SpoolSwapDraft[] @relation("SpoolSwapDraftFrom")
+  /// Bozze swap in cui questa bobina è quella da montare.
+  swapDraftsTo   SpoolSwapDraft[] @relation("SpoolSwapDraftTo")
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([inventoryLotId])
   @@index([locationId])
+  /// Hot path picker/compatible-spools: filtra per item e join su magazzino.
+  @@index([itemId])
+  /// Hot path unmount/mount: cerca spool montate su una stampante.
+  @@index([mountedOnId])
+  /// Hot path partial disponibili: ACTIVE + non montate + peso residuo.
+  @@index([status, mountedOnId, remainingWeight])
   @@schema("print-farm")
 }
 
@@ -109,6 +222,77 @@ enum SpoolStatus {
   DEPLETED // Finita (0g o scarto)
   ARCHIVED // Rimossa e non più tracciata (es. buttata parziale o persa)
 
+  @@schema("print-farm")
+}
+
+/// Ledger consumo run↔spool (Ondata 7, tracciabilità — audit TRACCIABILITA.md gap #1).
+/// Una riga per (printRunId, spoolId, source) con i grammi NETTI attribuiti a quella
+/// bobina su quella run: i writer fanno UPSERT accumulando il delta, quindi un revert
+/// harvest scala la stessa riga verso zero invece di creare contro-righe.
+/// Il consumo per-bobina della run = SUM(gramsUsed) su tutte le source.
+///
+/// Source note (TEXT aperta di proposito, niente enum: il backend tracker aggiungerà
+/// la sua senza migration):
+/// - 'harvest-reconcile'  → riconciliazione a harvest / revert (client)
+/// - 'harvest-checkpoint' → congelamento consumo prima di uno swap a metà stampa
+/// - 'run-start'          → bobina presente all'avvio run (gramsUsed=0, marcatore)
+/// - 'manual'             → correzioni da operatore
+/// - 'tracker-snapshot'   → (FUTURO, backend) deduzioni live da snapshot
+///
+/// FK: run in CASCADE (il ledger è un dettaglio della run, come PrintRunMetrics);
+/// spool in RESTRICT (la bobina deve sopravvivere per tracciabilità: si archivia,
+/// non si cancella — coerente con FilamentSpool.itemId già Restrict).
+model PrintRunSpoolConsumption {
+  id         String        @id @default(uuid()) @db.Uuid
+  printRunId String        @db.Uuid
+  printRun   PrintRun      @relation("SpoolConsumptionLedger", fields: [printRunId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  spoolId    String        @db.Uuid
+  spool      FilamentSpool @relation("SpoolConsumptionLedger", fields: [spoolId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// Grammi netti attribuiti (accumulati via upsert sul delta; negativo solo su ripristino).
+  gramsUsed  Decimal       @default(0) @db.Decimal(12, 2)
+  /// Sorgente dell'attribuzione (vedi header del modello).
+  source     String
+  createdAt  DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printRunId, spoolId, source])
+  /// "Cosa ha stampato questa bobina?" (vista per-bobina).
+  @@index([spoolId])
+  /// "Quali bobine ha consumato questa run?" (vista per-run).
+  @@index([printRunId])
+  @@schema("print-farm")
+}
+
+/// Tipo di risorsa trattenuta dal piano di preparazione live.
+enum PreparationReservationKind {
+  SPOOL
+  UNLOAD_LOCATION
+  AMS_SLOT
+
+  @@schema("print-farm")
+}
+
+/// Lock leggero e temporaneo del piano di preparazione.
+/// Le relazioni restano scalari per poter prenotare anche inventory sigillato
+/// senza creare una FilamentSpool prima dell'apertura fisica.
+model PreparationReservation {
+  id String @id @default(uuid()) @db.Uuid
+
+  spoolId    String? @unique @db.Uuid
+  locationId String? @unique @db.Uuid
+  amsSlotId  String? @unique @db.Uuid
+
+  printerId    String  @db.Uuid
+  assignmentId String? @db.Uuid
+  kind         PreparationReservationKind
+  expiresAt    DateTime @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerId, expiresAt])
+  @@index([assignmentId, expiresAt])
+  @@index([expiresAt])
   @@schema("print-farm")
 }
 
@@ -133,6 +317,11 @@ model PrinterAmsSlot {
   spoolId String?        @unique @db.Uuid
   spool   FilamentSpool? @relation("AmsSlotSpool", fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// FK opzionale al nuovo `PrinterAmsUnit` (popolata durante la migrazione di backfill).
+  /// Resta nullable per back-compat: i consumer legacy possono ancora navigare via (printerId, amsUnit).
+  amsUnitId  String?         @db.Uuid
+  amsUnitRel PrinterAmsUnit? @relation("AmsUnitSlots", fields: [amsUnitId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   /// Snapshot "reported" dalla stampante (NON tracciamento spool).
   /// Serve per salvare materiale/colore anche quando non abbiamo una FilamentSpool assegnata.
   /// Non deve sovrascrivere la spool "reale" (spoolId) scelta dal frontend.
@@ -141,6 +330,15 @@ model PrinterAmsSlot {
   reportedTrayInfoIdx  String? // es. "GFB99" (Bambu tray_info_idx) - opzionale
   reportedLastSeenAt   DateTime? @db.Timestamptz(6)
 
+  /// Reservation source-of-truth opzionale; il vincolo unique è sulla riga piano.
+  spoolPlanReservation  AssignmentSpoolPlan?   @relation("SpoolPlanReservedSlot")
+  /// Cicli JIT che richiedono la spool fisica in questo slot.
+  assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanAmsSlot")
+  /// Cicli JIT che, a fine asciugatura, richiedono la spool trasferita qui.
+  dryingRelocations     AssignmentDryingPlan[] @relation("DryingPlanRelocationSlot")
+  /// Cicli di asciugatura bobina avviati su questo slot.
+  dryingSessions        SpoolDryingSession[]   @relation("SpoolDryingSessionSlot")
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -148,6 +346,88 @@ model PrinterAmsSlot {
   @@unique([printerId, amsUnit, slot])
   @@index([printerId])
   @@index([spoolId])
+  @@index([amsUnitId])
   @@schema("print-farm")
 }
 
+/// Stato di un ciclo di asciugatura avviato su una bobina specifica.
+enum SpoolDryingSessionStatus {
+  DRYING
+  COMPLETED
+  STOPPED
+  FAILED
+
+  @@schema("print-farm")
+}
+
+/// Origine del ciclo di asciugatura bobina.
+enum SpoolDryingTrigger {
+  /// Avviato dall'operatore dalla pagina di preparazione.
+  MANUAL
+  /// Avviato in automatico insieme all'invio delle stampe (asciuga mentre stampa).
+  PRINT_START
+
+  @@schema("print-farm")
+}
+
+/// Ciclo di asciugatura legato alla **bobina fisica**, non a un assignment.
+///
+/// Complementare a `AssignmentDryingPlan` (asciugatura JIT pianificata dallo
+/// scheduler): qui l'operatore mette la bobina nella AMS HT e avvia il ciclo
+/// quando vuole. Mentre la sessione è `DRYING` l'unità AMS risulta occupata e
+/// non viene proposta per altri materiali, ma la stampante può continuare a
+/// stampare usando le altre unità.
+///
+/// Il completamento arriva dalla telemetria backend (`/api/internal/drying-events`)
+/// e aggiorna `FilamentSpool.lastDriedAt`, da cui deriva la validità.
+model SpoolDryingSession {
+  id String @id @default(uuid()) @db.Uuid
+
+  spoolId String        @db.Uuid
+  spool   FilamentSpool @relation("SpoolDryingSessions", fields: [spoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterSpoolDryingSessions", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  amsUnitId String         @db.Uuid
+  amsUnit   PrinterAmsUnit @relation("AmsUnitSpoolDryingSessions", fields: [amsUnitId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  amsSlotId String         @db.Uuid
+  amsSlot   PrinterAmsSlot @relation("SpoolDryingSessionSlot", fields: [amsSlotId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  status  SpoolDryingSessionStatus @default(DRYING)
+  trigger SpoolDryingTrigger       @default(MANUAL)
+
+  /// Parametri effettivi del ciclo, risolti dal profilo filamento al momento dell'avvio.
+  tempC           Int
+  durationMinutes Int
+  freshnessHours  Int
+  /// Materiale inviato nel comando MQTT (`ams_filament_drying.filament`).
+  filamentLabel   String?
+
+  startedAt     DateTime  @default(now()) @db.Timestamptz(6)
+  /// Fine prevista del ciclo: base della barra di progresso lato UI.
+  expectedEndAt DateTime  @db.Timestamptz(6)
+  completedAt   DateTime? @db.Timestamptz(6)
+  stoppedAt     DateTime? @db.Timestamptz(6)
+  /// Valorizzato al completamento: `completedAt + freshnessHours`.
+  freshnessUntil DateTime? @db.Timestamptz(6)
+
+  /// Identità del comando verso il backend: blocca callback stale/duplicate.
+  commandIdempotencyKey String @unique
+
+  failureReason String?
+  /// Operatore che ha avviato il ciclo (scalare: nessuna FK verso lo schema auth).
+  operatorUserId Int?
+
+  metadata Json? @db.JsonB
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([spoolId, startedAt(sort: Desc)])
+  @@index([printerId, status])
+  @@index([amsUnitId, status])
+  @@index([status, startedAt(sort: Desc)])
+  @@schema("print-farm")
+}

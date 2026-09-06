@@ -1,3 +1,15 @@
+/// Tipo di superficie piatto richiesta dal file / montata sulla stampante (Bambu Studio / firmware).
+enum PlateType {
+  TEXTURED
+  SMOOTH
+  SMOOTH_PA
+
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("plate_type")
+  @@schema("public")
+}
+
 /// File di progetto 3MF per la stampa 3D.
 /// Include informazioni sul file, parametri di stampa, materiali usati e versionamento.
 model ProjectThreeMFFile {
@@ -18,6 +30,9 @@ model ProjectThreeMFFile {
   totalFilamentWeight      Decimal? @db.Decimal(12, 2) // peso totale filamento usato in grammi
   plateNumber              Int      @default(1) // Numero del plate (index) per il comando di stampa
 
+  /// Tipo piatto richiesto per questa stampa (filtraggio stampanti + `bed_type` su comando Bambu).
+  requiredPlateType PlateType @default(TEXTURED)
+
   /// Metadati estratti da `Metadata/slice_info.config` (Bambu Studio)
   printerModelId String? // es. "C12"
   supportsUsed   Boolean @default(false)
@@ -25,6 +40,28 @@ model ProjectThreeMFFile {
   /// Oggetti nel plate (per skip/selezione oggetti singoli in stampa)
   /// JSON array: [{ identifyId: number, name: string, skipped: boolean }]
   sliceObjects   Json?
+
+  /// --- PROFILO DI SLICING (multi-nozzle) — cfr. docs/multi-nozzle §13 ---
+  /// Classificazione derivata da `Metadata/slice_info.config` (`filament_maps`).
+  /// 'SINGLE' = tutti i filamenti su un solo extruder; 'DUAL' = >=2 extruder distinti.
+  /// Null per file legacy senza `filament_maps`.
+  nozzleMode                String?
+  /// Extruder a cui è "pinnato" un file SINGLE (es. tutto su left). Null = ext0/legacy.
+  pinnedExtruder            Int?
+  /// Modalità mappa filamenti del file ('MANUAL' | 'AUTO' | 'DYNAMIC').
+  sliceMapMode              String?
+  /// True se il file è stato affettato assumendo l'FTS (`has_filament_switcher`).
+  fileExpectsFts            Boolean?
+  /// Tipo hardware per-extruder (`extruder_type`, ordine per indice extruder 0,1,...).
+  extruderTypes             Int[]     @default([])
+  /// Diametri nozzle per-extruder (`nozzle_diameters`, ordine per indice extruder 0,1,...).
+  nozzleDiametersByExtruder Decimal[] @default([]) @db.Decimal(4, 2)
+
+  /// Il file richiede un intervento manuale a metà stampa (es. inserimento di un componente/inserto)
+  /// che causa una pausa attesa/pianificata. Usato per mostrare all'operatore un messaggio dedicato
+  /// ("Pausa per inserimento aggiuntivo") alla prima pausa rilevata per questa stampa, invece del
+  /// generico "In pausa".
+  requiresAdditionalInsert Boolean @default(false)
 
   /// Percentuale di riempimento del piano (es. 0.70 = 70%)
   /// Usata per stimare l'area delle parti quando non conosciamo le dimensioni esatte
@@ -43,21 +80,25 @@ model ProjectThreeMFFile {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
-  printRuns      PrintRun[]
-  productId      String?               @db.Uuid
-  product        Product?              @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  printRuns             PrintRun[]
+  schedulerCalibrations SchedulerCalibration[]
+  productId             String?                @db.Uuid
+  product               Product?               @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Parte principale associata al file (opzionale).
   /// Nota: il dettaglio multi-parte rimane in `ProjectPart`, ma questo campo serve per risoluzioni rapide e affidabili.
-  productPartId  String?               @db.Uuid
-  productPart    ProductPart?          @relation("ProductPartFiles", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  materials      Item[] // Relazione legacy (per compatibilità)
-  fileMaterials  ProjectFileMaterial[] // Nuova relazione con peso specifico del file
-  productionJobs ProductionJob[]       @relation("JobsToFiles")
-  parts          ProjectPart[]         @relation("ProjectParts")
-  feedbacks      FarmFeedback[]
+  productPartId         String?                @db.Uuid
+  productPart           ProductPart?           @relation("ProductPartFiles", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  materials             Item[] // Relazione legacy (per compatibilità)
+  fileMaterials         ProjectFileMaterial[] // Nuova relazione con peso specifico del file
+  productionJobs        ProductionJob[]        @relation("JobsToFiles")
+  parts                 ProjectPart[]          @relation("ProjectParts")
+  feedbacks             FarmFeedback[]
 
   /// Task di accodamento persistenti (flusso "send to print")
   queueTasks QueueTask[] @relation("FileQueueTasks")
+
+  /// Job di slicing che hanno prodotto questo file (inverso di `SliceJob.resultFile`).
+  sliceJob SliceJob? @relation("SliceJobResultFile")
 
   @@index([productId])
   @@index([productPartId])
@@ -84,10 +125,18 @@ model ProjectFileMaterial {
   trayInfoIdx       String?
   /// Tipo filamento nel file (PLA/ABS/...)
   filamentType      String?
+  /// Extruder dichiarato dal file Bambu Studio (0 = right/main, 1 = left/auxiliary).
+  /// Estratto da `Metadata/slice_info.config` (`filament_maps`). Null se single-nozzle o non specificato.
+  extruderId        Int?
 
   /// Materiale inventario associato (opzionale, può essere mappato successivamente)
   materialId String? @db.Uuid
   material   Item?   @relation("FileMaterialUsage", fields: [materialId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Spec/famiglia logica del materiale (default di matching F6, backfill da `Item.itemSpecId`).
+  /// `materialId` (brand/variant) RESTA: diventa preferenza o vincolo forte quando il file lo richiede.
+  materialSpecId String?   @db.Uuid
+  materialSpec   ItemSpec? @relation("FileMaterialSpec", fields: [materialSpecId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   usedWeight Decimal @db.Decimal(12, 2) // Grammi usati nel file (per quel filamento)
   colorUsed  String? // Colore usato (tipicamente il colore del filamento nel file)
@@ -98,6 +147,7 @@ model ProjectFileMaterial {
   @@unique([fileId, fileFilamentIndex]) // Un filamento (indice) una sola volta per file
   @@index([fileId])
   @@index([materialId])
+  @@index([materialSpecId])
   @@schema("print-farm")
 }
 
@@ -194,11 +244,17 @@ model ProductionJob {
   /// Task Gantt che coinvolgono questo job
   ganttTasks GanttTask[]
 
+  /// Segnalazioni sui file rilevate durante questo job.
+  feedbacks FarmFeedback[]
+
+  @@unique([productOrderId, productPartId])
   @@index([productOrderId])
   @@index([assemblyOrderId])
   @@index([productId])
   @@index([productPartId])
   @@index([status])
+  /// Hot path tracciabilità ISO: risalire dai job al lotto di produzione.
+  @@index([productionLotId])
   @@schema("print-farm")
 }
 
@@ -215,9 +271,11 @@ model PrintRun {
 
   /// Stampante associata a questa run.
   ///
-  /// Per le run “pianificate” l'informazione passa da `assignment -> printer`.
-  /// Questo campo serve soprattutto per run “unplanned/custom” (es. stampa avviata dal pannello della stampante),
-  /// dove potremmo non avere una `PrinterAssignment` da collegare.
+  /// OBBLIGATORIO per tracciabilità ISO: le view inventario (`v_lot_upstream_material`,
+  /// `v_lot_timeline_events`) leggono `PrintRun.printerId` direttamente — non via assignment.
+  /// Valorizzare SEMPRE anche sulle run pianificate (oltre ad `assignmentId`), altrimenti
+  /// il nome stampante non compare nella timeline del lotto. Utile anche per run unplanned/custom
+  /// senza `PrinterAssignment`.
   printerId String?  @db.Uuid
   printer   Printer? @relation("PrintRunPrinter", fields: [printerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
@@ -261,6 +319,9 @@ model PrintRun {
   filaments          Item[]
   spoolId            String?        @db.Uuid // Bobina usata per questa run
   spool              FilamentSpool? @relation(fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Ledger consumo per-bobina di questa run (grammi netti per spool+source).
+  /// Preferire questo a `spoolId` (singolo, last-write) per la tracciabilità materiale.
+  spoolConsumptions  PrintRunSpoolConsumption[] @relation("SpoolConsumptionLedger")
   notes              String?
 
   failureLogs PrintFailureLog[]
@@ -314,20 +375,36 @@ model Printer {
   model   PrinterModel @relation(fields: [modelId], references: [id])
   modelId Int
 
-  imageUrl       String?
-  ipAddress      String?
-  softwareType   SoftwareType @default(BAMBU_STUDIO)
-  accessCode     String?
-  apiKey         String?
-  peakPower      Decimal?     @db.Decimal(12, 2)
-  runPower       Decimal?     @db.Decimal(12, 2)
-  nozzleDiameter Decimal      @default(0.4) @db.Decimal(4, 2)
-  nozzleType     String       @default("Hardened Steel")
-  structure      String       @default("CoreXY")
-  ams            Boolean?
+  imageUrl                 String?
+  ipAddress                String?
+  softwareType             SoftwareType @default(BAMBU_STUDIO)
+  accessCode               String?
+  apiKey                   String?
+  peakPower                Decimal?     @db.Decimal(12, 2)
+  runPower                 Decimal?     @db.Decimal(12, 2)
+  nozzleDiameter           Decimal      @default(0.4) @db.Decimal(4, 2)
+  nozzleType               String       @default("Hardened Steel")
+  /// Numero di nozzle/extruder della stampante (1 = single, 2 = dual H2D/X2D).
+  /// Autodetect dal firmware; fallback a 1 per back-compat.
+  nozzleCount              Int          @default(1)
+  /// True se la stampante ha il Filament Track Switch installato (solo dual-nozzle).
+  /// Quando true, ogni AMS può alimentare entrambi i nozzle (routing dinamico).
+  filaTrackSwitchInstalled Boolean      @default(false)
+  /// Snapshot dell'ultimo stato `fila_switch` riportato dal firmware (per debug + UI).
+  filaTrackSwitchState     Json?
+  /// Ultimo extruder attivo riportato dalla stampante (0 = right/main, 1 = left/auxiliary).
+  activeExtruder           Int          @default(0)
+  /// Tipo piatto attualmente montato (aggiornamento manuale operatore; usato per compatibilità con i file).
+  currentPlateType         PlateType    @default(TEXTURED)
+  /// True se la stampante ha il modulo per stampare TPU/TPE installato.
+  /// La compatibilità è per-stampante (non per modello): alcune macchine hanno il modulo, altre no.
+  /// Quando false, lo scheduler non assegna a questa stampante job con materiale TPU/TPE.
+  supportsTpu              Boolean      @default(false)
+  structure                String       @default("CoreXY")
+  ams                      Boolean?
   /// Modello AMS collegato (se presente). Serve per stimare consumi AMS (standby/working/drying).
-  amsModel       AmsModel?
-  pushAllTimeout Int?
+  amsModel                 AmsModel?
+  pushAllTimeout           Int?
 
   /// Stato runtime dalla stampante (WebSocket) - volatile
   status PrinterStatus @default(OFFLINE)
@@ -341,6 +418,11 @@ model Printer {
   /// È un flag persistente “overlay” separato da `operationalStatus` per evitare conflitti.
   needsFilamentSwap Boolean @default(false)
 
+  /// Istante in cui il flag è passato a true: serve per misurare il tempo di reazione
+  /// dell'operatore (attesa stampante) nelle sessioni di cambio filamento.
+  /// Non viene rinfrescato se il flag era già true.
+  needsFilamentSwapAt DateTime? @db.Timestamptz(6)
+
   /// True quando il piatto è *attivamente* in riscaldamento verso il target (indipendente da operationalStatus).
   /// Viene aggiornato dal backend in base a `bedTemp` e `bedTargetTemp` con isteresi (evita toggle rapido).
   isBedHeating Boolean @default(false)
@@ -352,8 +434,10 @@ model Printer {
   lastPrintPlateNumber Int?
   lastPrintUseAms      Boolean?
   /// Mapping AMS dell'ultimo job (5 elementi, best-effort). Può essere NULL se non determinabile.
-  lastPrintAmsMapping Int[]
-  lastPrintAt         DateTime? @db.Timestamptz(6)
+  lastPrintAmsMapping  Int[]
+  /// Mapping per-filamento → extruderId dell'ultimo job (solo dual-nozzle). Parallelo a `lastPrintAmsMapping`.
+  lastPrintFilamentMap Int[]
+  lastPrintAt          DateTime? @db.Timestamptz(6)
 
   /// --- HEALTH / TELEMETRIA ---
   /// Ultimo aggiornamento ricevuto dalla stampante via WebSocket.
@@ -408,11 +492,15 @@ model Printer {
   /// Serve per suggerire automaticamente l'assegnazione dei job in base al materiale richiesto.
   preferredMaterialCategories PrinterPreferredMaterialCategory[]
 
-  logs            PrinterLogs[]
-  maintenanceLogs PrinterMaintenanceLog[]
-  feedbacks       FarmFeedback[]
+  logs             PrinterLogs[]
+  maintenanceLogs  PrinterMaintenanceLog[]
+  /// Periodi di override (manutenzione / disabilitata / stampa manuale) con ingresso e uscita.
+  overridePeriods  PrinterOverridePeriod[]
+  /// Piani di manutenzione ricorrente associati alla stampante (template ISO).
+  maintenancePlans PrinterMaintenancePlan[]
+  feedbacks        FarmFeedback[]
   /// Issue operative/tecniche aperte o risolte (derivate da MQTT/WSS o inserite manualmente).
-  issues          PrinterIssue[]
+  issues           PrinterIssue[]
 
   printerMacros PrinterMacro[]    @relation("PrinterCompatibility")
   failureLogs   PrintFailureLog[]
@@ -429,10 +517,24 @@ model Printer {
   harvests      PrinterHarvest[]
   /// Storico carichi filamento su questa stampante
   filamentLoads PrinterFilamentLoad[]
+  /// Sessioni cronometrate di cambio/ricarica filamento su questa stampante
+  swapSessions  FilamentSwapSession[]
 
   /// Slot AMS per stampanti con AMS.
   /// Ogni slot può contenere una spool. Per stampanti senza AMS, usare currentSpoolId.
   amsSlots PrinterAmsSlot[] @relation("PrinterAmsSlots")
+
+  /// Nozzle/extruder fisici della stampante (1 record per single-nozzle, 2 per dual H2D/X2D).
+  /// Sostituisce `nozzleDiameter`/`nozzleType` su dual-nozzle (i campi legacy restano scrivibili per back-compat).
+  nozzles PrinterNozzle[] @relation("PrinterNozzles")
+
+  /// Unità AMS collegate alla stampante. Su X2D possono essere fino a 12 (4× AMS 2 Pro + 8× AMS HT).
+  /// Sostituisce `amsModel` (singolo) su multi-AMS.
+  amsUnits PrinterAmsUnit[] @relation("PrinterAmsUnits")
+
+  /// Spool esterne (`vt_tray`) per nozzle. Su single-nozzle è 1 (extruderId=0); su dual-nozzle fino a 2.
+  /// Sostituisce `currentSpoolId`/`externalReported*` su dual-nozzle.
+  externalSpools PrinterExternalSpool[] @relation("PrinterExternalSpools")
 
   /// Consumi energia aggregati giornalieri (per dashboard, include standby).
   energyDailySlices PrinterEnergyDailySlice[]
@@ -446,7 +548,17 @@ model Printer {
   queueTasks QueueTask[] @relation("PrinterQueueTasks")
 
   /// Task Gantt pianificati su questa stampante
-  ganttTasks GanttTask[]
+  ganttTasks             GanttTask[]
+  /// Interventi operatore registrati dal client.
+  schedulerInterventions SchedulerInterventionLog[]
+  /// Cicli di asciugatura JIT pianificati sulla stampante.
+  assignmentDryingPlans  AssignmentDryingPlan[]     @relation("DryingPlanPrinter")
+  /// Cicli di asciugatura bobina (manuali o avviati con le stampe).
+  spoolDryingSessions    SpoolDryingSession[]       @relation("PrinterSpoolDryingSessions")
+  /// Bozze scarico precompilate (UI, TV corridoio, voce).
+  harvestDrafts          HarvestDraft[]
+  /// Bozze swap/runout precompilate (preparazione + voce).
+  spoolSwapDrafts        SpoolSwapDraft[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -458,22 +570,145 @@ model Printer {
   @@schema("print-farm")
 }
 
+/// Nozzle/extruder fisico di una stampante.
+/// 1 record per single-nozzle, 2 record per dual H2D/X2D (extruderId = 0 right, 1 left).
+/// Sostituisce `Printer.nozzleDiameter`/`Printer.nozzleType` su dual-nozzle (legacy resta scrivibile per 1-2 release).
+model PrinterNozzle {
+  id        String  @id @default(uuid()) @db.Uuid
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterNozzles", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// 0 = right/main, 1 = left/auxiliary (Bambu convention).
+  extruderId Int
+
+  /// Diametro nozzle in mm (es. 0.4, 0.6).
+  diameter   Decimal @default(0.4) @db.Decimal(4, 2)
+  /// Tipo nozzle (es. "Hardened Steel", "Stainless Steel").
+  nozzleType String  @default("Hardened Steel")
+
+  /// Usura % (0..100), best-effort dal firmware.
+  wear         Int?
+  /// Serial number nozzle (se disponibile dal firmware).
+  serialNumber String?
+  /// Temperatura massima °C dichiarata dal nozzle (es. 300).
+  maxTempC     Int?
+
+  /// Snapshot ultimo colore/tipo filamento "reported" dal nozzle (non spool tracking).
+  lastReportedFilamentColor String?
+  lastReportedFilamentType  String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerId, extruderId])
+  @@index([printerId])
+  @@schema("print-farm")
+}
+
+/// Unità AMS collegata a una stampante (Bambu).
+/// Su X1/P1/A1: 1 record (amsId=0). Su H2D: fino a 2. Su X2D: fino a 12 (4× AMS 2 Pro + 8× AMS HT).
+/// Sostituisce `Printer.amsModel` (singleton) su multi-AMS.
+model PrinterAmsUnit {
+  id        String  @id @default(uuid()) @db.Uuid
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterAmsUnits", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// id MQTT (0..n). Su X2D può salire molto (fino a 12).
+  amsId           Int
+  amsModel        AmsModel
+  serialNumber    String?
+  firmwareVersion String?
+
+  /// Extruder a cui l'AMS è agganciata (0 = right, 1 = left).
+  /// null = routing dinamico via FTS (Filament Track Switch).
+  extruderId Int?
+
+  /// Telemetria: snapshot dell'ultimo MQTT.
+  humidity     Int?
+  tempC        Decimal? @db.Decimal(4, 1)
+  /// 0=Off, 1=Checking, 2=Drying, 3=Cooling, 4=Stopping, 5=Error.
+  dryStatus    Int?
+  /// 0=Off, 1=Heating, 2=Dehumidify.
+  drySubStatus Int?
+  /// Minuti rimanenti del ciclo di drying.
+  dryTimeMin   Int?
+
+  /// Slot AMS appartenenti a questa unità (relazione 1:N opzionale verso `PrinterAmsSlot.amsUnitId`).
+  slots                 PrinterAmsSlot[]       @relation("AmsUnitSlots")
+  /// Cicli JIT che occupano in esclusiva questa unità durante l'asciugatura.
+  assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanAmsUnit")
+  /// Cicli di asciugatura bobina che occupano in esclusiva questa unità.
+  spoolDryingSessions   SpoolDryingSession[]   @relation("AmsUnitSpoolDryingSessions")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerId, amsId])
+  @@index([printerId])
+  @@schema("print-farm")
+}
+
+/// Spool esterna (Bambu `vt_tray`) montata su un nozzle specifico.
+/// Su single-nozzle: 1 record (extruderId=0). Su dual-nozzle: fino a 2 (Right su extruderId=0, Left su extruderId=1).
+/// Sostituisce `Printer.currentSpoolId` + `Printer.externalReported*` su dual-nozzle.
+model PrinterExternalSpool {
+  id        String  @id @default(uuid()) @db.Uuid
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterExternalSpools", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// 0 = right/main, 1 = left/auxiliary.
+  extruderId Int
+
+  /// Spool tracciata associata (può essere null = solo "reported" dal firmware).
+  spoolId String?        @unique @db.Uuid
+  spool   FilamentSpool? @relation("ExternalSpool", fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Snapshot "reported" dal firmware (non spool tracking) — mirror dei campi attuali su Printer.
+  reportedMaterialType String?
+  reportedColor        String?
+  reportedTrayInfoIdx  String?
+  reportedLastSeenAt   DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerId, extruderId])
+  @@index([printerId])
+  @@schema("print-farm")
+}
+
 model PrinterModel {
   id          Int    @id @default(autoincrement())
   name        String @unique
   deviceModel String
+
+  /// Numero di nozzle/extruder che il modello supporta a livello hardware.
+  /// 1 = single (X1/P1/A1), 2 = dual (H2D/X2D). Source-of-truth per la UI.
+  /// `Printer.nozzleCount` resta come mirror per back-compat con i consumer esistenti.
+  nozzleCount Int @default(1)
+
+  /// Se true, i nozzle del modello sono equivalenti (es. tutti direct drive su H2D):
+  /// l'assegnazione filamento->extruder del file può essere permutata fra i nozzle.
+  /// false (X2D): mappa rigida, il filamento deve usare l'extruder esatto del file.
+  extruderAssignmentSwappable Boolean @default(false)
 
   /// Dimensioni piano di stampa (mm)
   buildPlateWidth  Decimal? @db.Decimal(8, 2) // Larghezza piano (X) in mm
   buildPlateDepth  Decimal? @db.Decimal(8, 2) // Profondità piano (Y) in mm
   buildPlateHeight Decimal? @db.Decimal(8, 2) // Altezza massima (Z) in mm
 
-  printers       Printer[]
+  printers              Printer[]
   /// Profili consumo energia per questo modello (per tensione/fase/materiale).
-  energyProfiles PrinterModelEnergyProfile[]
-  errorCodes     ErrorCode[]                 @relation("PrinterModelErrorCode")
+  energyProfiles        PrinterModelEnergyProfile[]
+  errorCodes            ErrorCode[]                 @relation("PrinterModelErrorCode")
   /// Macro G-code compatibili con questo modello di stampante
-  printerMacros  PrinterMacro[]              @relation("PrinterModelMacroCompatibility")
+  printerMacros         PrinterMacro[]              @relation("PrinterModelMacroCompatibility")
+  /// Profili OrcaSlicer (printer/process) associati a questo modello.
+  slicerProfiles        SlicerProfile[]             @relation("PrinterModelSlicerProfiles")
+  /// Job di slicing eseguiti per questo modello.
+  sliceJobs             SliceJob[]                  @relation("PrinterModelSliceJobs")
+  /// Fattori di calibrazione appresi per file e materiale.
+  schedulerCalibrations SchedulerCalibration[]
 
   @@schema("print-farm")
 }
@@ -511,7 +746,10 @@ enum AmsModel {
   AMS_2_PRO
   AMS_HT
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("ams_model")
+  @@schema("public")
 }
 
 /// Fasi consumo AMS.
@@ -569,6 +807,12 @@ model AmsEnergyProfile {
 
 /// Slice giornaliera di energia (kWh) per stampante/fase.
 /// Usata per grafici energia \"totale farm\" (include standby + stampa).
+///
+/// Nota upsert backend (`EnergyMonitor.incrementDailyEnergySlice`):
+/// - con categoria: ON CONFLICT (day, printerId, phase, materialCategoryId)
+/// - senza categoria: ON CONFLICT (day, printerId, phase) WHERE materialCategoryId IS NULL
+///   (indice SQL parziale `PrinterEnergyDailySlice_day_printerId_phase_null_category_key`,
+///   necessario perché Postgres tratta i NULL come distinti nell'@@unique a 4 colonne)
 model PrinterEnergyDailySlice {
   id String @id @default(uuid()) @db.Uuid
 
@@ -753,7 +997,10 @@ enum PrinterStatus {
   SLICING
   ERROR
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("printer_status")
+  @@schema("public")
 }
 
 /// Stato operativo della stampante (persistente, gestito da logica applicativa).
@@ -766,7 +1013,10 @@ enum PrinterOperationalStatus {
   FILAMENT_RUNOUT // Filamento finito durante stampa (richiede ricarica)
   ERROR // Errore bloccante (richiede intervento)
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("printer_operational_status")
+  @@schema("public")
 }
 
 /// Override manuale impostato dall'operatore.
@@ -776,7 +1026,10 @@ enum PrinterManualOverrideStatus {
   DISABLED
   MANUAL_PRINTING
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("printer_manual_override_status")
+  @@schema("public")
 }
 
 /// Stato di un'assegnazione stampante per un ProductionJob.
@@ -793,7 +1046,10 @@ enum AssignmentStatus {
   ERROR // Errore
   START_FAILED // Avvio fallito: stampante in errore, serve intervento. Self-heal quando la stampante si riprende.
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("assignment_status")
+  @@schema("public")
 }
 
 /// Assegnazione di una stampante a un ProductionJob.
@@ -831,15 +1087,27 @@ model PrinterAssignment {
   status        AssignmentStatus @default(SCHEDULED)
 
   // === Timing ===
-  scheduledAt DateTime? @db.Timestamptz(6) // Quando è stato schedulato
+  scheduledAt            DateTime?  @db.Timestamptz(6) // Quando è stato schedulato
   /// Timestamp "claim" (lock) usato SOLO dallo scheduler backend per evitare doppio start.
   /// Non rappresenta l'inizio stampa: serve solo come mutex soft recuperabile (stale) in caso di crash.
-  claimedAt   DateTime? @db.Timestamptz(6)
-  startedAt   DateTime? @db.Timestamptz(6) // Inizio stampa effettivo
-  completedAt DateTime? @db.Timestamptz(6) // Fine stampa
+  claimedAt              DateTime?  @db.Timestamptz(6)
+  startedAt              DateTime?  @db.Timestamptz(6) // Inizio stampa effettivo
+  completedAt            DateTime?  @db.Timestamptz(6) // Fine stampa
+  /// Snapshot immutabile del piano quando il task Gantt viene collegato.
+  plannedStart           DateTime?  @db.Timestamptz(6)
+  plannedEnd             DateTime?  @db.Timestamptz(6)
+  plannedDurationMinutes Int?
+  /// Origine F6 della decisione immediata. Il task è unique per rendere retry
+  /// e doppi cron idempotenti; il piano resta separato per audit/query.
+  sourceGanttPlanId      String?    @db.Uuid
+  sourceGanttPlan        GanttPlan? @relation("AssignmentSourceGanttPlan", fields: [sourceGanttPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sourceGanttTaskId      String?    @unique @db.Uuid
+  sourceGanttTask        GanttTask? @relation("AssignmentSourceGanttTask", fields: [sourceGanttTaskId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   /// Operazioni di raccolta pezzi associate a questa assegnazione
   harvests PrinterHarvest[]
+  /// Bozza scarico corrente (una per assignment attivo).
+  harvestDraft HarvestDraft?
 
   /// Righe contenuto odette associate (opzionale, per scarico/unplanned).
   odetteContents OdetteContent[]
@@ -857,12 +1125,25 @@ model PrinterAssignment {
   downtimeEvents PrinterDowntimeEvent[] @relation("AssignmentDowntimeEvents")
 
   /// Issue operative/tecniche collegate a questa assignment (opzionale).
-  issues PrinterIssue[]
+  issues                 PrinterIssue[]
+  /// Task di piani diversi che hanno rappresentato questa assignment.
+  ganttTasks             GanttTask[]
+  /// Interventi operatore correlati, quando l'assignment è nota.
+  schedulerInterventions SchedulerInterventionLog[]
+  /// Piano concreto delle bobine primarie/backup per ciascun filamento del file.
+  spoolPlans             AssignmentSpoolPlan[]
+  /// Cicli di asciugatura JIT richiesti prima della stampa.
+  dryingPlans            AssignmentDryingPlan[]     @relation("DryingPlanAssignment")
 
   // === Conteggi parti ===
   partsExpected Int // Parti totali attese per questa stampa (micro-assignment)
   partsProduced Int @default(0) // Parti prodotte ok
   partsRejected Int @default(0) // Parti scartate
+
+  /// Traccia se all'operatore è già stata mostrata la notifica "Pausa per inserimento aggiuntivo"
+  /// per la prima pausa di questa assegnazione (file con `requiresAdditionalInsert = true`).
+  /// Evita di ripetere il messaggio dedicato sulle pause successive della stessa stampa.
+  insertPauseNoticeShown Boolean @default(false)
 
   // === Materiale ===
   /// Categoria materiale richiesto dal file (es. "PETG", "PLA")
@@ -897,6 +1178,183 @@ model PrinterAssignment {
   @@index([printerId])
   @@index([status])
   @@index([queuePosition])
+  @@index([plannedStart])
+  @@index([sourceGanttPlanId])
+  /// Hot path compatible-spools / scheduler: assignment attivi per stampante.
+  @@index([printerId, status])
+  @@schema("print-farm")
+}
+
+enum AssignmentSpoolPlanStatus {
+  PLANNED
+  LOADED
+  CONSUMED
+  CANCELLED
+
+  @@schema("print-farm")
+}
+
+enum AssignmentSpoolPlanProvenance {
+  OPEN_SPOOL
+  SEALED_INVENTORY
+
+  @@schema("print-farm")
+}
+
+enum AssignmentSpoolPlanVerification {
+  VERIFIED
+  OPERATOR_REVIEW_REQUIRED
+
+  @@schema("print-farm")
+}
+
+/// Riga source-of-truth per una bobina primaria/backup pianificata.
+/// La reservation vive qui: `reservedSlotId` è unique e viene rilasciato
+/// azzerandolo su cancellazione/scadenza, senza lasciare lock sullo slot.
+model AssignmentSpoolPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  assignmentId String            @db.Uuid
+  assignment   PrinterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  fileFilamentIndex Int
+  sequence          Int
+
+  /// Null per una bobina ancora sigillata: in quel caso `itemId` identifica
+  /// l'articolo da aprire e la riga non può essere VERIFIED/automatizzabile.
+  spoolId String?        @db.Uuid
+  spool   FilamentSpool? @relation("AssignmentSpoolPlans", fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  itemId  String?        @db.Uuid
+  item    Item?          @relation(fields: [itemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  plannedGrams Decimal @db.Decimal(10, 2)
+  amsUnit      Int?
+  slot         Int?
+
+  status       AssignmentSpoolPlanStatus       @default(PLANNED)
+  provenance   AssignmentSpoolPlanProvenance
+  verification AssignmentSpoolPlanVerification @default(OPERATOR_REVIEW_REQUIRED)
+
+  /// Snapshot esplicito: true solo con spool concreta, profilo tray verificato
+  /// e reservation non scaduta. Non modifica i comandi inviati al backend.
+  automationEligible Boolean @default(false)
+
+  reservedSlotId       String?                @unique @db.Uuid
+  reservedSlot         PrinterAmsSlot?        @relation("SpoolPlanReservedSlot", fields: [reservedSlotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reservationExpiresAt DateTime?              @db.Timestamptz(6)
+  /// Cicli di asciugatura JIT generati per questa riga primaria/backup.
+  dryingPlans          AssignmentDryingPlan[] @relation("DryingPlanSpoolPlan")
+
+  planVersion Int    @default(1)
+  plannedBy   String @default("scheduler-f5-v1")
+  metadata    Json?  @db.JsonB
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([assignmentId, fileFilamentIndex, sequence])
+  @@index([assignmentId])
+  @@index([spoolId])
+  @@index([itemId])
+  @@index([reservedSlotId, reservationExpiresAt])
+  @@index([status])
+  @@schema("print-farm")
+}
+
+/// Stato persistente del ciclo di asciugatura JIT.
+enum AssignmentDryingPlanStatus {
+  PLANNED
+  AWAITING_OPERATOR
+  DRYING
+  READY
+  CONSUMED
+  EXPIRED
+  CANCELLED
+  FAILED
+
+  @@schema("print-farm")
+}
+
+/// Ciclo di asciugatura JIT legato a una bobina fisica e a una stampa dipendente.
+/// La risorsa esclusiva è l'unità AMS; lo slot identifica la bobina realmente trattata.
+model AssignmentDryingPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  assignmentId String            @db.Uuid
+  assignment   PrinterAssignment @relation("DryingPlanAssignment", fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  spoolPlanId String              @db.Uuid
+  spoolPlan   AssignmentSpoolPlan @relation("DryingPlanSpoolPlan", fields: [spoolPlanId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  spoolId String        @db.Uuid
+  spool   FilamentSpool @relation("DryingPlanSpool", fields: [spoolId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  printerId String  @db.Uuid
+  printer   Printer @relation("DryingPlanPrinter", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  amsUnitId String         @db.Uuid
+  amsUnit   PrinterAmsUnit @relation("DryingPlanAmsUnit", fields: [amsUnitId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  amsSlotId String         @db.Uuid
+  amsSlot   PrinterAmsSlot @relation("DryingPlanAmsSlot", fields: [amsSlotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// Trasferimento fisico post-ciclo: la bobina si asciuga in `amsSlot` (es. AMS HT
+  /// cablata al nozzle destro) ma la stampa la preleva da `relocationTargetSlot`
+  /// (es. AMS 2 Pro sul nozzle sinistro). Senza FTS il percorso è fisico, quindi
+  /// serve un passo operatore fra fine ciclo e avvio stampa.
+  relocationTargetSlotId String?         @db.Uuid
+  relocationTargetSlot   PrinterAmsSlot? @relation("DryingPlanRelocationSlot", fields: [relocationTargetSlotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Minuti operatore previsti per lo spostamento (0 = nessun trasferimento).
+  relocationMinutes      Int?
+  /// Valorizzato quando la bobina è stata effettivamente montata nel target.
+  relocationDoneAt       DateTime?       @db.Timestamptz(6)
+
+  ganttPlanId String?    @db.Uuid
+  ganttPlan   GanttPlan? @relation("DryingPlanGanttPlan", fields: [ganttPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  ganttTaskId String?    @db.Uuid
+  ganttTask   GanttTask? @relation("DryingPlanGanttTask", fields: [ganttTaskId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  fileFilamentIndex Int
+  extruderId        Int?
+  routingReason     String?
+
+  policy          FilamentDryingPolicy
+  status          AssignmentDryingPlanStatus @default(PLANNED)
+  tempC           Int
+  durationMinutes Int
+  freshnessHours  Int
+
+  plannedStart   DateTime  @db.Timestamptz(6)
+  plannedEnd     DateTime  @db.Timestamptz(6)
+  dueBefore      DateTime  @db.Timestamptz(6)
+  freshnessUntil DateTime? @db.Timestamptz(6)
+
+  operatorConfirmedAt DateTime? @db.Timestamptz(6)
+  startedAt           DateTime? @db.Timestamptz(6)
+  completedAt         DateTime? @db.Timestamptz(6)
+  stoppedAt           DateTime? @db.Timestamptz(6)
+
+  commandIdempotencyKey String? @unique
+  commandVersion        Int     @default(1)
+  planVersion           Int     @default(1)
+  plannedBy             String  @default("scheduler-drying-v1")
+
+  failureReason String?
+  metadata      Json?   @db.JsonB
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([assignmentId, spoolPlanId, planVersion])
+  @@index([assignmentId, status])
+  @@index([spoolId, status])
+  @@index([printerId, status])
+  @@index([amsUnitId, plannedStart, plannedEnd])
+  @@index([amsSlotId, status])
+  @@index([relocationTargetSlotId])
+  @@index([ganttTaskId])
+  @@index([status, dueBefore])
+  @@index([freshnessUntil])
   @@schema("print-farm")
 }
 
@@ -904,7 +1362,10 @@ enum SoftwareType {
   BAMBU_STUDIO
   MAINSAIL
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("software_type")
+  @@schema("public")
 }
 
 enum PrinterBrand {
@@ -912,7 +1373,10 @@ enum PrinterBrand {
   KLIPPER
   PRUSA
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("printer_brand")
+  @@schema("public")
 }
 
 enum FileStatus {
@@ -964,13 +1428,31 @@ model PrinterHarvest {
   /// Pezzi totali (accepted + rejected)
   partsTotal    Int @default(0)
 
+  /// Stato dell'assignment nel momento dello scarico (es. TO_HARVEST, FAILED).
+  /// Serve per annullare uno scarico ripristinando lo stato originale: senza questo dato
+  /// l'assignment tornava sempre in TO_HARVEST, cambiando il comportamento del ri-scarico.
+  assignmentStatusAtHarvest String?
+
   // === Qualità ===
+  /// Scarico "saltato": il piatto è stato liberato senza raccogliere i pezzi.
+  /// I pezzi vengono comunque contati in `partsRejected` (fisicamente persi), ma il flag
+  /// permette di distinguerli dagli scarti di qualità in cronologia e nei report.
+  wasSkipped   Boolean @default(false)
   /// Motivo scarto (se ci sono pezzi rejected)
   rejectReason String?
   /// Note dell'operatore
   notes        String?
   /// Foto/immagine dei pezzi (opzionale)
   imageUrl     String?
+
+  /// Segnalazioni sui file aperte da questo scarico.
+  feedbacks FarmFeedback[]
+
+  /// Movimenti inventario generati da questo scarico.
+  /// Serve per annullare uno scarico in modo esatto: senza questo legame l'annullamento
+  /// deve indovinare i movimenti per (parte, utente, finestra temporale) e può cancellare
+  /// quelli di scarichi diversi avvenuti negli stessi secondi (tipico dello scarico massivo).
+  movements Movement[]
 
   // === Lotto ===
   /// Lotto di produzione associato
@@ -1036,9 +1518,9 @@ model PrinterFilamentLoad {
 
   // === Vecchia spool ===
   /// Spool che era montata prima del cambio
-  oldSpoolId     String?        @db.Uuid
+  oldSpoolId     String? @db.Uuid
   /// Azione eseguita sulla vecchia spool
-  oldSpoolAction String?        @db.VarChar(20)
+  oldSpoolAction String? @db.VarChar(20)
 
   // === Tracking inventario (per undo) ===
   /// Movement USO creato durante il prelievo (null se spool parziale/manual)
@@ -1057,6 +1539,9 @@ model PrinterFilamentLoad {
   /// Note dell'operatore
   notes String?
 
+  /// Sessioni cronometrate che hanno prodotto questo carico
+  swapSessions FilamentSwapSession[]
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -1073,6 +1558,74 @@ enum FilamentLoadTrigger {
   SWAP
   MISMATCH
 
+  @@schema("print-farm")
+}
+
+/// Sessione cronometrata di cambio/ricarica filamento eseguita da un operatore.
+/// Un record per stampante+slot per ogni passaggio nel dialog di swap: misura quanto
+/// tempo serve davvero per sostituire una bobina, separando l'attesa (stampante ferma
+/// in attesa dell'operatore) dal lavoro effettivo (step del dialog).
+model FilamentSwapSession {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Chiave generata dal client: rende idempotente l'apertura della sessione
+  /// anche dopo reload della pagina (il dialog persiste il progresso in localStorage).
+  clientKey String @unique
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Operatore che ha eseguito il cambio
+  operatorUserId Int
+  operatorUser   User @relation("FilamentSwapSessions", fields: [operatorUserId], references: [id], onDelete: Restrict)
+
+  /// Motivo dell'intervento: RUNOUT (bobina esaurita) vs SWAP (cambio pianificato)
+  trigger FilamentLoadTrigger @default(SWAP)
+
+  /// Target: 'ams' oppure 'external'
+  targetKind String @default("external") @db.VarChar(10)
+  amsUnit    Int?
+  slot       Int?
+  extruderId Int?
+
+  /// Bobina rimossa e bobina montata (best-effort: possono mancare su inventario sigillato)
+  fromSpoolId String? @db.Uuid
+  toSpoolId   String? @db.Uuid
+
+  /// Carico inventario generato dallo step "monta"
+  filamentLoadId String?              @db.Uuid
+  filamentLoad   PrinterFilamentLoad? @relation(fields: [filamentLoadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Quando la stampante ha richiesto l'intervento (runout/flag swap). Best-effort.
+  detectedAt DateTime? @db.Timestamptz(6)
+  /// Apertura del dialog sulla riga: inizio presa in carico dell'operatore
+  startedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  /// Ultimo step registrato: serve per chiudere le sessioni abbandonate
+  lastStepAt DateTime  @default(now()) @db.Timestamptz(6)
+  /// Step finale completato con successo
+  finishedAt DateTime? @db.Timestamptz(6)
+
+  /// Attesa prima dell'intervento (detectedAt → startedAt)
+  waitSeconds    Int?
+  /// Durata totale a orologio (startedAt → finishedAt), pause incluse
+  elapsedSeconds Int?
+  /// Lavoro effettivo: somma degli step, ognuno limitato per non contare le pause lunghe
+  workSeconds    Int?
+  /// Durata in secondi per singolo step: { unload, unmount, mount, load, done }
+  stepSeconds    Json? @db.JsonB
+
+  /// Step falliti/ritentati durante la sessione
+  errorCount Int     @default(0)
+  /// Sessione chiusa senza raggiungere lo step finale
+  abandoned  Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerId, startedAt(sort: Desc)])
+  @@index([operatorUserId, startedAt(sort: Desc)])
+  @@index([trigger, startedAt(sort: Desc)])
+  @@index([finishedAt(sort: Desc)])
   @@schema("print-farm")
 }
 
@@ -1122,13 +1675,19 @@ enum GanttTaskStatus {
 /// Rappresenta un'esecuzione del Gantt Scheduler (snapshot pianificazione).
 /// Ogni volta che il cron o l'operatore ricalcola il piano, viene creato un nuovo GanttPlan
 /// e il precedente viene marcato come SUPERSEDED.
+///
+/// INVARIANTE SQL (audit 2026-09, DB16): esiste l'indice parziale
+/// "GanttPlan_single_active_idx" = UNIQUE (status) WHERE status = 'ACTIVE'
+/// (migrazioni 20260731203000_scheduler_f6_gantt_source e 20260904001000_f0_invariants).
+/// NON dichiarabile come @@unique([status]) (bloccherebbe più piani SUPERSEDED/FAILED)
+/// e NON va droppato: è l'ultima barriera contro due piani ACTIVE simultanei.
 model GanttPlan {
   id String @id @default(uuid()) @db.Uuid
 
-  status    GanttPlanStatus @default(ACTIVE)
+  status       GanttPlanStatus @default(ACTIVE)
   /// Orizzonte di pianificazione: inizio e fine dell'intervallo calcolato.
-  horizonStart DateTime @db.Timestamptz(6)
-  horizonEnd   DateTime @db.Timestamptz(6)
+  horizonStart DateTime        @db.Timestamptz(6)
+  horizonEnd   DateTime        @db.Timestamptz(6)
 
   /// Statistiche solver
   solverStatus      String?
@@ -1136,9 +1695,16 @@ model GanttPlan {
   solverDurationMs  Int?
   jobsEvaluated     Int      @default(0)
   printersEvaluated Int      @default(0)
+  /// Diagnostica F3: copertura, churn, carryover, potatura e decisione di replan.
+  diagnostics       Json?    @db.JsonB
+  /// Bucket capacitivi giornalieri oltre l'orizzonte tattico dettagliato.
+  capacityPlan      Json?    @db.JsonB
 
   /// Task (blocchi temporali) del piano
-  tasks GanttTask[]
+  tasks             GanttTask[]
+  etaSnapshots      SchedulerOrderEtaSnapshot[]
+  sourceAssignments PrinterAssignment[]         @relation("AssignmentSourceGanttPlan")
+  dryingPlans       AssignmentDryingPlan[]      @relation("DryingPlanGanttPlan")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -1163,6 +1729,16 @@ model GanttTask {
   /// Job di produzione (null se il task è un setup/filament change)
   productionJobId String?        @db.Uuid
   productionJob   ProductionJob? @relation(fields: [productionJobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Assignment reale collegata a questa run pianificata.
+  /// Non è unique globalmente: la stessa assignment può apparire in snapshot
+  /// Gantt successivi. Il vincolo composto evita duplicati nello stesso piano.
+  assignmentId     String?                @db.Uuid
+  assignment       PrinterAssignment?     @relation(fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Assignment creata direttamente da questo task (relazione audit F6).
+  sourceAssignment PrinterAssignment?     @relation("AssignmentSourceGanttTask")
+  /// Cicli JIT dipendenti da questo blocco di stampa.
+  dryingPlans      AssignmentDryingPlan[] @relation("DryingPlanGanttTask")
 
   /// Ordine di produzione (denormalizzato per query rapide nella UI)
   productOrderId String? @db.Uuid
@@ -1196,12 +1772,170 @@ model GanttTask {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
+  @@unique([ganttPlanId, assignmentId])
   @@index([ganttPlanId])
   @@index([printerId])
   @@index([productionJobId])
+  @@index([assignmentId])
   @@index([productOrderId])
   @@index([taskStatus])
   @@index([plannedStart])
+  @@schema("print-farm")
+}
+
+/// Fattori appresi da run reali con identità file/modello/materiale affidabile.
+/// `scopeKey` evita la semantica ambigua degli unique composti con file nullable.
+model SchedulerCalibration {
+  id       String @id @default(uuid()) @db.Uuid
+  scopeKey String @unique
+
+  printerModelId Int
+  printerModel   PrinterModel @relation(fields: [printerModelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  materialCategory String
+
+  fileId String             @db.Uuid
+  file   ProjectThreeMFFile @relation(fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  durationFactor   Decimal @default(1) @db.Decimal(10, 6)
+  /// Varianza campionaria del rapporto durata reale/stimata.
+  durationVariance Decimal @default(0) @db.Decimal(12, 8)
+  filamentFactor   Decimal @default(1) @db.Decimal(10, 6)
+  failureRate      Decimal @default(0) @db.Decimal(10, 6)
+
+  sampleCount         Int @default(0)
+  durationSampleCount Int @default(0)
+  filamentSampleCount Int @default(0)
+  failureSampleCount  Int @default(0)
+
+  windowStart DateTime? @db.Timestamptz(6)
+  windowEnd   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerModelId, materialCategory])
+  @@index([fileId])
+  @@schema("print-farm")
+}
+
+/// Snapshot prospettico dell'ETA ordine prodotto da un piano Gantt valido.
+/// Consente di misurare T-24h/T-72h solo da quando gli snapshot esistono.
+model SchedulerOrderEtaSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+
+  ganttPlanId String    @db.Uuid
+  ganttPlan   GanttPlan @relation(fields: [ganttPlanId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  productOrderId String       @db.Uuid
+  productOrder   ProductOrder @relation(fields: [productOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  forecastAt DateTime @default(now()) @db.Timestamptz(6)
+  etaP50     DateTime @db.Timestamptz(6)
+  etaP80     DateTime @db.Timestamptz(6)
+  /// Scenario avverso P95 (piano §13). Nullable: assente negli snapshot precedenti a F4.1.
+  etaP95 DateTime? @db.Timestamptz(6)
+  /// Tier di rischio §13 (NORMALE/A_RISCHIO/CRITICO/IN_RITARDO) da dueDate + P50/P80/P95.
+  /// Senza P95 (snapshot pre-F4.1) le bande severe (target entro P80) restano esatte;
+  /// NULL onesto senza dueDate/P50/P80, oppure oltre P80 senza P95: mai stimato.
+  riskTier String?
+  confidence Float
+  source     String
+  coverage   Float
+  breakdown  Json     @db.JsonB
+
+  @@unique([ganttPlanId, productOrderId])
+  @@index([productOrderId, forecastAt])
+  @@index([forecastAt])
+  @@schema("print-farm")
+}
+
+enum SchedulerInterventionType {
+  FILAMENT_SWAP
+  FILAMENT_DRYING
+  SPOOL_MOVE
+  PLATE_CHANGE
+  MANUAL_RETRY
+  MANUAL_OVERRIDE
+
+  @@schema("print-farm")
+}
+
+enum SchedulerInterventionSource {
+  PLANNED
+  UNPLANNED
+  UNKNOWN
+
+  @@schema("print-farm")
+}
+
+/// Evento operatore affidabile prodotto da un flusso client persistito.
+model SchedulerInterventionLog {
+  id       String  @id @default(uuid()) @db.Uuid
+  eventKey String? @unique
+
+  type   SchedulerInterventionType
+  source SchedulerInterventionSource @default(UNKNOWN)
+
+  printerId String?  @db.Uuid
+  printer   Printer? @relation(fields: [printerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  assignmentId String?            @db.Uuid
+  assignment   PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  metadata  Json?    @db.JsonB
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([type, createdAt])
+  @@index([printerId, createdAt])
+  @@index([assignmentId])
+  @@schema("print-farm")
+}
+
+// ============================================================================
+// OPERATOR PRESENCE (calendario operatore 4.6, gate F1 avvii non presidiati)
+// ============================================================================
+
+/// Presenza extra ad-hoc di un utente fuori turno (PIANO-AZIONE 4.6):
+/// dichiarazione leggera "domani ci sono 2h" che si AGGIUNGE alle finestre
+/// WorkShift − WorkAbsence nello snapshot di presenza
+/// (`client/src/lib/scheduler/operator-presence.ts`). La capacità è condivisa
+/// e i ruoli fluidi (MODELLO-DOMANDA): conta la dichiarazione, non il ruolo.
+model OperatorExtraPresence {
+  id     String @id @default(uuid()) @db.Uuid
+  userId Int
+  /// Giorno della presenza extra (solo data, convenzione `@db.Date` come WorkAbsence).
+  date DateTime @db.Date
+  /// Inizio in minuti dalla mezzanotte LOCALE (es. 1200 = 20:00).
+  fromMinute Int @db.SmallInt
+  /// Fine in minuti dalla mezzanotte locale; <= fromMinute = overnight (chiude il giorno dopo).
+  toMinute Int @db.SmallInt
+  note     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([date])
+  @@schema("print-farm")
+}
+
+/// Chiusura aziendale di un giorno (festività, ponte, chiusura estiva).
+/// In quel giorno i turni ricorrenti non producono presenza per NESSUN
+/// operatore; una presenza extra dichiarata esplicitamente resta valida.
+/// Scelta modellistica 4.6: tabella dedicata invece del riuso di WorkAbsence
+/// (che è per-utente e richiederebbe N righe allineate a ogni cambio organico).
+model CompanyHoliday {
+  id String @id @default(uuid()) @db.Uuid
+  /// Giorno di chiusura (solo data).
+  date DateTime @db.Date
+  note String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([date])
   @@schema("print-farm")
 }
 
@@ -1239,8 +1973,8 @@ enum SchedulerConfigProfileStatus {
 /// Singolo parametro chiave/valore di un profilo di configurazione scheduler.
 /// Supporta valori numerici, booleani e di testo. La categoria raggruppa i parametri nella UI.
 model SchedulerConfigValue {
-  id        String @id @default(uuid()) @db.Uuid
-  profileId String @db.Uuid
+  id        String                 @id @default(uuid()) @db.Uuid
+  profileId String                 @db.Uuid
   profile   SchedulerConfigProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   key         String
@@ -1259,19 +1993,19 @@ model SchedulerConfigValue {
 /// Esecuzione (reale o simulata) dello scheduler con uno specifico profilo.
 /// Salva snapshot della configurazione, outcome del solver e metadata input.
 model SchedulerScenarioRun {
-  id        String @id @default(uuid()) @db.Uuid
-  profileId String? @db.Uuid
+  id        String                  @id @default(uuid()) @db.Uuid
+  profileId String?                 @db.Uuid
   profile   SchedulerConfigProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
 
   runType        SchedulerRunType @default(REAL)
   label          String?
   configSnapshot Json?
 
-  solverStatus    String?
-  solverObjective Decimal? @db.Decimal(16, 2)
-  solverDurationMs Int?
-  jobsEvaluated    Int     @default(0)
-  printersEvaluated Int    @default(0)
+  solverStatus      String?
+  solverObjective   Decimal? @db.Decimal(16, 2)
+  solverDurationMs  Int?
+  jobsEvaluated     Int      @default(0)
+  printersEvaluated Int      @default(0)
 
   assignmentsCreated Int @default(0)
   assignmentsKept    Int @default(0)
@@ -1296,8 +2030,8 @@ enum SchedulerRunType {
 
 /// Matrice candidato job-printer di uno scenario: contiene score, penalty, fattibilità e breakdown.
 model SchedulerScenarioCandidate {
-  id    String @id @default(uuid()) @db.Uuid
-  runId String @db.Uuid
+  id    String               @id @default(uuid()) @db.Uuid
+  runId String               @db.Uuid
   run   SchedulerScenarioRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   jobId       String  @db.Uuid
@@ -1312,12 +2046,231 @@ model SchedulerScenarioCandidate {
   penalty Int @default(0)
   net     Int @default(0)
 
-  selected  Boolean @default(false)
+  selected Boolean @default(false)
 
   breakdown Json?
 
   @@index([runId])
   @@index([runId, jobId])
   @@index([runId, printerId])
+  @@schema("print-farm")
+}
+
+/// Monitor TV di corridoio: un kiosk pubblico per aisleCode, con vista proiettata dall'operatore.
+model CorridorMonitor {
+  id          String @id @default(uuid()) @db.Uuid
+  /// Nome mostrato in impostazioni e nell'intestazione del kiosk.
+  name        String
+  /// Corridoio fisico (aisleCode risolto da group/shelf). Un monitor per corridoio.
+  aisleCode   String @unique
+  /// Token opaco usato nell'URL pubblico `/monitor/<token>`.
+  publicToken String @unique
+  /// Vista attiva: default | runout | swap | harvest.
+  activeMode  String @default("default")
+  /// Overlay odette/posizione scelti in bulk harvest (chiave: printerId o assignmentId).
+  harvestPlan Json?
+  /// Overlay vocale corrente (trascritto, azione, esito, conferma pendente).
+  voiceOverlay Json?
+  /// Ultimo click su Proietta.
+  projectedAt DateTime? @db.Timestamptz(6)
+  /// Microfoni Raspberry associati a questo monitor.
+  voiceDevices VoiceDevice[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("print-farm")
+}
+
+/// Bozza scarico precompilata: unica fonte di verità per lista, TV e voce.
+model HarvestDraft {
+  id String @id @default(uuid()) @db.Uuid
+
+  assignmentId String            @unique @db.Uuid
+  assignment   PrinterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  aisleCode String
+
+  partsAccepted Int
+  partsRejected Int @default(0)
+
+  odetteId String? @db.Uuid
+  odette   Odette? @relation(fields: [odetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// ASSIGNED | SUGGESTED | VOICE | MANUAL
+  odetteSource String @default("SUGGESTED")
+
+  targetLocationId String?            @db.Uuid
+  targetLocation   WarehouseLocation? @relation("HarvestDraftTargetLocation", fields: [targetLocationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  markOdetteFull Boolean @default(false)
+  rejectReason   String?
+  setMaintenance Boolean @default(false)
+  note           String?
+
+  assignmentUpdatedAt DateTime @db.Timestamptz(6)
+  computedSignature   String
+  /// DRAFT | CONFIRMED | STALE | CANCELLED
+  state               String   @default("DRAFT")
+  /// VOICE | UI | AUTO
+  lastTouchedBy       String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerId])
+  @@index([aisleCode, state])
+  @@index([odetteId])
+  @@schema("print-farm")
+}
+
+/// Bozza swap/runout: lista di prelievo, confermata in voce solo con tag.
+model SpoolSwapDraft {
+  id String @id @default(uuid()) @db.Uuid
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  aisleCode String
+  /// Chiave riga preparazione (slot/runout) per non collidere su dual-nozzle.
+  rowKey    String
+
+  /// RUNOUT | SWAP
+  trigger String @default("SWAP")
+
+  fromSpoolId String?        @db.Uuid
+  fromSpool   FilamentSpool? @relation("SpoolSwapDraftFrom", fields: [fromSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  toSpoolId   String?        @db.Uuid
+  toSpool     FilamentSpool? @relation("SpoolSwapDraftTo", fields: [toSpoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  toTagCode   String?
+
+  /// Override operatore sulla bobina suggerita: { override: true, reason?,
+  /// fromSuggestedSpoolId, toSpoolId, brandBreak, partialCoverage }.
+  /// NULL quando la bozza riflette il piano senza scelta manuale.
+  override    Json?
+
+  unloadTargetLocationId String?            @db.Uuid
+  unloadTargetLocation   WarehouseLocation? @relation("SpoolSwapDraftUnloadLocation", fields: [unloadTargetLocationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  computedSignature String
+  /// DRAFT | CONFIRMED | STALE | CANCELLED
+  state             String @default("DRAFT")
+  lastTouchedBy     String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerId, rowKey])
+  @@index([aisleCode, state])
+  @@schema("print-farm")
+}
+
+/// Microfono Raspberry per corridoio: token device e operatore predefinito.
+model VoiceDevice {
+  id      String @id @default(uuid()) @db.Uuid
+  name    String
+  aisleCode String
+  deviceToken String @unique
+  boundOperatorId Int?
+  boundOperator   User? @relation("VoiceDeviceBoundOperator", fields: [boundOperatorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  enabled     Boolean   @default(true)
+  lastSeenAt  DateTime? @db.Timestamptz(6)
+  corridorMonitorId String?          @db.Uuid
+  corridorMonitor   CorridorMonitor? @relation(fields: [corridorMonitorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  sessions VoiceSession[]
+  logs     VoiceCommandLog[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([aisleCode])
+  @@index([boundOperatorId])
+  @@schema("print-farm")
+}
+
+/// Turno vocale su un dispositivo (operatore + snapshot handle).
+model VoiceSession {
+  id         String      @id @default(uuid()) @db.Uuid
+  deviceId   String      @db.Uuid
+  device     VoiceDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  operatorId Int
+  operator   User        @relation("VoiceSessionOperator", fields: [operatorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  snapshot      Json     @default("{}")
+  turns         Json     @default("[]")
+  pendingIntent Json?
+  expiresAt     DateTime @db.Timestamptz(6)
+
+  logs VoiceCommandLog[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([deviceId, expiresAt])
+  @@index([expiresAt])
+  @@index([operatorId])
+  @@schema("print-farm")
+}
+
+/// Log di un turno vocale: audit, idempotenza e tuning prompt.
+model VoiceCommandLog {
+  id              String        @id @default(uuid()) @db.Uuid
+  sessionId       String?       @db.Uuid
+  session         VoiceSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  deviceId        String        @db.Uuid
+  device          VoiceDevice   @relation(fields: [deviceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  operatorId      Int
+  operator        User          @relation("VoiceCommandLogOperator", fields: [operatorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  transcript      String
+  tool            String?
+  args            Json?
+  /// EXECUTED | REJECTED | FAILED | FOLLOWUP | DRY_RUN
+  status          String
+  errorMessage    String?
+  latencyMs       Int?
+  replyText       String?
+  idempotencyKey  String        @unique
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([deviceId, createdAt])
+  @@index([operatorId, createdAt])
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@schema("print-farm")
+}
+
+/// Audit delle azioni di bonifica dalla pagina Validazione Dati.
+model DataValidationFixLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  checkId     String
+  action      String
+  targetIds   String[]
+  affected    Int      @default(0)
+  dryRun      Boolean  @default(false)
+  performedBy String
+  metadata    Json?    @db.JsonB
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([checkId, createdAt])
+  @@index([createdAt])
+  @@schema("print-farm")
+}
+
+/// Snapshot periodico dei conteggi di validazione (trend F0).
+model DataValidationSnapshot {
+  id         String   @id @default(uuid()) @db.Uuid
+  capturedAt DateTime @default(now()) @db.Timestamptz(6)
+  windowDays Int?
+  checkId    String
+  family     String
+  title      String
+  count      Int
+  sampleSize Int?
+  severity   String
+
+  @@index([capturedAt])
+  @@index([checkId, capturedAt])
   @@schema("print-farm")
 }

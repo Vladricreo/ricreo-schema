@@ -1,0 +1,39 @@
+name: Validate Prisma migrations
+
+on:
+  push:
+    paths:
+      - 'migrations/**'
+      - '.github/workflows/validate-migrations.yml'
+  pull_request:
+    paths:
+      - 'migrations/**'
+      - '.github/workflows/validate-migrations.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ogni cartella in migrations/ è una migration Prisma: deve contenere
+      # migration.sql. Cartelle extra (snapshot, note) causano P3015 in deploy.
+      - name: Require migration.sql in every migrations/* directory
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r dir; do
+            name="$(basename "$dir")"
+            if [ "$name" = "." ]; then
+              continue
+            fi
+            if [ ! -f "$dir/migration.sql" ]; then
+              echo "P3015: manca migration.sql in $dir"
+              missing=1
+            fi
+          done < <(find migrations -mindepth 1 -maxdepth 1 -type d | sort)
+          if [ "$missing" -ne 0 ]; then
+            echo "Sposta le cartelle non-migration fuori da migrations/ (es. docs/snapshots/)."
+            exit 1
+          fi
+          echo "OK: ogni cartella in migrations/ ha migration.sql"

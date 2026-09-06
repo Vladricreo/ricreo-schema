@@ -25,12 +25,44 @@ enum SettingsName {
   AMAZON_RESTOCK_TIME
   AMAZON_OPTIMAL_STOCK_DAYS
   FBM_OPTIMAL_STOCK_DAYS
+  FBM_RESTOCK_TIME
   PRODUCTION_ORDER_AUTOMATION
+  /// Lotto minimo globale per gli ordini automatici di produzione (default applicativo: 5).
+  PRODUCTION_MIN_BATCH_QTY
   AMAZON_ORDER_FIXED_COST
   AMAZON_STORAGE_FEE_LOW
   AMAZON_STORAGE_FEE_HIGH
   /// Credenziali SP-API/LWA (cifrate a DB) usate per import Amazon (solo admin).
   AMAZON_SP_API_CREDENTIALS
+  /// Token API ZonWizard (cifrato a DB) usato per sincronizzare costi prodotti (solo admin).
+  ZONWIZARD_API_CREDENTIALS
+  /// Indirizzo mittente di default per le spedizioni inbound FBA (Amazon SP-API).
+  /// Valore JSON con shape AddressInput: { name, phoneNumber, addressLine1, addressLine2?, city, postalCode, countryCode, stateOrProvinceCode? }.
+  FBA_INBOUND_SOURCE_ADDRESS
+  /// Credenziali API Sendcloud (cifrate a DB) usate per la workstation spedizioni.
+  SENDCLOUD_API_CREDENTIALS
+  /// Finestra temporale (in giorni) per la sync degli ordini Sendcloud.
+  SENDCLOUD_SYNC_DAYS
+  /// ID indirizzo mittente Sendcloud predefinito (scelto da UI).
+  /// Valore JSON: { senderAddressId: number }.
+  SENDCLOUD_DEFAULT_SENDER_ADDRESS_ID
+  /// Corriere Sendcloud predefinito per paese (validazione indirizzo / fallback).
+  /// Valore JSON: { byCountry: { IT: { carrierCode, carrierName?, contractId? } } }.
+  SENDCLOUD_DEFAULT_CARRIERS_BY_COUNTRY
+  /// DEPRECATO: tempo base per pezzo dei prodotti senza dati di assemblaggio.
+  /// Non più usato né scritto: senza campioni il costo manodopera è 0 e il prodotto
+  /// risulta "mai calcolato". Il valore resta nell'enum perché rimuoverlo richiede
+  /// di ricreare il tipo e tutte le view che dipendono da `Settings.name`.
+  ASSEMBLY_BASE_TIME_PER_PIECE
+  /// Soglia di inattività (minuti) oltre la quale una sessione "tab" di
+  /// assemblaggio si considera abbandonata (default applicativo: 45).
+  ASSEMBLY_LABOR_IDLE_GAP_MINUTES
+  /// Tetto (minuti) per una sessione "tab" senza alcuna attività registrata
+  /// (default applicativo: 15).
+  ASSEMBLY_LABOR_NO_ACTIVITY_CAP_MINUTES
+  /// Intervallo (secondi) del heartbeat di presenza del tablet.
+  /// Riservato: il client usa per ora la costante 120s (knob per uso futuro).
+  ASSEMBLY_LABOR_HEARTBEAT_SECONDS
 
   @@schema("inventory")
 }
@@ -188,5 +220,38 @@ model CupsPrintProfile {
   @@unique([kind])
   @@index([printerId])
   @@index([labelFormatId])
+  @@schema("inventory")
+}
+
+/// Prompt OpenAI modificabile per categoria (import item, import documento).
+/// Una riga per chiave: modello, reasoning e punti di istruzione usati a ogni chiamata.
+model AiPromptConfig {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Chiave categoria: item-import | document-import.
+  key String @unique
+
+  /// ID modello OpenAI (es. gpt-5.6-terra).
+  model String
+
+  /// Livello di reasoning: none | low | medium | high | xhigh | max.
+  reasoningEffort String
+
+  /// Testo introduttivo del system prompt.
+  intro String @db.Text
+
+  /// Schema JSON che il modello deve restituire.
+  schemaText String @db.Text
+
+  /// Punti regola modificabili: [{ id: string, text: string }].
+  points Json
+
+  /// Istruzione finale del messaggio utente (dopo catalogo/contesto).
+  userInstruction String @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("AiPromptConfig")
   @@schema("inventory")
 }

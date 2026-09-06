@@ -70,9 +70,11 @@ view VPfFailuresByReason30d {
   @@schema("print_farm_views")
 }
 
-/// Attività recente unificata (issue/failure/manutenzione).
+/// Attività recente unificata (issue/manutenzione).
+/// id è testo composto (`ISSUE:<int>` / `MAINTENANCE:<uuid>`): le fonti hanno
+/// tipi diversi (PrinterLogs.id int4 vs PrinterMaintenanceLog.id uuid).
 view VPfRecentActivity {
-  id          String   @unique @db.Uuid
+  id          String   @unique
   type        String
   at          DateTime @db.Timestamptz(6)
   title       String
@@ -140,5 +142,168 @@ view VPfFilamentConsumption30d {
 
   @@unique([category, color])
   @@map("v_pf_filament_consumption_30d")
+  @@schema("print_farm_views")
+}
+
+/// Accuratezza osservata del piano per assignment collegata a un task Gantt.
+/// Una riga per assignment; i campi errore restano null finché i tempi reali
+/// o le metriche filamento non sono disponibili.
+view VPfScheduleAccuracy {
+  assignmentId String  @unique @map("assignmentId") @db.Uuid
+  ganttTaskId  String? @map("ganttTaskId") @db.Uuid
+
+  printerId        String  @map("printerId") @db.Uuid
+  printerModelId   Int     @map("printerModelId")
+  productionJobId  String? @map("productionJobId") @db.Uuid
+  fileId           String? @map("fileId") @db.Uuid
+  materialCategory String? @map("materialCategory")
+
+  plannedStart           DateTime  @map("plannedStart") @db.Timestamptz(6)
+  plannedEnd             DateTime  @map("plannedEnd") @db.Timestamptz(6)
+  plannedDurationMinutes Int       @map("plannedDurationMinutes")
+  actualStart            DateTime? @map("actualStart") @db.Timestamptz(6)
+  actualEnd              DateTime? @map("actualEnd") @db.Timestamptz(6)
+  actualDurationMinutes  Decimal?  @map("actualDurationMinutes") @db.Decimal(14, 4)
+
+  startDeltaMinutes       Decimal? @map("startDeltaMinutes") @db.Decimal(14, 4)
+  endDeltaMinutes         Decimal? @map("endDeltaMinutes") @db.Decimal(14, 4)
+  durationErrorMinutes    Decimal? @map("durationErrorMinutes") @db.Decimal(14, 4)
+  durationAbsErrorMinutes Decimal? @map("durationAbsErrorMinutes") @db.Decimal(14, 4)
+  durationApePercent      Decimal? @map("durationApePercent") @db.Decimal(14, 4)
+
+  expectedFilamentGrams Decimal? @map("expectedFilamentGrams") @db.Decimal(14, 4)
+  actualFilamentGrams   Decimal? @map("actualFilamentGrams") @db.Decimal(14, 4)
+  filamentErrorGrams    Decimal? @map("filamentErrorGrams") @db.Decimal(14, 4)
+  filamentApePercent    Decimal? @map("filamentApePercent") @db.Decimal(14, 4)
+
+  ganttWithin24h Boolean @map("ganttWithin24h")
+
+  @@map("v_pf_schedule_accuracy")
+  @@schema("print_farm_views")
+}
+
+// ============================================================================
+// SMART ETA VIEWS
+// View per stimare la data di completamento (ETA) di job e ordini.
+// Vedi migration 20260619120000_print_farm_eta_views.
+// ============================================================================
+
+/// Latenza harvest (fine stampa -> raccolta) mediana per ora del giorno, ultimi 3 mesi.
+/// Cattura l'effetto "di notte le stampanti non vengono scaricate".
+view VPfHarvestLatencyByHour {
+  finishHour       Int     @unique @map("finishHour")
+  medianLatencyMin Decimal @map("medianLatencyMin") @db.Decimal(12, 2)
+  p25LatencyMin    Decimal @map("p25LatencyMin") @db.Decimal(12, 2)
+  p75LatencyMin    Decimal @map("p75LatencyMin") @db.Decimal(12, 2)
+  sampleSize       Int     @map("sampleSize")
+
+  @@map("v_pf_harvest_latency_by_hour")
+  @@schema("print_farm_views")
+}
+
+/// Utilizzo mensile della flotta (minuti stampa, capacita, % libera, stampanti attive).
+view VPfFleetThroughputMonthly {
+  month           DateTime @unique @db.Date
+  runMinutes      Decimal  @map("runMinutes") @db.Decimal(14, 2)
+  capacityMinutes Decimal  @map("capacityMinutes") @db.Decimal(14, 2)
+  utilizationPct  Decimal  @map("utilizationPct") @db.Decimal(5, 2)
+  freeCapacityPct Decimal  @map("freeCapacityPct") @db.Decimal(5, 2)
+  activePrinters  Int      @map("activePrinters")
+
+  @@map("v_pf_fleet_throughput_monthly")
+  @@schema("print_farm_views")
+}
+
+/// ETA per singolo ProductionJob attivo, come banda (ottimistica/attesa/pessimistica).
+/// Modello ibrido: ancora al Gantt per la parte schedulata, throughput per il resto.
+view VPfJobEta {
+  jobId                String    @unique @map("jobId") @db.Uuid
+  jobNumber            String    @map("jobNumber")
+  productOrderId       String?   @map("productOrderId") @db.Uuid
+  priority             Int       @map("priority")
+  remainingQty         Int       @map("remainingQty")
+  platesRemaining      Int       @map("platesRemaining")
+  workMinutes          Decimal   @map("workMinutes") @db.Decimal(14, 2)
+  scheduledEnd         DateTime? @map("scheduledEnd") @db.Timestamptz(6)
+  ganttCoverage        Decimal   @map("ganttCoverage") @db.Decimal(5, 3)
+  expectedPrinters     Int       @map("expectedPrinters")
+  harvestPerPlateMin   Decimal   @map("harvestPerPlateMin") @db.Decimal(12, 1)
+  queueWaitExpectedMin Decimal   @map("queueWaitExpectedMin") @db.Decimal(14, 1)
+  etaOptimistic        DateTime  @map("etaOptimistic") @db.Timestamptz(6)
+  etaExpected          DateTime  @map("etaExpected") @db.Timestamptz(6)
+  etaPessimistic       DateTime  @map("etaPessimistic") @db.Timestamptz(6)
+  confidence           String    @map("confidence")
+  basis                String    @map("basis")
+
+  @@map("v_pf_job_eta")
+  @@schema("print_farm_views")
+}
+
+/// File 3MF preferito per (ProductPart, variante lineage).
+/// Una parte con piu' lineage compatibili con stampanti diverse genera piu' righe:
+/// lo scheduler le considera come alternative (ognuna col proprio partCount/compatiblePrinters).
+/// La selezione del file dentro la variante e' APPROVED > DRAFT (ultima versione).
+/// Vedi migration 20260622140000_part_preferred_files_view.
+view VPfPartPreferredFile {
+  productPartId            String   @map("productPartId") @db.Uuid
+  /// Radice della catena di versioni: identifica la variante.
+  variantRootId            String   @map("variantRootId") @db.Uuid
+  fileId                   String   @map("fileId") @db.Uuid
+  version                  Int      @map("version")
+  status                   String   @map("status")
+  /// 'approved' | 'draft' (mirror di selectPreferredFile, per variante).
+  selection                String   @map("selection")
+  partCount                Int      @map("partCount")
+  compatiblePrinters       String[] @map("compatiblePrinters")
+  estimatedDurationMinutes Int      @map("estimatedDurationMinutes")
+
+  @@unique([productPartId, variantRootId])
+  @@map("v_pf_part_preferred_files")
+  @@schema("print_farm_views")
+}
+
+/// Tempi operatore per cambio/ricarica filamento, aggregati per motivo (30 giorni).
+/// `trigger` = RUNOUT | SWAP | MANUAL | MISMATCH.
+view VPfFilamentSwapTime30d {
+  trigger          String  @unique
+  sessionsCount    Int     @map("sessionsCount")
+  /// Sessioni chiuse senza completare lo step finale (escluse dalle medie).
+  abandonedCount   Int     @map("abandonedCount")
+  avgWorkSeconds   Decimal @map("avgWorkSeconds") @db.Decimal(12, 2)
+  medianWorkSeconds Decimal @map("medianWorkSeconds") @db.Decimal(12, 2)
+  avgWaitSeconds   Decimal @map("avgWaitSeconds") @db.Decimal(12, 2)
+  totalWorkSeconds Int     @map("totalWorkSeconds")
+
+  @@map("v_pf_filament_swap_time_30d")
+  @@schema("print_farm_views")
+}
+
+/// Tempi operatore per cambio/ricarica filamento, aggregati per operatore (30 giorni).
+view VPfFilamentSwapByOperator30d {
+  operatorUserId Int     @unique @map("operatorUserId")
+  operatorName   String  @map("operatorName")
+  sessionsCount  Int     @map("sessionsCount")
+  runoutCount    Int     @map("runoutCount")
+  swapCount      Int     @map("swapCount")
+  avgWorkSeconds Decimal @map("avgWorkSeconds") @db.Decimal(12, 2)
+
+  @@map("v_pf_filament_swap_by_operator_30d")
+  @@schema("print_farm_views")
+}
+
+/// ETA per ProductOrder completo = massimo tra le ETA dei job figli.
+view VPfOrderEta {
+  orderId           String   @unique @map("orderId") @db.Uuid
+  orderNumber       String   @map("orderNumber")
+  quantityToProduce Int      @map("quantityToProduce")
+  quantityProduced  Int      @map("quantityProduced")
+  productionStatus  String   @map("productionStatus")
+  jobsCount         Int      @map("jobsCount")
+  etaOptimistic     DateTime @map("etaOptimistic") @db.Timestamptz(6)
+  etaExpected       DateTime @map("etaExpected") @db.Timestamptz(6)
+  etaPessimistic    DateTime @map("etaPessimistic") @db.Timestamptz(6)
+  confidence        String   @map("confidence")
+
+  @@map("v_pf_order_eta")
   @@schema("print_farm_views")
 }

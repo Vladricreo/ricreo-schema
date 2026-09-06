@@ -83,5 +83,8 @@ enum QueueTaskStatus {
   ERROR // Errore durante il processo
   CANCELLED // Annullato dall'utente
 
-  @@schema("print-farm")
+  /// Tipo in public/snake_case: wal2json non genera JSON valido per enum
+  /// quoted nello schema "print-farm" (Realtime list_changes).
+  @@map("queue_task_status")
+  @@schema("public")
 }

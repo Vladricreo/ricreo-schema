@@ -1,0 +1,1881 @@
+/// Mapping tra identificativi esterni ERP e goodsId Temu dopo create V3.
+/// Schema Postgres `product`: di proprietà di Product Console.
+model TemuGoodsMapping {
+  id              String   @id @default(cuid())
+  /// Identificativo esterno inviato a Temu (`externalGoodsId`).
+  externalGoodsId String
+  /// Identificativo generato da Temu (`goodsId`).
+  goodsId         String
+  /// SKU esterni associati alla create (convenience).
+  externalSkuIds  String[] @default([])
+  /// skuId Temu del primo SKU, usato per `bg.local.goods.priceorder.change.sku.price`.
+  temuSkuId       String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([externalGoodsId])
+  @@index([goodsId])
+  @@schema("product")
+}
+
+/// Credenziali OAuth Etsy per un singolo shop (Seller App).
+/// Access token ~1h; refresh token ~90 giorni (può ruotare al refresh).
+/// `accessToken` e `refreshToken` sono AES-256-GCM (SETTINGS_ENCRYPTION_KEY).
+model EtsyOAuthCredential {
+  id           String   @id @default(cuid())
+  /// Shop Etsy autorizzato (`ETSY_SHOP_ID`).
+  shopId       String
+  /// Access token cifrato (payload Settings v1).
+  accessToken  String
+  /// Refresh token cifrato (payload Settings v1).
+  refreshToken String
+  /// Scadenza access token (UTC).
+  expiresAt    DateTime @db.Timestamptz(6)
+  /// Scope concessi (spazio-separati), es. `listings_r listings_w shops_r transactions_r`.
+  scopes       String   @default("")
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([shopId])
+  @@schema("product")
+}
+
+/// Credenziali OAuth eBay (user token) per un account seller.
+/// Access token ~2h; refresh token ~18 mesi.
+/// `accessToken` e `refreshToken` sono AES-256-GCM (SETTINGS_ENCRYPTION_KEY).
+model EbayOAuthCredential {
+  id           String   @id @default(cuid())
+  /// Chiave logica dell'account (es. `primary` o username eBay).
+  accountKey   String
+  /// Access token cifrato (payload Settings v1).
+  accessToken  String
+  /// Refresh token cifrato (payload Settings v1).
+  refreshToken String
+  /// Scadenza access token (UTC).
+  expiresAt    DateTime @db.Timestamptz(6)
+  /// Scope concessi (spazio-separati).
+  scopes       String   @default("")
+  ebayUserId   String?
+  ebayUsername String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([accountKey])
+  @@schema("product")
+}
+
+/// Notifica eBay MARKETPLACE_ACCOUNT_DELETION ricevuta dalla Edge Function pubblica.
+/// Identificativi utente e payload sono cifrati con SETTINGS_ENCRYPTION_KEY.
+model EbayAccountDeletion {
+  id              String    @id @default(uuid())
+  /// Id notifica eBay (idempotenza: la stessa notifica può arrivare più volte).
+  notificationId  String
+  topic           String    @default("MARKETPLACE_ACCOUNT_DELETION")
+  eventDate       DateTime? @db.Timestamptz(6)
+  /// Username eBay cifrato (payload Settings v1).
+  usernameEnc     String?
+  /// userId eBay cifrato (payload Settings v1).
+  userIdEnc       String?
+  /// eiasToken cifrato (payload Settings v1).
+  eiasTokenEnc    String?
+  /// Payload JSON completo cifrato (o redacted se manca la chiave).
+  payloadEnc      String
+  signatureValid  Boolean   @default(false)
+  /// Valorizzato quando l'app privata ha elaborato la cancellazione.
+  processedAt     DateTime? @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([notificationId])
+  @@index([processedAt])
+  @@index([createdAt])
+  @@schema("product")
+}
+
+/// Canale store su cui vive uno SKU (stesso SKU su Amazon, Etsy, eBay, Temu).
+enum StoreChannel {
+  AMAZON
+  ETSY
+  EBAY
+  TEMU
+
+  @@schema("product")
+}
+
+/// Stato di un job Reports SP-API (createReport è asincrono).
+enum StoreReportStatus {
+  REQUESTED
+  DONE
+  FAILED
+  CANCELLED
+
+  @@schema("product")
+}
+
+/// Vendite giornaliere per SKU e store. Chiave comune futura: SKU + channel + storeKey.
+model StoreSalesDaily {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  /// Amazon: marketplaceId; in futuro shop Etsy / marketplace eBay / region Temu.
+  storeKey String
+  sku      String
+  date     DateTime    @db.Date
+
+  asin        String?
+  productName String?
+
+  unitsOrdered        Int     @default(0)
+  unitsRefunded       Int     @default(0)
+  unitsShipped        Int     @default(0)
+  /// Ricavo merce IVA inclusa (Amazon EU/UK: item-price già con IVA).
+  orderedProductSales Decimal @default(0) @db.Decimal(12, 2)
+  currency            String  @default("EUR")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, date])
+  @@index([sku, date])
+  @@index([channel, date])
+  @@index([channel, sku, date])
+  @@schema("product")
+}
+
+/// Traffico giornaliero Sales and Traffic (sessioni, page view, Buy Box).
+/// `sku = "*"` = totali catalogo per store×giorno (salesAndTrafficByDate).
+model StoreTrafficDaily {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  storeKey String
+  sku      String
+  date     DateTime    @db.Date
+
+  asin       String?
+  parentAsin String?
+
+  sessions               Int     @default(0)
+  pageViews              Int     @default(0)
+  buyBoxPercentage       Decimal? @db.Decimal(7, 4)
+  unitSessionPercentage  Decimal? @db.Decimal(7, 4)
+  unitsOrdered           Int     @default(0)
+  orderedProductSales    Decimal @default(0) @db.Decimal(12, 2)
+  totalOrderItems        Int     @default(0)
+  averageSellingPrice    Decimal? @db.Decimal(12, 2)
+  currency               String  @default("EUR")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, date], map: "StoreTrafficDaily_day_key")
+  @@index([sku, date])
+  @@index([channel, date])
+  @@index([channel, sku, date])
+  @@index([asin, date])
+  @@schema("product")
+}
+
+/// Funnel ricerca Brand Analytics a livello ASIN (Search Catalog Performance).
+model StoreSearchCatalogPeriod {
+  id         String       @id @default(cuid())
+  channel    StoreChannel
+  storeKey   String
+  asin       String
+  periodType String
+  startDate  DateTime     @db.Date
+  endDate    DateTime     @db.Date
+
+  impressionCount    Int      @default(0)
+  clickCount         Int      @default(0)
+  clickRate          Decimal? @db.Decimal(7, 4)
+  cartAddCount       Int      @default(0)
+  purchaseCount      Int      @default(0)
+  conversionRate     Decimal? @db.Decimal(7, 4)
+  searchTrafficSales Decimal  @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, asin, periodType, startDate], map: "StoreSearchCatalog_period_key")
+  @@index([channel, storeKey, startDate])
+  @@index([asin, startDate])
+  @@schema("product")
+}
+
+/// Funnel ricerca Brand Analytics per query × ASIN (Search Query Performance).
+model StoreSearchQueryPeriod {
+  id         String       @id @default(cuid())
+  channel    StoreChannel
+  storeKey   String
+  asin       String
+  searchQuery String
+  periodType String
+  startDate  DateTime     @db.Date
+  endDate    DateTime     @db.Date
+
+  searchQueryScore  Decimal? @db.Decimal(12, 4)
+  searchQueryVolume Int      @default(0)
+
+  totalQueryImpressionCount Int      @default(0)
+  asinImpressionCount       Int      @default(0)
+  asinImpressionShare       Decimal? @db.Decimal(7, 4)
+
+  totalClickCount Int      @default(0)
+  asinClickCount  Int      @default(0)
+  asinClickShare  Decimal? @db.Decimal(7, 4)
+
+  totalCartAddCount Int      @default(0)
+  asinCartAddCount  Int      @default(0)
+  asinCartAddShare  Decimal? @db.Decimal(7, 4)
+
+  totalPurchaseCount Int      @default(0)
+  asinPurchaseCount  Int      @default(0)
+  asinPurchaseShare  Decimal? @db.Decimal(7, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, asin, searchQuery, periodType, startDate], map: "StoreSearchQuery_period_key")
+  @@index([channel, storeKey, startDate])
+  @@index([searchQuery])
+  @@index([asin, startDate])
+  @@schema("product")
+}
+
+/// Riga ordine (FBA e FBM). Serve per paese, canale di fulfillment e ricavi.
+model StoreOrderLine {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  storeKey String
+  /// Chiave idempotente (es. amazonOrderId + orderItemId).
+  lineKey  String
+
+  /// ID ordine del canale (Amazon / eBay / Etsy / Temu).
+  amazonOrderId String?
+  orderItemId   String?
+  purchaseDate  DateTime? @db.Timestamptz(6)
+
+  /// Username acquirente sul canale (eBay `BuyerUserID`). Serve a collegare
+  /// una conversazione di messaggistica all'ordine: eBay non espone l'order id
+  /// nei messaggi, solo l'inserzione e lo username.
+  buyerUsername String?
+
+  /// Amazon: FBA / FBM. Null sugli altri canali.
+  fulfillmentChannel String?
+  salesChannel       String?
+  shipCountry        String?
+  /// Destinatario e indirizzo (PII). Etsy `getShopReceipts`; eBay Fulfillment/Trading;
+  /// Amazon all-orders di solito solo città / CAP / stato. Telefono: Etsy non lo espone.
+  shipRecipientName    String?
+  shipAddressLine1     String?
+  shipAddressLine2     String?
+  shipCity             String?
+  shipState            String?
+  shipPostalCode       String?
+  shipFormattedAddress String?
+  shipPhone            String?
+  buyerEmail           String?
+
+  sku         String
+  asin        String?
+  productName String?
+  quantity    Int      @default(0)
+  itemPrice   Decimal? @db.Decimal(12, 2)
+  /// IVA riga (Amazon la calcola per paese di spedizione).
+  itemTax     Decimal? @db.Decimal(12, 2)
+  /// Spedizione addebitata al cliente (non il costo seller).
+  shippingPrice Decimal? @db.Decimal(12, 2)
+  shippingTax   Decimal? @db.Decimal(12, 2)
+  /// Gift wrap addebitato al cliente (Amazon all-orders, IVA inclusa).
+  giftWrapPrice Decimal? @db.Decimal(12, 2)
+  giftWrapTax   Decimal? @db.Decimal(12, 2)
+  itemPromotionDiscount Decimal? @db.Decimal(12, 2)
+  shipPromotionDiscount Decimal? @db.Decimal(12, 2)
+  /// Prezzo merce IVA esclusa (fallback se itemTax è NULL/0).
+  vatExclusiveItemPrice Decimal? @db.Decimal(12, 2)
+  /// Spedizione IVA esclusa (fallback se shippingTax è NULL/0).
+  vatExclusiveShippingPrice Decimal? @db.Decimal(12, 2)
+  itemStatus  String?
+  currency    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, lineKey])
+  @@index([sku, purchaseDate])
+  @@index([storeKey, purchaseDate])
+  @@index([fulfillmentChannel])
+  @@index([channel, sku, purchaseDate])
+  // Serve le finestre equal-time delle coorti di lancio (ASIN × data).
+  @@index([channel, asin, purchaseDate], map: "StoreOrderLine_channel_asin_date")
+  @@index([amazonOrderId])
+  @@index([channel, buyerUsername])
+  @@schema("product")
+}
+
+/// Alias paese libero (Etsy e altri) → ISO-2, per IVA di destinazione.
+model StoreCountryAlias {
+  id String @id @default(cuid())
+  /// Stringa grezza normalizzata (trim + lower), unica.
+  rawName String
+  /// Codice ISO-3166-1 alpha-2 (GB, non UK).
+  countryCode String @db.Char(2)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([rawName])
+  @@index([countryCode])
+  @@schema("product")
+}
+
+/// Pick&pack FBA reale da Finances API (non Fee Preview).
+/// Una riga per ordine + item; l'analytics la somma sul periodo.
+model StoreOrderFee {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+
+  amazonOrderId String
+  /// Vuoto se Amazon non invia OrderItemId.
+  orderItemId   String @default("")
+  sku           String
+
+  /// Pick&pack / peso FBA addebitato da Amazon (valore assoluto).
+  fbaFulfillmentFee Decimal @db.Decimal(12, 4)
+  /// Commissione di vendita (Commission + closing + digital services).
+  referralFee       Decimal @default(0) @db.Decimal(12, 4)
+  /// Digital Services Fee, già inclusa in referralFee: serve solo allo scorporo in UI.
+  digitalServicesFee Decimal @default(0) @db.Decimal(12, 4)
+  /// Storno spedizione FBA da Settlement/Finances (valore assoluto).
+  shippingChargeback Decimal @default(0) @db.Decimal(12, 4)
+  /// Commissione sul rimborso (RefundCommission).
+  refundCommission   Decimal @default(0) @db.Decimal(12, 4)
+  /// Altre ItemFees Amazon non classificate (valore assoluto).
+  otherFee           Decimal @default(0) @db.Decimal(12, 4)
+  currency          String  @default("EUR")
+  postedDate        DateTime? @db.Timestamptz(6)
+
+  /// Stime usate finché il canale non pubblica i costi reali.
+  provisionalReferralFee        Decimal @default(0) @db.Decimal(12, 4)
+  provisionalDigitalServicesFee Decimal @default(0) @db.Decimal(12, 4)
+  provisionalFbaFee             Decimal @default(0) @db.Decimal(12, 4)
+  provisionalShippingChargeback Decimal @default(0) @db.Decimal(12, 4)
+  provisionalFbmShipping        Decimal @default(0) @db.Decimal(12, 4)
+  /// listing | fee_preview | channel_settings
+  provisionalFeeSource      String?
+  /// shipping_price | shipping_average
+  provisionalShippingSource String?
+  provisionalAt             DateTime? @db.Timestamptz(6)
+  /// True quando le colonne reali sono state popolate dal canale.
+  realCosts                 Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, amazonOrderId, orderItemId, sku], map: "StoreOrderFee_item_key")
+  @@index([sku], map: "StoreOrderFee_sku_idx")
+  @@index([amazonOrderId], map: "StoreOrderFee_order_idx")
+  @@index([channel, realCosts], map: "StoreOrderFee_channel_real_idx")
+  @@schema("product")
+}
+
+/// Stima commissioni Amazon (Fee Preview, max 1 report/giorno).
+/// Referral e fee FBA per SKU; le EFN sono per paese di destinazione.
+model StoreSkuFeeEstimate {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  storeKey String
+  sku      String
+
+  currency            String?
+  referralFeePerUnit  Decimal? @db.Decimal(12, 4)
+  fbaFeeDomestic      Decimal? @db.Decimal(12, 4)
+  /// Chiavi ISO paese (IT, DE, GB, …) → fee FBA EFN per unità.
+  fbaFeeByCountry     Json?
+  estimatedFeeTotal   Decimal? @db.Decimal(12, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku])
+  @@index([sku])
+  @@schema("product")
+}
+
+/// Reso post-spedizione (report FBA o FBM), distinto dagli ordini cancellati.
+model StoreReturnLine {
+  id             String       @id @default(cuid())
+  channel        StoreChannel
+  storeKey       String
+  idempotencyKey String       @unique
+
+  amazonOrderId      String?
+  sku                String
+  asin               String?
+  productName        String?
+  quantity           Int      @default(0)
+  returnDate         DateTime @db.Date
+  /// Codice motivo selezionabile (es. QUALITY_UNACCEPTABLE / Return Reason).
+  reason             String?
+  /// Testo libero descrittivo (FBA: customer-comments).
+  reasonDescription  String?
+  status             String?
+  /// Amazon: FBA o FBM. Null sugli altri canali.
+  amazonFulfillment  String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([sku, returnDate])
+  @@index([storeKey, returnDate])
+  @@schema("product")
+}
+
+/// Snapshot giornaliero del Best Seller Rank (BSR) per ASIN, paese e categoria.
+/// SP-API Catalog Items restituisce solo il rank corrente: lo storico va costruito qui.
+model StoreBsrSnapshot {
+  id         String       @id @default(cuid())
+  channel    StoreChannel
+  /// Amazon: marketplaceId (identifica il paese dello store).
+  storeKey   String
+  /// ISO 3166-1 alpha-2 del paese (IT, DE, FR, …), denormalizzato da storeKey.
+  countryCode String
+  asin       String
+  sku        String?
+  /// Giorno UTC dello snapshot (un punto al giorno per categoria).
+  capturedAt DateTime     @db.Date
+  /// Titolo categoria Amazon (es. "Home & Kitchen").
+  category   String
+  /// classificationId, websiteDisplayGroup o fallback sul titolo.
+  categoryKey String
+  /// `classification` (browse node) o `displayGroup` (reparto vetrina).
+  kind       String
+  rank       Int
+  createdAt  DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, asin, capturedAt, kind, categoryKey], map: "StoreBsrSnapshot_rank_key")
+  @@index([asin, storeKey, capturedAt], map: "StoreBsrSnapshot_asin_store_date")
+  @@index([asin, countryCode, capturedAt], map: "StoreBsrSnapshot_asin_country_date")
+  @@schema("product")
+}
+
+/// Media stelle (o feedback eBay) e conteggio per listing.
+/// `asin` è l'id listing del canale: ASIN Amazon, ItemID eBay, listing_id Etsy, goodsId Temu.
+/// Amazon: una riga prodotto (`storeKey` = AMAZON), non per paese. Etsy/eBay restano per store.
+model StoreReviewSummary {
+  id          String       @id @default(cuid())
+  channel     StoreChannel
+  storeKey    String
+  countryCode String
+  /// Id listing del marketplace (ASIN / ItemID / listing_id / goodsId).
+  asin        String
+  sku         String?
+  capturedAt  DateTime     @db.Date
+  rating      Decimal      @db.Decimal(2, 1)
+  count       Int
+  /// Percentuali 5→1 stelle, se presenti sulla pagina recensioni.
+  histogram   Json?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, asin, capturedAt], map: "StoreReviewSummary_day_key")
+  @@index([asin, storeKey], map: "StoreReviewSummary_asin_store")
+  @@schema("product")
+}
+
+/// Recensione o feedback cliente. Amazon: una riga per `externalId` (prodotto), non per paese.
+model StoreCustomerReview {
+  id           String       @id @default(cuid())
+  channel      StoreChannel
+  storeKey     String
+  countryCode  String
+  /// Id listing del marketplace (ASIN / ItemID / listing_id / goodsId).
+  asin         String
+  sku          String?
+  /// Id esterno (Amazon R3…, eBay FeedbackID, Etsy review id).
+  externalId   String
+  rating       Int
+  /// eBay: POSITIVE / NEUTRAL / NEGATIVE. Null sulle recensioni a stelle.
+  sentiment    String?
+  title        String       @default("")
+  body         String       @default("")
+  author       String?
+  /// Data come mostrata su Amazon (testo localizzato).
+  dateLabel    String       @default("")
+  /// Data recensione parsata dal testo Amazon, se riconoscibile.
+  reviewedAt   DateTime?    @db.Date
+  /// Paese di provenienza del recensore (ISO), se diverso o se le recensioni sono aggregate.
+  originCountryCode String?
+  /// Presa visione: le recensioni nuove restano false fino a conferma in UI.
+  viewed       Boolean      @default(false)
+  verified     Boolean      @default(false)
+  capturedAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+
+  consoleNotifications ConsoleNotification[]
+
+  @@unique([channel, externalId], map: "StoreCustomerReview_ext_key")
+  @@index([asin, storeKey, capturedAt], map: "StoreCustomerReview_asin_store")
+  @@index([viewed, reviewedAt], map: "StoreCustomerReview_viewed_date")
+  @@schema("product")
+}
+
+/// Snapshot giornaliero di titolo, bullet, descrizione e media per SKU × paese.
+/// Il cron/import popola queste righe: la UI legge da qui invece di richiamare il marketplace.
+model StoreListingContentSnapshot {
+  id          String       @id @default(cuid())
+  channel     StoreChannel
+  storeKey    String
+  countryCode String
+  sku         String
+  /// Id listing del marketplace (ASIN / ItemID / listing_id / goodsId).
+  asin        String?
+  capturedAt  DateTime     @db.Date
+  title       String       @default("")
+  description String       @default("")
+  /// Array JSON di stringhe (punti elenco Amazon, o vuoto sugli altri canali).
+  bulletPoints Json
+  /// Array JSON di URL immagine.
+  productImages Json
+  /// Metadati qualità per eBay/Etsy/Temu (tag, specifics, listingId, conteggi foto).
+  qualityMeta Json?
+  mainImageWidth  Int?
+  mainImageHeight Int?
+  hasVideo    Boolean      @default(false)
+  hasAplus    Boolean      @default(false)
+  /// Data di pubblicazione Amazon (date_first_available o createdDate listing).
+  publishedAt DateTime?    @db.Date
+  /// Categoria Amazon (display group / browse root).
+  amazonCategory    String?
+  amazonCategoryKey String?
+  /// Sottocategoria Amazon (browse node foglia).
+  amazonSubcategory    String?
+  amazonSubcategoryKey String?
+  ean String?
+  /// Collegamento a inventory.Product (stesso ASIN, EAN o SKU).
+  inventoryProductId   String? @db.Uuid
+  inventoryProductName String?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, capturedAt], map: "StoreListingContent_day_key")
+  @@index([sku, capturedAt], map: "StoreListingContent_sku_date")
+  @@index([asin, storeKey, capturedAt], map: "StoreListingContent_asin_store_date")
+  @@index([inventoryProductId], map: "StoreListingContent_inventory_product")
+  @@schema("product")
+}
+
+/// Snapshot giornaliero dello stato Amazon (BUYABLE / DISCOVERABLE) per SKU × paese.
+/// Amazon non espone lo storico di inattività: lo ricostruiamo da queste osservazioni.
+model StoreListingActivitySnapshot {
+  id             String       @id @default(cuid())
+  channel        StoreChannel
+  storeKey       String
+  countryCode    String
+  sku            String
+  asin           String?
+  capturedAt     DateTime     @db.Date
+  /// Istante reale dell'osservazione (orario dell'import).
+  observedAt     DateTime     @db.Timestamptz(6)
+  isPublished    Boolean
+  isBuyable      Boolean
+  isDiscoverable Boolean
+  /// Stati Amazon grezzi (`BUYABLE`, `DISCOVERABLE`).
+  statuses       String[]     @default([])
+  quantity       Int?
+  /// `lastUpdatedDate` Amazon sul listing, se presente.
+  amazonUpdatedAt DateTime?   @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, capturedAt], map: "StoreListingActivity_day_key")
+  @@index([sku, storeKey, capturedAt], map: "StoreListingActivity_sku_date")
+  @@schema("product")
+}
+
+/// Periodo in cui il listing non era acquistabile in un paese.
+/// `endedAt` null = ancora inattivo al momento dell'ultima osservazione.
+model StoreListingInactivityPeriod {
+  id              String       @id @default(cuid())
+  channel         StoreChannel
+  storeKey        String
+  countryCode     String
+  sku             String
+  asin            String?
+  startedAt       DateTime     @db.Timestamptz(6)
+  endedAt         DateTime?    @db.Timestamptz(6)
+  /// NOT_BUYABLE | NOT_DISCOVERABLE | OUT_OF_STOCK | ABSENT
+  reason          String
+  statuses        String[]     @default([])
+  quantity        Int?
+  amazonUpdatedAt DateTime?    @db.Timestamptz(6)
+  createdAt       DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(6)
+
+  consoleNotifications ConsoleNotification[]
+
+  @@index([channel, storeKey, sku, startedAt], map: "StoreListingInactivity_sku_start")
+  @@index([sku, storeKey, endedAt], map: "StoreListingInactivity_open")
+  @@schema("product")
+}
+
+/// Job resumable per l'import giornaliero qualità (bottone UI o cron).
+model StoreQualityDailyJob {
+  id                 String            @id @default(cuid())
+  channel            StoreChannel
+  capturedAt         DateTime          @db.Date
+  /// listings | extras | reviews | refresh | refresh_reviews | done
+  phase              String            @default("listings")
+  nextAmazonPage     Int               @default(1)
+  /// Offset nella coda SKU extra (inventory / vendite / snapshot precedenti).
+  nextExtraOffset    Int               @default(0)
+  processedListings  Int               @default(0)
+  processedReviews   Int               @default(0)
+  totalListings      Int               @default(0)
+  status             StoreReportStatus @default(REQUESTED)
+  lastMessage        String?
+  errorMessage       String?
+  importedAt         DateTime?         @db.Timestamptz(6)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, capturedAt], map: "StoreQualityDailyJob_day_key")
+  @@index([status, capturedAt], map: "StoreQualityDailyJob_status_idx")
+  @@schema("product")
+}
+
+/// Prompt JSON modificabile per i suggerimenti OpenAI sulla scheda qualità.
+model QualityAiPrompt {
+  id String @id @default(cuid())
+  /// Chiave logica, es. `listing-content-suggest`.
+  key String @unique
+  /// JSON: model, system, instructions.
+  prompt Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// Versione di titolo, bullet e descrizione per SKU × paese.
+/// `published` = inviata ad Amazon; il live può tardare giorni.
+model QualityListingContentVersion {
+  id          String       @id @default(cuid())
+  channel     StoreChannel
+  storeKey    String
+  countryCode String
+  sku         String
+  version     Int
+  title       String       @default("")
+  description String       @default("")
+  /// Array JSON di stringhe (punti elenco).
+  bulletPoints Json
+  /// True se questa versione è stata inviata ad Amazon.
+  published   Boolean      @default(false)
+  publishedAt DateTime?    @db.Timestamptz(6)
+  /// deepl | chatgpt | manual
+  source      String?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, sku, version], map: "QualityListingContentVer_ver_key")
+  @@index([sku, storeKey, published], map: "QualityListingContentVer_sku_pub")
+  @@schema("product")
+}
+
+/// Breakdown punteggio listing per paese, calcolato sull'ultimo snapshot + recensioni.
+view VListingQualityScore {
+  id                         String    @unique
+  sku                        String
+  storeKey                   String
+  countryCode                String
+  asin                       String?
+  capturedAt                 DateTime  @db.Date
+  listingScore               Decimal   @db.Decimal(3, 1)
+  scoreKnown                 Int
+  scorePassed                Int
+  titleNoSymbols             Boolean?
+  titleOver150Chars          Boolean?
+  bulletsFiveOrMore          Boolean
+  bulletsOver150CharsEach    Boolean
+  bulletsCapitalizedFirst    Boolean
+  bulletsNotAllCaps          Boolean
+  descriptionOver1000Chars   Boolean
+  mediaCorrectResolution     Boolean?
+  mediaWhiteBackground       Boolean?
+  mediaSevenPlusImages       Boolean
+  mediaHasVideo              Boolean
+  reviewsTwentyPlus          Boolean?
+  reviewsFourPlusRating      Boolean?
+
+  @@map("v_listing_quality_score")
+  @@schema("product")
+}
+
+/// Stato corrente listing per la dashboard salute (view live; la dashboard usa la matview).
+view VListingHealthCurrent {
+  id                   String       @unique
+  channel              StoreChannel
+  storeKey             String
+  countryCode          String
+  sku                  String
+  asin                 String?
+  title                String
+  inventoryProductId   String?      @db.Uuid
+  inventoryProductName String?
+  capturedAt           DateTime     @db.Date
+  isBuyable            Boolean?
+  isDiscoverable       Boolean?
+  isPublished          Boolean?
+  quantity             Int?
+  activityCapturedAt   DateTime?    @db.Date
+  inactivityReason     String?
+  inactivityStartedAt  DateTime?    @db.Timestamptz(6)
+  listingScore         Decimal?     @db.Decimal(3, 1)
+  listingPrice         Decimal?     @db.Decimal(12, 2)
+  currency             String?
+
+  @@map("v_listing_health_current")
+  @@schema("product")
+}
+
+/// Snapshot materializzato di `v_listing_health_current` (refresh cron 30 min).
+view MvListingHealthCurrent {
+  id                   String       @unique
+  channel              StoreChannel
+  storeKey             String
+  countryCode          String
+  sku                  String
+  asin                 String?
+  title                String
+  inventoryProductId   String?      @db.Uuid
+  inventoryProductName String?
+  capturedAt           DateTime     @db.Date
+  isBuyable            Boolean?
+  isDiscoverable       Boolean?
+  isPublished          Boolean?
+  quantity             Int?
+  activityCapturedAt   DateTime?    @db.Date
+  inactivityReason     String?
+  inactivityStartedAt  DateTime?    @db.Timestamptz(6)
+  listingScore         Decimal?     @db.Decimal(3, 1)
+  listingPrice         Decimal?     @db.Decimal(12, 2)
+  currency             String?
+
+  @@map("mv_listing_health_current")
+  @@schema("product")
+}
+
+/// Vendite e resi 30 giorni vs 30 precedenti (view live; la dashboard usa la matview).
+view VListingSalesReturns30d {
+  id               String       @unique
+  channel          StoreChannel
+  storeKey         String
+  sku              String
+  asin             String?
+  productName      String?
+  units30          Int
+  unitsPrev30      Int
+  revenue30        Decimal      @db.Decimal(12, 2)
+  returns30        Int
+  returnsPrev30    Int
+  returnRate30     Decimal      @db.Decimal(8, 2)
+  returnRatePrev30 Decimal      @db.Decimal(8, 2)
+  topReturnReason  String?
+
+  @@map("v_listing_sales_returns_30d")
+  @@schema("product")
+}
+
+/// Snapshot materializzato di `v_listing_sales_returns_30d` (refresh cron 30 min).
+view MvListingSalesReturns30d {
+  id               String       @unique
+  channel          StoreChannel
+  storeKey         String
+  sku              String
+  asin             String?
+  productName      String?
+  units30          Int
+  unitsPrev30      Int
+  revenue30        Decimal      @db.Decimal(12, 2)
+  returns30        Int
+  returnsPrev30    Int
+  returnRate30     Decimal      @db.Decimal(8, 2)
+  returnRatePrev30 Decimal      @db.Decimal(8, 2)
+  topReturnReason  String?
+
+  @@map("mv_listing_sales_returns_30d")
+  @@schema("product")
+}
+
+/// Trend BSR Amazon: rank primario corrente vs baseline (view live; la dashboard usa la matview).
+view VListingBsrTrend {
+  id               String       @unique
+  channel          StoreChannel
+  storeKey         String
+  countryCode      String
+  asin             String
+  sku              String?
+  capturedAt       DateTime     @db.Date
+  rank             Int
+  category         String
+  categoryKey      String
+  prevRank         Int?
+  prevCapturedAt   DateTime?    @db.Date
+  rankDelta        Int?
+  rankDeltaPercent Decimal?     @db.Decimal(8, 2)
+
+  @@map("v_listing_bsr_trend")
+  @@schema("product")
+}
+
+/// Snapshot materializzato di `v_listing_bsr_trend` (refresh cron 30 min).
+view MvListingBsrTrend {
+  id               String       @unique
+  channel          StoreChannel
+  storeKey         String
+  countryCode      String
+  asin             String
+  sku              String?
+  capturedAt       DateTime     @db.Date
+  rank             Int
+  category         String
+  categoryKey      String
+  prevRank         Int?
+  prevCapturedAt   DateTime?    @db.Date
+  rankDelta        Int?
+  rankDeltaPercent Decimal?     @db.Decimal(8, 2)
+
+  @@map("mv_listing_bsr_trend")
+  @@schema("product")
+}
+
+/// Recensioni ≤3★ ultimi 180 giorni (view live; la dashboard usa la matview).
+view VListingReviewAlert {
+  id                   String       @unique
+  channel              StoreChannel
+  storeKey             String
+  countryCode          String
+  asin                 String
+  sku                  String?
+  externalId           String
+  rating               Int
+  reviewTitle          String
+  reviewBody           String
+  author               String?
+  viewed               Boolean
+  verified             Boolean
+  reviewedAt           DateTime?    @db.Date
+  capturedAt           DateTime     @db.Timestamptz(6)
+  inventoryProductId   String?      @db.Uuid
+  inventoryProductName String?
+  listingTitle         String
+
+  @@map("v_listing_review_alert")
+  @@schema("product")
+}
+
+/// Snapshot materializzato di `v_listing_review_alert` (refresh cron 30 min).
+view MvListingReviewAlert {
+  id                   String       @unique
+  channel              StoreChannel
+  storeKey             String
+  countryCode          String
+  asin                 String
+  sku                  String?
+  externalId           String
+  rating               Int
+  reviewTitle          String
+  reviewBody           String
+  author               String?
+  viewed               Boolean
+  verified             Boolean
+  reviewedAt           DateTime?    @db.Date
+  capturedAt           DateTime     @db.Timestamptz(6)
+  inventoryProductId   String?      @db.Uuid
+  inventoryProductName String?
+  listingTitle         String
+
+  @@map("mv_listing_review_alert")
+  @@schema("product")
+}
+
+/// KPI e problemi aggregati per store (matview, refresh cron 30 min).
+view MvListingHealthStoreStats {
+  storeKey       String
+  channel        StoreChannel
+  countryCode    String
+  monitored      Int
+  inactive       Int
+  avgScore       Decimal? @db.Decimal(8, 2)
+  lowScore       Int
+  units30        Int
+  returns30      Int
+  unitsPrev30    Int
+  returnsPrev30  Int
+  returnsAlert   Int
+  bsrDown        Int
+  reviews30      Int
+  reviewsPrev30  Int
+  reviews90      Int
+  reviewsPrev90  Int
+  reviews365     Int
+  reviewsPrev365 Int
+
+  @@unique([channel, storeKey])
+  @@map("mv_listing_health_store_stats")
+  @@schema("product")
+}
+
+/// Singleton: ultimo refresh della dashboard salute listing.
+model ListingHealthRefresh {
+  id          Int      @id @default(1)
+  refreshedAt DateTime @db.Timestamptz(6)
+  rowCount    Int      @default(0)
+  durationMs  Int      @default(0)
+
+  @@schema("product")
+}
+
+/// Singleton: ultimo refresh delle matview della pagina Vendite, così la UI
+/// può dire quanto sono vecchi i dati invece di mostrarli come se fossero live.
+model SalesAnalyticsRefresh {
+  id          Int      @id @default(1)
+  refreshedAt DateTime @db.Timestamptz(6)
+  rowCount    Int      @default(0)
+  durationMs  Int      @default(0)
+  /// `cron` o `ui`: distingue il giro schedulato dal bottone Aggiorna.
+  source      String   @default("cron")
+
+  @@schema("product")
+}
+
+/// Job Reports SP-API: watermark e deduplica di createReport (non idempotente).
+model StoreReportJob {
+  id               String            @id @default(cuid())
+  channel          StoreChannel
+  reportType       String
+  storeKey         String
+  /// Distingue opzioni report (es. batch ASIN SQP). I job vendite restano ''.
+  optionKey        String            @default("")
+  dataStart        DateTime          @db.Timestamptz(6)
+  dataEnd          DateTime          @db.Timestamptz(6)
+  externalReportId String?
+  documentId       String?
+  status           StoreReportStatus @default(REQUESTED)
+  importedAt       DateTime?         @db.Timestamptz(6)
+  errorMessage     String?
+  createdAt        DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, reportType, storeKey, optionKey, dataStart, dataEnd], map: "StoreReportJob_window_key")
+  @@index([status, createdAt])
+  @@schema("product")
+}
+
+/// Cursore di sync incrementale per canali non Amazon (eBay / Etsy / Temu).
+model StoreChannelSyncCursor {
+  id            String       @id @default(cuid())
+  channel       StoreChannel
+  storeKey      String
+  /// `orders` oppure `refunds`.
+  kind          String
+  watermark     DateTime?    @db.Timestamptz(6)
+  offset        Int          @default(0)
+  pagesFetched  Int          @default(0)
+  itemsUpserted Int          @default(0)
+  rangeFrom     DateTime?    @db.Timestamptz(6)
+  rangeTo       DateTime?    @db.Timestamptz(6)
+  errorMessage  String?
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, kind], map: "StoreChannelSyncCursor_key")
+  @@index([channel, kind], map: "StoreChannelSyncCursor_channel_kind")
+  @@schema("product")
+}
+
+/// Cursore paginazione Finances API (listFinancialEvents) per finestra di posted date.
+model StoreFinanceCursor {
+  id      String       @id @default(cuid())
+  channel StoreChannel
+  /// Marketplace da cui derivare l'endpoint regionale.
+  storeKey String
+  dataStart DateTime @db.Timestamptz(6)
+  dataEnd   DateTime @db.Timestamptz(6)
+  nextToken String?
+  status    StoreReportStatus @default(REQUESTED)
+  pagesFetched Int @default(0)
+  itemsUpserted Int @default(0)
+  importedAt DateTime? @db.Timestamptz(6)
+  errorMessage String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, storeKey, dataStart, dataEnd], map: "StoreFinanceCursor_window_key")
+  @@index([status, createdAt], map: "StoreFinanceCursor_status_idx")
+  @@schema("product")
+}
+
+/// Credenziali OAuth Gmail (Workspace) per leggere/rispondere ai messaggi Amazon inoltrati.
+/// mailboxEmail è il gruppo/alias Amazon; OAuth avviene con un utente membro (GMAIL_OAUTH_EMAIL).
+model GmailOAuthCredential {
+  id           String   @id @default(cuid())
+  /// Indirizzo del gruppo/alias (es. store-messages@tuodominio.it).
+  mailboxEmail String
+  accessToken  String
+  refreshToken String
+  /// Scadenza access token (UTC).
+  expiresAt    DateTime @db.Timestamptz(6)
+  /// Scope concessi (spazio-separati).
+  scopes       String   @default("")
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([mailboxEmail])
+  @@schema("product")
+}
+
+/// Snapshot giornaliero inventario FBA dal ledger Amazon (Summary View).
+/// Una riga Amazon = data + FNSKU + disposition + paese (location COUNTRY).
+model StoreFbaInventoryDaily {
+  id       String       @id @default(cuid())
+  channel  StoreChannel
+  /// Marketplace usato per createReport (storeKey della selling region).
+  storeKey String
+  date     DateTime     @db.Date
+  fnsku    String
+  asin     String
+  msku     String
+  title    String       @default("")
+  /// Es. SELLABLE / UNSSELLABLE. Lo stock vendibile è solo SELLABLE.
+  disposition String
+  /// Paese ISO o FC, a seconda di aggregateByLocation.
+  location String
+
+  startingWarehouseBalance     Int @default(0)
+  inTransitBetweenWarehouses   Int @default(0)
+  receipts                     Int @default(0)
+  customerShipments            Int @default(0)
+  customerReturns              Int @default(0)
+  vendorReturns                Int @default(0)
+  warehouseTransferInOut       Int @default(0)
+  found                        Int @default(0)
+  lost                         Int @default(0)
+  damaged                      Int @default(0)
+  disposed                     Int @default(0)
+  otherEvents                  Int @default(0)
+  endingWarehouseBalance       Int @default(0)
+  unknownEvents                Int @default(0)
+
+  /// Colonne Amazon non mappate: non perdiamo dati se il TSV cambia.
+  extra Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, date, fnsku, disposition, location], map: "StoreFbaInventoryDaily_grain")
+  @@index([asin, date])
+  @@index([msku, date])
+  @@index([endingWarehouseBalance])
+  @@index([channel, storeKey, date])
+  @@schema("product")
+}
+
+/// Catalogo veicoli Amazon (Vehicles API EU) per mappare marca/modello → KTYPE.
+model AmazonVehicle {
+  id             String   @id @default(cuid())
+  marketplaceId  String
+  /// CAR | MOTORBIKE
+  vehicleType    String
+  /// Chiave stabile: KTYPE oppure `amazon:{amazonId}`.
+  identifier     String
+  make           String
+  model          String
+  variantName    String?
+  bodyStyle      String?
+  driveType      String?
+  energy         String?
+  engineKw       Decimal? @db.Decimal(10, 2)
+  engineHp       Decimal? @db.Decimal(10, 2)
+  yearFrom       Int?
+  monthFrom      Int?
+  yearTo         Int?
+  monthTo        Int?
+  /// ACTIVE | DELETED
+  status         String   @default("ACTIVE")
+  ktype          String?
+  amazonId       String?
+  lastProcessedAt DateTime? @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId, vehicleType, identifier], map: "AmazonVehicle_ident_key")
+  @@index([marketplaceId, make, model], map: "AmazonVehicle_make_model")
+  @@index([marketplaceId, ktype], map: "AmazonVehicle_ktype")
+  @@index([marketplaceId, status], map: "AmazonVehicle_status")
+  @@schema("product")
+}
+
+/// Job resumable per scaricare/aggiornare il catalogo veicoli Amazon.
+model AmazonVehicleSyncJob {
+  id            String            @id @default(cuid())
+  marketplaceId String
+  /// CAR | MOTORBIKE | done
+  phase         String            @default("CAR")
+  pageToken     String?
+  processed     Int               @default(0)
+  upserted      Int               @default(0)
+  status        StoreReportStatus @default(REQUESTED)
+  lastMessage   String?
+  errorMessage  String?
+  importedAt    DateTime?         @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId], map: "AmazonVehicleSyncJob_marketplace")
+  @@index([status, updatedAt], map: "AmazonVehicleSyncJob_status")
+  @@schema("product")
+}
+
+/// Stato fitment per SKU × marketplace: KTYPE pubblicati e ultima ricerca GPT.
+model AmazonListingFitment {
+  id                String    @id @default(cuid())
+  marketplaceId     String
+  sku               String
+  asin              String?
+  publishedKtypes   String[]  @default([])
+  publishedCount    Int       @default(0)
+  /// JSON ultima ricerca (veicoli GPT + match KTYPE).
+  lastResearch      Json?
+  lastResearchedAt  DateTime? @db.Timestamptz(6)
+  lastPublishedAt   DateTime? @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId, sku], map: "AmazonListingFitment_sku_key")
+  @@index([marketplaceId, publishedCount], map: "AmazonListingFitment_count")
+  @@schema("product")
+}
+
+/// Soglie di classificazione coorti di lancio (una sola riga, id = default).
+model ListingLaunchThreshold {
+  id                 String   @id @default("default")
+  deadMaxUnits       Int      @default(1)
+  weakMaxUnits       Int      @default(4)
+  activatedMinUnits  Int      @default(5)
+  successfulMinUnits Int      @default(10)
+  winnerMinUnits     Int      @default(25)
+  winnerMinRevenue   Decimal  @default(500) @db.Decimal(12, 2)
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// Commissioni di vendita eBay / Etsy / Temu (una sola riga, id = default).
+/// Percentuali in punti (15 = 15%). Quota fissa in EUR.
+model ChannelSaleFeeSetting {
+  id           String   @id @default("default")
+  ebayPercent  Decimal  @default(12.8) @db.Decimal(5, 2)
+  ebayFixedEur Decimal  @default(0.35) @db.Decimal(8, 2)
+  etsyPercent  Decimal  @default(10.5) @db.Decimal(5, 2)
+  etsyFixedEur Decimal  @default(0.30) @db.Decimal(8, 2)
+  temuPercent  Decimal  @default(15) @db.Decimal(5, 2)
+  temuFixedEur Decimal  @default(0) @db.Decimal(8, 2)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// Soglie colore del margine in analytics vendite (una sola riga, id = default).
+/// Rosso se margine < lowMaxPercent; verde se >= goodMinPercent; arancione in mezzo.
+model SalesMarginThreshold {
+  id             String   @id @default("default")
+  /// Sotto questa % il margine è basso (rosso).
+  lowMaxPercent  Decimal  @default(30) @db.Decimal(5, 2)
+  /// Da questa % in su il margine è buono (verde).
+  goodMinPercent Decimal  @default(45) @db.Decimal(5, 2)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// Snapshot prezzo listing e commissioni Amazon per SKU × marketplace (pagina Profitto).
+/// FBA: referral, digital services e pick&pack da Product Fees (salvati qui).
+/// FBM: le commissioni Amazon restano qui; il costo corriere arriva da ShippingPrice.
+model ListingProfitEstimate {
+  id         String       @id @default(cuid())
+  channel    StoreChannel
+  storeKey   String
+  countryCode String      @db.VarChar(2)
+  sku        String
+  asin       String?
+  /// FBA | FBM
+  fulfillment String?
+  listingPrice      Decimal? @db.Decimal(12, 2)
+  /// Spedizione addebitata al cliente (offerta Amazon), se presente.
+  customerShipping  Decimal? @db.Decimal(12, 2)
+  currency          String   @default("EUR") @db.VarChar(3)
+  referralFee         Decimal? @db.Decimal(12, 4)
+  digitalServicesFee  Decimal? @db.Decimal(12, 4)
+  fbaFee              Decimal? @db.Decimal(12, 4)
+  importedAt DateTime @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  consoleNotifications ConsoleNotification[]
+
+  @@unique([channel, storeKey, sku], map: "ListingProfitEstimate_sku_store")
+  @@index([sku], map: "ListingProfitEstimate_sku")
+  @@index([channel, sku], map: "ListingProfitEstimate_channel_sku")
+  @@schema("product")
+}
+
+/// Job resumable per importare prezzi listing e commissioni Product Fees.
+model ListingProfitImportJob {
+  id               String            @id @default(cuid())
+  channel          StoreChannel
+  capturedAt       DateTime          @db.Date
+  /// Indice del marketplace seller in elaborazione.
+  marketplaceIndex Int               @default(0)
+  nextAmazonPage   Int               @default(1)
+  extraOffset      Int               @default(0)
+  /// listings | extras | done
+  phase            String            @default("listings")
+  processed        Int               @default(0)
+  total            Int               @default(0)
+  status           StoreReportStatus @default(REQUESTED)
+  lastMessage      String?
+  errorMessage     String?
+  importedAt       DateTime?         @db.Timestamptz(6)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([channel, capturedAt], map: "ListingProfitImportJob_day")
+  @@index([status, updatedAt], map: "ListingProfitImportJob_status")
+  @@schema("product")
+}
+
+/// Costo spedizione FBM di default, per paese di destinazione (per riga ordine).
+/// Usato sugli ordini quando non c'è un'etichetta reale in inventory.Shipment.
+model ShippingPrice {
+  /// Codice ISO-2 (UK già normalizzato in GB).
+  countryCode String   @id @db.VarChar(2)
+  /// Costo corriere per una riga verso quel paese (non si moltiplica per i pezzi).
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("EUR") @db.VarChar(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// Media unitaria FBM da inventory.Shipment: ultimi 30 giorni se c'è storico,
+/// altrimenti tutte le spedizioni disponibili per quel paese.
+view VCountryShippingCost {
+  countryCode        String   @unique @map("country_code")
+  unitCost           Decimal  @map("unit_cost") @db.Decimal(12, 2)
+  shipmentCount      Int      @map("shipment_count")
+  windowDays         Int      @map("window_days")
+  usedLatestFallback Boolean  @map("used_latest_fallback")
+  sampleFrom         DateTime @map("sample_from") @db.Timestamptz(6)
+  sampleTo           DateTime @map("sample_to") @db.Timestamptz(6)
+
+  @@map("v_country_shipping_cost")
+  @@schema("product")
+}
+
+/// Pacco FBA dichiarato/misurato da Amazon per uno SKU, usato dal confronto packaging.
+model AmazonFbaPackageSnapshot {
+  id            String @id @default(cuid())
+  marketplaceId String
+  sku           String
+  asin          String?
+  productType   String?
+  title         String?
+  imageUrl      String?
+
+  catalogLengthCm Decimal? @db.Decimal(12, 2)
+  catalogWidthCm  Decimal? @db.Decimal(12, 2)
+  catalogHeightCm Decimal? @db.Decimal(12, 2)
+  catalogWeightG  Decimal? @db.Decimal(12, 2)
+
+  listingLengthCm Decimal? @db.Decimal(12, 2)
+  listingWidthCm  Decimal? @db.Decimal(12, 2)
+  listingHeightCm Decimal? @db.Decimal(12, 2)
+  listingWeightG  Decimal? @db.Decimal(12, 2)
+
+  fetchedAt DateTime @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId, sku], map: "AmazonFbaPackageSnapshot_sku_key")
+  @@index([marketplaceId, asin], map: "AmazonFbaPackageSnapshot_asin")
+  @@index([marketplaceId, fetchedAt], map: "AmazonFbaPackageSnapshot_fetched")
+  @@schema("product")
+}
+
+/// Paesi attesi e filtri per gli avvisi di copertura dei listing Amazon (singleton).
+model AmazonListingCoverageSetting {
+  id String @id @default("default")
+  /// MarketplaceId in cui ogni listing dovrebbe essere pubblicato e acquistabile.
+  expectedMarketplaceIds String[]
+  /// Se true, le schede padre di variazione non generano avvisi.
+  excludeParentSkus Boolean @default(true)
+  /// Se true, gli SKU FBA sono inclusi negli avvisi.
+  includeFba Boolean @default(true)
+  /// Se true, gli SKU FBM sono inclusi negli avvisi.
+  includeFbm Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// SKU esclusi dagli avvisi di copertura (noti come incompleti di proposito).
+model AmazonListingCoverageSkuExclusion {
+  id  String @id @default(cuid())
+  sku String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([sku], map: "AmazonListingCoverageSkuExclusion_sku")
+  @@schema("product")
+}
+
+/// SKU dismessi: fuori da import catalogo (qualità, profitto, KPI) e dashboard listing.
+/// Lo storico ordini/P&L resta invariato.
+model ListingIgnoredSku {
+  id        String   @id @default(cuid())
+  sku       String
+  reason    String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([sku], map: "ListingIgnoredSku_sku")
+  @@schema("product")
+}
+
+/// Tassi di cambio verso EUR da Frankfurter (BCE e altre banche centrali).
+/// `rate` = unità di `currency` per 1 EUR (es. 1 EUR = 0,86 GBP).
+model ExchangeRate {
+  id String @id @default(cuid())
+  /// Valuta quotata (ISO 4217), es. GBP, PLN, SEK.
+  currency String
+  /// Base sempre EUR.
+  base String @default("EUR")
+  /// Quante unità di `currency` equivalgono a 1 EUR.
+  rate Decimal @db.Decimal(18, 8)
+  /// Data della rilevazione pubblicata da Frankfurter.
+  rateDate DateTime @db.Date
+  /// Origine del dato (es. frankfurter).
+  source String @default("frankfurter")
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([currency], map: "ExchangeRate_currency")
+  @@index([rateDate], map: "ExchangeRate_rateDate")
+  @@schema("product")
+}
+
+/// Job resumable per importare dimensioni/peso pacco FBA da Catalog + Listings.
+model AmazonFbaPackageSyncJob {
+  id            String            @id @default(cuid())
+  marketplaceId String
+  cursor        Int               @default(0)
+  processed     Int               @default(0)
+  total         Int               @default(0)
+  status        StoreReportStatus @default(REQUESTED)
+  lastMessage   String?
+  importedAt    DateTime?         @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([marketplaceId], map: "AmazonFbaPackageSyncJob_marketplace")
+  @@index([status, updatedAt], map: "AmazonFbaPackageSyncJob_status")
+  @@schema("product")
+}
+
+/// Stato di un reclamo per unità FBA non ricevute.
+enum FbaMissingUnitClaimStatus {
+  IN_PROGRESS
+  WAITING
+  REFUNDED
+
+  @@schema("product")
+}
+
+/// Snapshot spedito/ricevuto per MSKU × spedizione inbound (SP-API v0 getShipmentItems).
+/// Vive in `product` perché inventory.FbaShipmentReceiptItem è di un'altra app.
+model FbaInboundReceiptItem {
+  id String @id @default(cuid())
+  /// UUID di inventory.FbaShipment (solo riferimento, no FK cross-schema).
+  shipmentId String @db.Uuid
+  amazonShipmentId String?
+  shipmentConfirmationId String
+  marketplaceId String
+  sku String
+  fnsku String?
+  asin String?
+  title String @default("")
+  quantityShipped Int @default(0)
+  quantityReceived Int @default(0)
+  /// Data spedizione (createdAt piano/spedizione o readyToShip Amazon).
+  shippedAt DateTime? @db.Timestamptz(6)
+  syncedAt DateTime @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([shipmentConfirmationId, sku], map: "FbaInboundReceiptItem_ship_sku")
+  @@index([sku], map: "FbaInboundReceiptItem_sku")
+  @@index([asin], map: "FbaInboundReceiptItem_asin")
+  @@index([shipmentId], map: "FbaInboundReceiptItem_shipment")
+  @@schema("product")
+}
+
+/// Job a passi per sincronizzare le ricevute inbound da SP-API.
+model FbaInboundReceiptSyncJob {
+  id           String            @id @default("default")
+  cursor       Int               @default(0)
+  processed    Int               @default(0)
+  total        Int               @default(0)
+  status       StoreReportStatus @default(REQUESTED)
+  lastMessage  String?
+  importedAt   DateTime?         @db.Timestamptz(6)
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
+/// SKU esclusi dal reclamo (di solito 1–2 unità, non vale la richiesta).
+model FbaMissingUnitIgnore {
+  id        String   @id @default(cuid())
+  sku       String
+  reason    String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([sku], map: "FbaMissingUnitIgnore_sku")
+  @@schema("product")
+}
+
+/// Reclamo rimborso per unità mancanti su una spedizione inbound.
+model FbaMissingUnitClaim {
+  id String @id @default(cuid())
+  sku String
+  asin String?
+  fnsku String?
+  sellerId String
+  status FbaMissingUnitClaimStatus @default(IN_PROGRESS)
+  shipmentId String? @db.Uuid
+  shipmentConfirmationId String
+  amazonShipmentId String?
+  quantityShipped Int @default(0)
+  quantityReceived Int @default(0)
+  quantityMissing Int @default(0)
+  caseId String?
+  caseOpenedAt DateTime? @db.Timestamptz(6)
+  refundedQuantity Int?
+  refundedAt DateTime? @db.Timestamptz(6)
+  excelGeneratedAt DateTime? @db.Timestamptz(6)
+  lastMessageSyncAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  messages             FbaMissingUnitClaimMessage[]
+  consoleNotifications ConsoleNotification[]
+
+  @@unique([sku, shipmentConfirmationId], map: "FbaMissingUnitClaim_sku_ship")
+  @@index([sku], map: "FbaMissingUnitClaim_sku")
+  @@index([status], map: "FbaMissingUnitClaim_status")
+  @@index([caseId], map: "FbaMissingUnitClaim_case")
+  @@schema("product")
+}
+
+/// Evento/messaggio di un case Amazon (rimborsi SP-API o nota operatore).
+model FbaMissingUnitClaimMessage {
+  id String @id @default(cuid())
+  claimId String
+  claim FbaMissingUnitClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  caseId String?
+  /// reimbursement | receipt | manual | system
+  source String
+  /// inbound | outbound | system
+  direction String @default("system")
+  title String?
+  body String
+  occurredAt DateTime @db.Timestamptz(6)
+  raw Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([claimId, occurredAt], map: "FbaMissingUnitClaimMessage_claim")
+  @@schema("product")
+}
+
+/// Template descrizione eBay: JSON strutturato (badge, bullet, testo IT/EN)
+/// da cui si genera l'HTML per la pubblicazione.
+model EbayListingDescription {
+  id        String @id @default(cuid())
+  /// ItemID eBay.
+  listingId String
+  sku       String?
+  /// JSON: title, badges, bulletsIt/En, descriptionIt/En, html.
+  content   Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([listingId], map: "EbayListingDescription_listing")
+  @@index([sku], map: "EbayListingDescription_sku")
+  @@schema("product")
+}
+
+/// Aggregato mensile ordini (materialized view). DDL: scripts/sql/order-seasonality-materialized-view.sql
+view MvOrderSeasonality {
+  year        Int
+  month       Int
+  channel     String
+  sku         String
+  asin        String?
+  productName String?
+  orderCount  BigInt
+  units       BigInt
+  revenue     Decimal @db.Decimal(14, 2)
+
+  @@unique([year, month, channel, sku])
+  @@map("mv_order_seasonality")
+  @@schema("product")
+}
+
+/// Singleton: ultimo refresh della vista stagionalità ordini.
+model OrderSeasonalityRefresh {
+  id          Int      @id @default(1)
+  refreshedAt DateTime @db.Timestamptz(6)
+  rowCount    Int      @default(0)
+  durationMs  Int      @default(0)
+
+  @@schema("product")
+}
+
+/// Costo unitario e anagrafica SKU per la panoramica (matview, refresh via cron).
+view VOverviewSkuMeta {
+  sku         String   @unique
+  unitCostEur Decimal? @map("unit_cost_eur") @db.Decimal(12, 4)
+  productName String?  @map("product_name")
+  imageUrl    String?  @map("image_url")
+  asin        String?
+
+  @@map("mv_overview_sku_meta")
+  @@schema("product")
+}
+
+/// Vendite e profitto aggregati per giorno e canale (matview, finestra 730 giorni).
+view VOverviewSalesDaily {
+  day                 DateTime @db.Date
+  channel             String
+  orders              Int
+  units               Int
+  grossEur            Decimal  @map("gross_eur") @db.Decimal(16, 4)
+  vatEur              Decimal  @map("vat_eur") @db.Decimal(16, 4)
+  netRevenueEur       Decimal  @map("net_revenue_eur") @db.Decimal(16, 4)
+  referralEur         Decimal  @map("referral_eur") @db.Decimal(16, 4)
+  digitalEur          Decimal  @map("digital_eur") @db.Decimal(16, 4)
+  fbaFeeEur           Decimal  @map("fba_fee_eur") @db.Decimal(16, 4)
+  chargebackEur       Decimal  @map("chargeback_eur") @db.Decimal(16, 4)
+  otherFeeEur         Decimal  @map("other_fee_eur") @db.Decimal(16, 4)
+  refundCommissionEur Decimal  @map("refund_commission_eur") @db.Decimal(16, 4)
+  fbmShippingEur      Decimal  @map("fbm_shipping_eur") @db.Decimal(16, 4)
+  cogsEur             Decimal  @map("cogs_eur") @db.Decimal(16, 4)
+  cogsKnownUnits      Int      @map("cogs_known_units")
+  refundUnits         Int      @map("refund_units")
+  refundAmountEur     Decimal  @map("refund_amount_eur") @db.Decimal(16, 4)
+  refundVatEur        Decimal  @map("refund_vat_eur") @db.Decimal(16, 4)
+  refundReferralEur   Decimal  @map("refund_referral_eur") @db.Decimal(16, 4)
+  recoveredCogsEur    Decimal  @map("recovered_cogs_eur") @db.Decimal(16, 4)
+  returnFeeEur        Decimal  @map("return_fee_eur") @db.Decimal(16, 4)
+  profitEur           Decimal  @map("profit_eur") @db.Decimal(16, 4)
+
+  @@unique([day, channel])
+  @@map("mv_overview_sales_daily")
+  @@schema("product")
+}
+
+/// Vendite e profitto aggregati per giorno, canale e SKU (matview, finestra 730 giorni).
+view VOverviewSkuDaily {
+  day           DateTime @db.Date
+  channel       String
+  sku           String
+  asin          String?
+  productName   String?  @map("product_name")
+  units         Int
+  grossEur      Decimal  @map("gross_eur") @db.Decimal(16, 4)
+  netRevenueEur Decimal  @map("net_revenue_eur") @db.Decimal(16, 4)
+  refundUnits   Int      @map("refund_units")
+  profitEur     Decimal  @map("profit_eur") @db.Decimal(16, 4)
+
+  @@unique([day, channel, sku])
+  @@map("mv_overview_sku_daily")
+  @@schema("product")
+}
+
+/// Ricavo e profitto per giorno e canale logistico FBA/FBM (matview, finestra 730 giorni).
+view VOverviewFulfillmentDaily {
+  day           DateTime @db.Date
+  fulfillment   String
+  units         Int
+  netRevenueEur Decimal  @map("net_revenue_eur") @db.Decimal(16, 4)
+  profitEur     Decimal  @map("profit_eur") @db.Decimal(16, 4)
+
+  @@unique([day, fulfillment])
+  @@map("mv_overview_fulfillment_daily")
+  @@schema("product")
+}
+
+/// Ricavo e profitto per giorno e paese di destinazione (matview, finestra 730 giorni).
+view VOverviewCountryDaily {
+  day           DateTime @db.Date
+  countryCode   String   @map("country_code")
+  units         Int
+  netRevenueEur Decimal  @map("net_revenue_eur") @db.Decimal(16, 4)
+  profitEur     Decimal  @map("profit_eur") @db.Decimal(16, 4)
+
+  @@unique([day, countryCode])
+  @@map("mv_overview_country_daily")
+  @@schema("product")
+}
+
+/// Vendite per giorno con tutte le dimensioni filtrabili dalla lista Vendite
+/// (canale, store, SKU, fulfillment, paese) in chiave: l'app aggrega su periodi
+/// arbitrari con un GROUP BY sku, fulfillment. Nessuna finestra temporale, il filtro "tutto"
+/// deve restare esatto. Le voci di costo sono già reali o provvisorie secondo
+/// StoreOrderFee.realCosts; referralEur include la DSF, digitalEur è dettaglio.
+view VSalesAnalyticsDaily {
+  day                    DateTime @db.Date
+  channel                String
+  storeKey               String   @map("store_key")
+  salesChannel           String   @map("sales_channel")
+  sku                    String
+  fulfillment            String
+  shipCountry            String   @map("ship_country")
+  asin                   String?
+  productName            String?  @map("product_name")
+  imageUrl               String?  @map("image_url")
+  unitCostEur            Decimal? @map("unit_cost_eur") @db.Decimal(12, 4)
+  units                  Int
+  grossEur               Decimal  @map("gross_eur") @db.Decimal(16, 4)
+  vatEur                 Decimal  @map("vat_eur") @db.Decimal(16, 4)
+  /// Spedizione incassata dal cliente, al netto dello sconto spedizione.
+  customerShippingEur    Decimal  @map("customer_shipping_eur") @db.Decimal(16, 4)
+  customerShippingTaxEur Decimal  @map("customer_shipping_tax_eur") @db.Decimal(16, 4)
+  referralEur            Decimal  @map("referral_eur") @db.Decimal(16, 4)
+  digitalEur             Decimal  @map("digital_eur") @db.Decimal(16, 4)
+  fbaFeeEur              Decimal  @map("fba_fee_eur") @db.Decimal(16, 4)
+  chargebackEur          Decimal  @map("chargeback_eur") @db.Decimal(16, 4)
+  otherFeeEur            Decimal  @map("other_fee_eur") @db.Decimal(16, 4)
+  refundCommissionEur    Decimal  @map("refund_commission_eur") @db.Decimal(16, 4)
+  fbmShippingEur         Decimal  @map("fbm_shipping_eur") @db.Decimal(16, 4)
+  cogsEur                Decimal  @map("cogs_eur") @db.Decimal(16, 4)
+  hasFeeEstimate         Boolean  @map("has_fee_estimate")
+  realCostUnits          Int      @map("real_cost_units")
+  provisionalCostUnits   Int      @map("provisional_cost_units")
+
+  @@unique([day, channel, storeKey, salesChannel, sku, fulfillment, shipCountry])
+  @@map("mv_sales_analytics_daily")
+  @@schema("product")
+}
+
+/// Resi per giorno di reso, stessa grana filtrabile della lista Vendite.
+view VSalesAnalyticsRefundDaily {
+  day               DateTime @db.Date
+  channel           String
+  storeKey          String   @map("store_key")
+  sku               String
+  refundUnits       Int      @map("refund_units")
+  refundAmountEur   Decimal  @map("refund_amount_eur") @db.Decimal(16, 4)
+  refundVatEur      Decimal  @map("refund_vat_eur") @db.Decimal(16, 4)
+  refundReferralEur Decimal  @map("refund_referral_eur") @db.Decimal(16, 4)
+  /// Unità rientrate ancora vendibili: il COGS si recupera solo su queste.
+  sellableUnits     Int      @map("sellable_units")
+  recoveredCogsEur  Decimal  @map("recovered_cogs_eur") @db.Decimal(16, 4)
+  returnFeeEur      Decimal  @map("return_fee_eur") @db.Decimal(16, 4)
+
+  @@unique([day, channel, storeKey, sku])
+  @@map("mv_sales_analytics_refund_daily")
+  @@schema("product")
+}
+
+/// Snapshot inbox CS: reso / annullamento / rimborso persistito da import o cron.
+/// La pagina Richieste legge solo da qui; le API marketplace girano in background.
+model AfterSalesRequest {
+  id                 String       @id @default(cuid())
+  /// Chiave stabile canale:tipo:id marketplace (es. AMAZON:cancel:123).
+  externalKey        String       @unique
+  channel            StoreChannel
+  /// return | cancel | refund
+  kind               String
+  /// open | pending | in_progress | closed
+  status             String
+  statusLabel        String       @default("")
+  previousStatus     String?
+  statusChangedAt    DateTime?    @db.Timestamptz(6)
+  orderId            String       @default("")
+  sku                String       @default("")
+  asin               String?
+  listingId          String?
+  title              String       @default("")
+  imageUrl           String       @default("")
+  quantity           Int          @default(0)
+  reason             String?
+  reasonDescription  String?
+  requestedAt        DateTime     @db.Timestamptz(6)
+  dueAt              DateTime?    @db.Timestamptz(6)
+  marketplaceUrl     String?
+  /// Amazon: solo FBM in inbox. Null sugli altri canali.
+  fulfillment        String?
+  shipCountry        String?
+  shipCountryName    String?
+  afterSalesSn       String?
+  parentAfterSalesSn String?
+  firstSeenAt        DateTime     @default(now()) @db.Timestamptz(6)
+  lastSeenAt         DateTime     @db.Timestamptz(6)
+  createdAt          DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @db.Timestamptz(6)
+  statusChanges      AfterSalesRequestStatusChange[]
+
+  @@index([channel, status, requestedAt], map: "AfterSalesRequest_channel_status")
+  @@index([channel, kind, requestedAt], map: "AfterSalesRequest_channel_kind")
+  @@index([orderId], map: "AfterSalesRequest_order")
+  @@index([afterSalesSn], map: "AfterSalesRequest_after_sn")
+  @@schema("product")
+}
+
+/// Storico cambi stato di una richiesta (import/cron o azione seller).
+model AfterSalesRequestStatusChange {
+  id         String            @id @default(cuid())
+  requestId  String
+  request    AfterSalesRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fromStatus String
+  toStatus   String
+  fromLabel  String?
+  toLabel    String?
+  changedAt  DateTime          @default(now()) @db.Timestamptz(6)
+
+  @@index([requestId, changedAt], map: "AfterSalesRequestStatusChange_req")
+  @@schema("product")
+}
+
+/// Job giornaliero import richieste (settings + cron). Un passo = un canale.
+model AfterSalesImportJob {
+  id            String            @id @default(cuid())
+  capturedAt    DateTime          @db.Date
+  /// amazon | ebay | temu | etsy | done
+  phase         String            @default("amazon")
+  status        StoreReportStatus @default(REQUESTED)
+  lastMessage   String?
+  errorMessage  String?
+  /// Errori per-canale dell'ultimo giro (JSON AfterSalesChannelError[]).
+  channelErrors Json?
+  upserted      Int               @default(0)
+  createdCount  Int               @default(0)
+  statusChanges Int               @default(0)
+  importedAt    DateTime?         @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([capturedAt], map: "AfterSalesImportJob_day_key")
+  @@index([status, capturedAt], map: "AfterSalesImportJob_status_idx")
+  @@schema("product")
+}
+
+/// Stato letto di una conversazione Amazon (inbox Gmail gruppo).
+/// Di default è da leggere: la riga nasce solo quando qualcuno segna letto o risponde.
+model AmazonBuyerConversationRead {
+  id                   String    @id @default(cuid())
+  /// Chiave raggruppamento acquirente (`buyer:…` / `name:…` / `thread:…`).
+  conversationId       String
+  isRead               Boolean   @default(true)
+  readAt               DateTime? @db.Timestamptz(6)
+  /// Utente autenticato che ha segnato letto o inviato la risposta.
+  readByUserId         Int?
+  readByName           String?
+  /// Ultimo inbound visto al momento della lettura: un nuovo inbound riapre "da leggere".
+  lastInboundMessageId String?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([conversationId], map: "AmazonBuyerConversationRead_conv")
+  @@index([isRead], map: "AmazonBuyerConversationRead_read")
+  @@schema("product")
+}
+
+/// Gate di quota API condiviso tra processi, cron e bottoni (niente burst).
+/// Una riga = provider × credenziale/store × gruppo operazione.
+model ExternalApiQuotaGate {
+  id             String    @id @default(cuid())
+  /// amazon | ebay | etsy | temu
+  provider       String
+  /// Seller, shop o account (es. sellerId|eu).
+  scope          String
+  /// Gruppo che condivide la stessa quota (es. createReport, sell-rest).
+  operationGroup String
+  /// Prossimo slot concedibile (leaky bucket, 1 token).
+  nextSlotAt     DateTime  @db.Timestamptz(6)
+  /// Cooldown globale dopo 429 / Retry-After.
+  cooldownUntil  DateTime? @db.Timestamptz(6)
+  /// Rate (rps) allineato all'header del provider, se presente.
+  rate           Float     @default(1)
+  lastGrantedAt  DateTime? @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([provider, scope, operationGroup], map: "ExternalApiQuotaGate_key")
+  @@index([nextSlotAt], map: "ExternalApiQuotaGate_slot")
+  @@schema("product")
+}
+
+/// Lease di esecuzione per un passo di import (cron / UI / continue).
+/// Scade da solo: un processo morto non blocca gli altri.
+model ImportExecutionLease {
+  id        String       @id @default(cuid())
+  /// sales | quality | profit | after-sales | kpi | fba-inventory | oauth-refresh
+  pipeline  String
+  channel   StoreChannel
+  storeKey  String       @default("")
+  /// Intervallo o giorno (es. 2026-08-01|2026-08-30).
+  rangeKey  String       @default("")
+  ownerId   String
+  expiresAt DateTime     @db.Timestamptz(6)
+  createdAt DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([pipeline, channel, storeKey, rangeKey], map: "ImportExecutionLease_key")
+  @@index([expiresAt], map: "ImportExecutionLease_expires")
+  @@schema("product")
+}
+
+/// Coda prioritaria del tick vendite (cron 30s): un task per canale/kind/paese.
+model SyncTaskSchedule {
+  id           String       @id @default(uuid())
+  pipeline     String
+  channel      StoreChannel
+  kind         String
+  scopeKey     String       @default("")
+  priority     Int          @default(100)
+  intervalMs   Int
+  nextRunAt    DateTime     @default(now()) @db.Timestamptz(6)
+  runningUntil DateTime?    @db.Timestamptz(6)
+  ownerId      String?
+  lastRunAt    DateTime?    @db.Timestamptz(6)
+  lastOkAt     DateTime?    @db.Timestamptz(6)
+  failures     Int          @default(0)
+  lastMessage  String?
+  enabled      Boolean      @default(true)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([pipeline, channel, kind, scopeKey], map: "SyncTaskSchedule_key")
+  @@index([enabled, nextRunAt, priority], map: "SyncTaskSchedule_due")
+  @@schema("product")
+}

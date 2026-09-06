@@ -15,6 +15,8 @@ model Sku {
   /// Effetto: la generazione automatica di `ProductOrder` deve ignorarlo.
   doNotStock               Boolean            @default(false)
   minStock                 Int                @default(0)
+  /// Stock massimo per SKU. 0 = nessun limite (default).
+  maxStock                 Int                @default(0)
   currentStock             Int                @default(0)
   dimensionsId             String?            @db.Uuid
   dimensions               Dimensions?        @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
@@ -24,8 +26,23 @@ model Sku {
   location                 WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   ean                      String?
   asin                     String?
-  createdAt                DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt                DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
+
+  /// Proprietario etichetta FBA inbound per questo SKU.
+  /// - SELLER (default): il venditore stampa e applica FNSKU. Default conservativo:
+  ///   un nuovo SKU non avrà il listing Amazon ancora configurato in "Manufacturer Barcode",
+  ///   quindi servirà FNSKU finché non viene esplicitamente abilitato.
+  /// - NONE: lo SKU usa il codice a barre del produttore (manufacturer barcode / EAN registrato),
+  ///   nessuna FNSKU richiesta. Da impostare quando il listing è in modalità "Manufacturer Barcode".
+  /// - AMAZON: Amazon applica l'etichetta (servizio a pagamento "FBA Label Service").
+  fbaLabelOwner FbaLabelOwner @default(SELLER)
+  /// Proprietario delle operazioni di prep FBA per questo SKU.
+  /// - SELLER (default): il venditore esegue la prep.
+  /// - NONE: nessuna prep richiesta.
+  /// - AMAZON: prep gestita da Amazon (servizio a pagamento).
+  fbaPrepOwner  FbaPrepOwner  @default(SELLER)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   /// Allocazioni multi-location per questo SKU (quantità per slot).
   warehouseSkuAllocations WarehouseSkuAllocation[]
@@ -36,6 +53,7 @@ model Sku {
   /// Righe ordini Amazon collegate a questo SKU (collegamento opzionale da `AmazonOrderItem.skuId`).
   amazonOrderItems    AmazonOrderItem[]
   shipmentLines       ShipmentLine[]
+  sendcloudOrderLines SendcloudOrderLine[]
   movements           Movement[]
   finishedAllocations FinishedAllocation[]
   OdetteReservation   OdetteReservation[]
@@ -43,6 +61,8 @@ model Sku {
   assemblyOrders      AssemblyOrder[]
   productOrders       ProductOrder[]
   projectFiles        ProjectThreeMFFile[] @relation("ProjectRelatedSku")
+  customerReturnLines CustomerReturnLine[]
+  assemblyBoxes       AssemblyBox[]
 
   productPackages   ProductToPackage[]
   productComponents ProductToComponent[]
@@ -235,38 +255,66 @@ model AmazonIgnoredAsin {
 /// Modello per una spedizione, che può contenere un 'ProductItem' o essere legata a un 'Movement'.
 /// Traccia informazioni come corriere, tracking e stato dell'etichetta.
 model Shipment {
-  id               String              @id @default(uuid()) @db.Uuid
+  id                 String                @id @default(uuid()) @db.Uuid
   /// Progressivo numerico leggibile (BIGINT Postgres) per uso umano/reportistica.
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
-  number           BigInt              @unique @default(autoincrement()) @db.BigInt
-  movementId       String?             @db.Uuid
+  number             BigInt                @unique @default(autoincrement()) @db.BigInt
+  movementId         String?               @db.Uuid
   /// Relazione al movimento.
-  movement         Movement?           @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  productId        String?             @db.Uuid
-  product          Product?            @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  lines            ShipmentLine[]
-  orderedAt        DateTime            @db.Timestamptz(6)
-  shippedAt        DateTime?           @db.Timestamptz(6)
+  movement           Movement?             @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productId          String?               @db.Uuid
+  product            Product?              @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  lines              ShipmentLine[]
+  orderedAt          DateTime              @db.Timestamptz(6)
+  shippedAt          DateTime?             @db.Timestamptz(6)
   /// Timestamp interno: quando l'etichetta è stata stampata dalla nostra app (CUPS).
   /// Serve per distinguere "stampato lato corriere" vs "stampato da noi".
-  printedAt        DateTime?           @db.Timestamptz(6)
-  courier          String?
-  labelUrl         String?
-  isShipped        Boolean             @default(false)
-  orderNumber      String?
-  recipientCountry String?
-  recipientName    String?
-  trackingNumber   String?
-  trackingUrl      String?
-  labelStatus      ShipmentLabelStatus @default(PENDING)
-  shipmentType     ShipmentType        @default(STANDARD)
-  createdAt        DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
-  fullAddress      String?
-  notes            String?
+  printedAt          DateTime?             @db.Timestamptz(6)
+  courier            String?
+  labelUrl           String?
+  isShipped          Boolean               @default(false)
+  /// Identificativo interno dell'ordine sul provider (es. ShippyPro `ordine_id`).
+  /// Usato come chiave di sincronizzazione e mostrato come "Ordine".
+  orderNumber        String?
+  /// Numero d'ordine del marketplace originale (Amazon, Etsy, eBay, Shopify, ...),
+  /// es. ShippyPro `transaction_id`. È l'ID che il cliente vede sul suo account.
+  marketplaceOrderId String?
+  /// Store/marketplace di provenienza della vendita, normalizzato dalla sync/import.
+  salesChannel       ShipmentSalesChannel?
+  recipientCountry   String?
+  /// Nome destinatario cifrato a riposo con AES-256-GCM.
+  recipientName      String?
+  /// Blind index HMAC-SHA256 del nome normalizzato, usato per confronti esatti.
+  recipientNameHash  String?               @db.VarChar(64)
+  trackingNumber     String?
+  trackingUrl        String?
+  /// Totale vendita marketplace (ShippyPro `total_sales`, es. "38.49 EUR").
+  totalSales         Decimal?              @db.Decimal(12, 2)
+  /// Valuta della vendita e dello shipping pagato dal cliente (ISO 4217).
+  salesCurrency      String?               @db.VarChar(3)
+  /// Costo spedizione pagato dal cliente (ShippyPro `shipment_amountpaid`).
+  customerShippingCost Decimal?            @db.Decimal(12, 2)
+  /// Costo spedizione pagato da noi al corriere (ShippyPro `shipment_cost`).
+  shippingCost       Decimal?              @db.Decimal(12, 2)
+  /// Valuta del costo corriere (ShippyPro `shipment_cost_currency`).
+  shippingCostCurrency String?             @db.VarChar(3)
+  labelStatus        ShipmentLabelStatus   @default(PENDING)
+  shipmentType       ShipmentType          @default(STANDARD)
+  createdAt          DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime              @default(now()) @updatedAt @db.Timestamptz(6)
+  /// Indirizzo completo cifrato a riposo con AES-256-GCM.
+  fullAddress        String?
+  /// Note spedizione cifrate a riposo con AES-256-GCM.
+  notes              String?
+
+  customerReturns  CustomerReturn[]
+  sendcloudParcels SendcloudParcel[]
 
   @@index([productId])
   @@index([movementId])
+  @@index([marketplaceOrderId])
+  @@index([salesChannel])
+  @@index([recipientNameHash])
   @@schema("inventory")
 }
 
@@ -283,18 +331,49 @@ model ShipmentLine {
   /// MIGLIORIA: snapshot testuale dello SKU per documenti/archivio
   skuCodeSnapshot String?
 
+  /// DEPRECATO per lotti multipli: mantenuto solo per compatibilità legacy/UI (lotto "principale").
+  /// La tracciabilità ISO reale usa `lotAllocations` (FIFO, uno o più lotti per riga).
   lotId String?       @db.Uuid
   lot   InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   sku      Sku?     @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt           DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                @default(now()) @updatedAt @db.Timestamptz(6)
+  customerReturnLines CustomerReturnLine[]
+  /// Allocazioni FIFO per lotto (tracciabilità ISO): una riga per ogni InventoryLot consumato.
+  lotAllocations      ShipmentLotAllocation[]
 
   @@index([shipmentId])
   @@index([skuId])
   @@index([lotId])
+  @@schema("inventory")
+}
+
+/// Allocazione di quantità di uno specifico `InventoryLot` su una riga di spedizione.
+/// Perché: una `ShipmentLine` può consumare pezzi da più lotti (consumo FIFO). Questa
+/// tabella è la fonte di verità per la tracciabilità "lotto → spedizione → cliente";
+/// `ShipmentLine.lotId` resta solo per compatibilità legacy con l'UI esistente.
+model ShipmentLotAllocation {
+  id             String       @id @default(uuid()) @db.Uuid
+  shipmentLineId String       @db.Uuid
+  shipmentLine   ShipmentLine @relation(fields: [shipmentLineId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  lotId String       @db.Uuid
+  lot   InventoryLot @relation(fields: [lotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantity Int
+
+  /// Movimento VENDITA generato per questa allocazione (audit/tracciabilità).
+  movementId String?   @db.Uuid
+  movement   Movement? @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([shipmentLineId])
+  @@index([lotId])
+  @@index([movementId])
   @@schema("inventory")
 }
 
@@ -341,6 +420,8 @@ enum ShipmentLabelStatus {
   GENERATED
   PRINTED
   CANCELLED
+  /// Stampa inviata a CUPS ma non confermata (`completed`). Si può ristampare.
+  ERROR
 
   @@schema("inventory")
 }
@@ -355,6 +436,36 @@ enum ShipmentType {
   @@schema("inventory")
 }
 
+/// Store di provenienza della vendita associata alla spedizione.
+enum ShipmentSalesChannel {
+  AMAZON
+  TEMU
+  EBAY
+  ETSY
+
+  @@schema("inventory")
+}
+
+/// Proprietario delle etichette FBA inbound per uno SKU.
+/// Riflette i valori accettati da SP-API Fulfillment Inbound v2024-03-20 (`labelOwner`).
+enum FbaLabelOwner {
+  AMAZON
+  SELLER
+  NONE
+
+  @@schema("inventory")
+}
+
+/// Proprietario delle operazioni di prep FBA per uno SKU.
+/// Riflette i valori accettati da SP-API Fulfillment Inbound v2024-03-20 (`prepOwner`).
+enum FbaPrepOwner {
+  AMAZON
+  SELLER
+  NONE
+
+  @@schema("inventory")
+}
+
 /// Perché: uno stesso ProductItem può avere più SKU per mercati diversi.
 enum Marketplace {
   GENERIC
@@ -363,5 +474,101 @@ enum Marketplace {
   EBAY
   ETSY
 
+  @@schema("inventory")
+}
+
+/// Origine del reso (ritorno corriere vs reso cliente vs inserimento manuale).
+enum CustomerReturnOrigin {
+  DELIVERY_FAILURE
+  CUSTOMER_RETURN
+  MANUAL
+
+  @@schema("inventory")
+}
+
+/// Stato workflow reso in magazzino.
+enum CustomerReturnStatus {
+  PENDING_INBOUND
+  RECEIVED
+  IN_INSPECTION
+  COMPLETED
+  SCRAPPED
+  CANCELLED
+
+  @@schema("inventory")
+}
+
+/// Esito ispezione per riga reso.
+enum CustomerReturnLineCondition {
+  TO_INSPECT
+  REUSABLE
+  RECOVERABLE_PARTS
+  SCRAP
+
+  @@schema("inventory")
+}
+
+/// Testata reso cliente / ritorno spedizione (non confondere con keyword SQL `RETURN`).
+model CustomerReturn {
+  id                     String               @id @default(uuid()) @db.Uuid
+  number                 BigInt               @unique @default(autoincrement()) @db.BigInt
+  origin                 CustomerReturnOrigin
+  status                 CustomerReturnStatus @default(PENDING_INBOUND)
+  shipmentId             String?              @db.Uuid
+  shipment               Shipment?            @relation(fields: [shipmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Snapshot ordine / tracking per resi senza shipment collegato o dedup sync provider.
+  orderNumberSnapshot    String?
+  trackingNumberSnapshot String?
+  clientNameSnapshot     String?
+  countrySnapshot        String?
+  labelUrl               String?
+  receivedAt             DateTime?            @db.Timestamptz(6)
+  completedAt            DateTime?            @db.Timestamptz(6)
+  notes                  String?
+  createdByUserId        Int?                 @db.Integer
+  createdByUser          User?                @relation(fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Chiave idempotente sync ShippyPro `GetReturns` (se disponibile).
+  shippyProReturnId      String?              @unique
+  lines                  CustomerReturnLine[]
+  createdAt              DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([shipmentId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@schema("inventory")
+}
+
+/// Riga reso: quantità per SKU/prodotto, eventualmente collegata alla riga spedizione originale.
+model CustomerReturnLine {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  customerReturnId    String                      @db.Uuid
+  customerReturn      CustomerReturn              @relation(fields: [customerReturnId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  skuId               String?                     @db.Uuid
+  sku                 Sku?                        @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productId           String?                     @db.Uuid
+  product             Product?                    @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  shipmentLineId      String?                     @db.Uuid
+  shipmentLine        ShipmentLine?               @relation(fields: [shipmentLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  quantity            Int                         @default(1)
+  lineCondition       CustomerReturnLineCondition @default(TO_INSPECT)
+  notes               String?
+  /// Quando è stato registrato l’ingresso a magazzino (RESO_IN) per prodotto riutilizzabile.
+  inventoryReceivedAt DateTime?                   @db.Timestamptz(6)
+  /// Odette di destinazione pianificata in fase di ricezione (solo REUSABLE).
+  /// Verrà usata dal flusso di Riassemblaggio per registrare il movimento RESO_IN
+  /// nell'odette corretta e creare/aggiornare l'OdetteContent.
+  targetOdetteId      String?                     @db.Uuid
+  targetOdette        Odette?                     @relation("CustomerReturnLineTargetOdette", fields: [targetOdetteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  movements           Movement[]
+  /// Ordini di produzione critici collegati a questa riga (parti mancanti dopo recupero).
+  productionOrders    ProductOrder[]              @relation("CustomerReturnLineProductionOrders")
+  createdAt           DateTime                    @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                    @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([customerReturnId])
+  @@index([skuId])
+  @@index([productId])
+  @@index([targetOdetteId])
   @@schema("inventory")
 }
