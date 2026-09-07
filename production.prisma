@@ -133,6 +133,9 @@ model AssemblyOrder {
 
   startedAt  DateTime?      @db.Timestamptz(6)
   finishedAt DateTime?      @db.Timestamptz(6)
+  /// Data in cui l'assemblaggio dovrebbe essere completato (override manuale).
+  /// Se assente, la UI usa la dueDate più vicina dei Production Order collegati.
+  dueDate    DateTime?      @db.Timestamptz(6)
   priority   Int            @default(0) // 0: Bassa, 1: Media, 2: Alta
   status     AssemblyStatus @default(READY_TO_ASSEMBLE)
   createdAt  DateTime       @default(now()) @db.Timestamptz(6)
