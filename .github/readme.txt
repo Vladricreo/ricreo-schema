@@ -126,10 +126,4 @@ git submodule update --init --recursive
 - **Prima**: commit/push nel submodule (`prisma/schema` → `ricreo-schema`)
 - **Poi**: commit/push nel repo principale (`client`) per aggiornare il puntatore del submodule
 
-## Cartelle in `migrations/`
-
-Prisma considera **ogni sottocartella** di `migrations/` una migration e
-richiede `migration.sql`. Snapshot, note o dump SQL vanno in `docs/`
-(es. `docs/snapshots/`), altrimenti `prisma migrate deploy` fallisce con P3015.
-
 
