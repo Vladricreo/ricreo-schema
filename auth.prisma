@@ -97,6 +97,9 @@ model User {
   /// Gruppi di unione ordini Sendcloud creati da questo utente.
   sendcloudMergeGroups SendcloudMergeGroup[]
 
+  /// Rimborsi packaging secondario registrati da questo utente.
+  shipmentPackagingRefunds ShipmentPackagingRefund[] @relation("ShipmentPackagingRefundCreatedBy")
+
   @@index([isActive]) /// Indice pratico per filtri frequenti
   @@schema("public") ///  la tabella degli utenti
 }

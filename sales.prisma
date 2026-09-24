@@ -309,6 +309,10 @@ model Shipment {
 
   customerReturns  CustomerReturn[]
   sendcloudParcels SendcloudParcel[]
+  /// Movimenti di rimborso/storno packaging secondario generati da questa spedizione.
+  packagingRefundMovements Movement[]                 @relation("PackagingRefundMovement")
+  /// Scelta persistita dei packaging secondari rimessi in inventario.
+  packagingRefund          ShipmentPackagingRefund?
 
   @@index([productId])
   @@index([movementId])
@@ -344,6 +348,8 @@ model ShipmentLine {
   customerReturnLines CustomerReturnLine[]
   /// Allocazioni FIFO per lotto (tracciabilità ISO): una riga per ogni InventoryLot consumato.
   lotAllocations      ShipmentLotAllocation[]
+  /// Quantità nette di packaging secondario rimborsate su questa riga.
+  packagingRefundLines ShipmentPackagingRefundLine[]
 
   @@index([shipmentId])
   @@index([skuId])
@@ -374,6 +380,55 @@ model ShipmentLotAllocation {
   @@index([shipmentLineId])
   @@index([lotId])
   @@index([movementId])
+  @@schema("inventory")
+}
+
+/// Scelta persistita di quali packaging secondari rimettere in inventario.
+/// Una sola testata per spedizione, così il dialog si riapre sullo stesso record.
+model ShipmentPackagingRefund {
+  id         String @id @default(uuid()) @db.Uuid
+  shipmentId String @unique @db.Uuid
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdByUserId Int?  @db.Integer
+  createdByUser   User? @relation("ShipmentPackagingRefundCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  lines ShipmentPackagingRefundLine[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([createdByUserId])
+  @@schema("inventory")
+}
+
+/// Quantità netta rimborsata di un packaging secondario per una riga spedizione.
+/// Lo stock non si aggiorna qui: ogni delta è un INSERT su Movement.
+model ShipmentPackagingRefundLine {
+  id       String                  @id @default(uuid()) @db.Uuid
+  refundId String                  @db.Uuid
+  refund   ShipmentPackagingRefund @relation(fields: [refundId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  shipmentLineId String       @db.Uuid
+  shipmentLine   ShipmentLine @relation(fields: [shipmentLineId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  itemSpecId String   @db.Uuid
+  itemSpec   ItemSpec @relation(fields: [itemSpecId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// SKU preferito della famiglia al momento del rimborso.
+  itemId String @db.Uuid
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// Quantità netta rimborsata (può essere 0).
+  quantity Int
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([refundId, shipmentLineId, itemSpecId])
+  @@index([shipmentLineId])
+  @@index([itemSpecId])
+  @@index([itemId])
   @@schema("inventory")
 }
 

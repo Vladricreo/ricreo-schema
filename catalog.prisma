@@ -101,6 +101,9 @@ model Item {
   /// Varianti usate (_USED) generate a partire da questo ricambio nuovo.
   usedVariants Item[] @relation("ItemUsedVariant")
 
+  /// Righe di rimborso packaging che hanno usato questo SKU.
+  packagingRefundLines ShipmentPackagingRefundLine[]
+
   @@index([type])
   /// Hot path inventario filamenti: MATERIAL con stock > 0.
   @@index([type, inStock])
@@ -165,6 +168,9 @@ model ItemSpec {
   partMaterials     ProductPartMaterial[]
 
   movements Movement[]
+
+  /// Righe di rimborso packaging che rimborsano questa famiglia.
+  packagingRefundLines ShipmentPackagingRefundLine[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

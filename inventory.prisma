@@ -64,6 +64,11 @@ model Movement {
   journalEntryId    String?                @db.Uuid
   journalEntry      AssemblyJournalEntry?  @relation(fields: [journalEntryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Audit spedizione: rimborso o storno del packaging secondario.
+  /// Distinto da `shipments` (movimento di vendita via `Shipment.movementId`).
+  packagingRefundShipmentId String?   @db.Uuid
+  packagingRefundShipment   Shipment? @relation("PackagingRefundMovement", fields: [packagingRefundShipmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   @@index([productPartId])
   @@index([assemblyStageId])
   @@index([productId])
@@ -85,6 +90,7 @@ model Movement {
   @@index([maintenanceLogId])
   @@index([harvestId])
   @@index([journalEntryId])
+  @@index([packagingRefundShipmentId])
   @@schema("inventory")
 }
 
