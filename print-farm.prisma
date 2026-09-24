@@ -1705,6 +1705,8 @@ model GanttPlan {
   etaSnapshots      SchedulerOrderEtaSnapshot[]
   sourceAssignments PrinterAssignment[]         @relation("AssignmentSourceGanttPlan")
   dryingPlans       AssignmentDryingPlan[]      @relation("DryingPlanGanttPlan")
+  /// Metriche di rollout F8 misurate contro questo piano (append-only).
+  rolloutMetrics    SchedulerRolloutMetric[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -1815,6 +1817,72 @@ model SchedulerCalibration {
 
   @@index([printerModelId, materialCategory])
   @@index([fileId])
+  @@schema("print-farm")
+}
+
+/// Metriche per-generazione del rollout Gantt (F8, piano §15): una riga per
+/// ciclo di assegnazioni persistito. Alimenta il gate di promozione
+/// `evaluateGanttRolloutGate` (lib/scheduler/gantt-rollout-gate.ts) e la
+/// route read-only `/api/scheduler/rollout-gate`.
+/// Solo append: nessuna riga viene aggiornata, lo storico resta auditabile.
+model SchedulerRolloutMetric {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Policy sorgente attiva nella generazione (LEGACY_CP_SAT / SHADOW_COMPARE / GANTT_SLICE).
+  sourcePolicy  String
+  /// Correlation id del lock di generazione (audit cross-log).
+  correlationId String?
+
+  /// Piano Gantt di riferimento (attivo al momento della misura), se presente.
+  ganttPlanId String?    @db.Uuid
+  ganttPlan   GanttPlan? @relation(fields: [ganttPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Agreement legacy↔Gantt: stampanti confrontate, accordi e quota (0..1).
+  comparedPrinters Int       @default(0)
+  agreements       Int       @default(0)
+  divergences      Int       @default(0)
+  agreementRatio   Decimal?  @db.Decimal(7, 6)
+
+  /// Contatori apply (contesto operativo: attivita' del ciclo, NON il churn F8).
+  assignmentsCreated   Int      @default(0)
+  assignmentsUpdated   Int      @default(0)
+  assignmentsKept      Int      @default(0)
+  assignmentsCancelled Int      @default(0)
+  /// Plan churn F8 (0..1): churnReplacedPrinters / churnTrackedPrinters.
+  churnRatio           Decimal? @db.Decimal(7, 6)
+
+  /// Stampanti gestite dal ciclo (contesto; NON e' il denominatore del fallback rate).
+  managedPrinters Int @default(0)
+  /// Fallback anomali: stampanti in scope non decise dalla slice (rifiutate in
+  /// rivalidazione live, o tutte le in-scope se il piano era stale/assente).
+  fallbackCount Int @default(0)
+  /// Stampanti solver nello scope della slice (canary, o tutta la flotta senza
+  /// canary): denominatore corretto del fallback rate (R15: non la flotta intera).
+  sliceScopePrinters Int @default(0)
+  /// Rifiuti live della slice (dettaglio in GanttPlan.diagnostics.rollout).
+  rejectedCount Int @default(0)
+  /// Stampanti fuori dal canary shelf group: decise dal legacy per scope, NON anomalie.
+  canaryExcludedCount Int @default(0)
+  /// Motivo di piano stale/assente quando la slice non era utilizzabile.
+  stalePlanReason String?
+
+  /// Plan churn F8 (R15): sostituzioni per stampante vs SCHEDULED primaria
+  /// precedente. Esclude fill da fermo e update a pari job (payload-only).
+  churnReplacedPrinters Int @default(0)
+  /// Denominatore churn: stampanti con una SCHEDULED primaria preesistente.
+  churnTrackedPrinters  Int @default(0)
+
+  /// Durata totale della generazione assegnazioni (ms).
+  generationDurationMs Int?
+  /// Durata del solver Gantt (ms): dalla rigenerazione sincrona se presente,
+  /// altrimenti copiata dal piano attivo. Alimenta il gate "tempi solver".
+  ganttSolverDurationMs Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([sourcePolicy, createdAt])
+  @@index([ganttPlanId])
   @@schema("print-farm")
 }
 
