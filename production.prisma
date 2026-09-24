@@ -27,6 +27,7 @@ model ProductOrder {
   etaBreakdown      Json?            @db.JsonB
   /// Scadenza operativa opzionale. Se assente lo scheduler non inventa SLA:
   /// il canale/SKU non espone ancora una policy affidabile e versionata.
+  /// I completamenti kit la impostano al giorno di calendario successivo alla creazione.
   dueDate           DateTime?        @db.Timestamptz(6)
   /// Provenienza della `dueDate` (motore di copertura / kit / manuale).
   /// NULL finché la data non è valorizzata o arriva da codice precedente a F2/F3.
@@ -39,6 +40,12 @@ model ProductOrder {
   priority          Int              @default(1) /// 1=low, 2=medium, 3=high, 4=critical
   /// Ordine creato manualmente dall'utente: la generazione automatica non modifica priorità né quantità.
   isManual          Boolean          @default(false)
+  /// True se è un ordine di completamento (solo le parti mancanti di un assemblaggio).
+  /// Distinto da `lane`: possono esisterne più di uno sullo stesso AssemblyOrder.
+  isCompletionOrder Boolean          @default(false)
+  /// Quale completamento è, sullo stesso assemblaggio (1, poi 2, …).
+  /// NULL sugli ordini che non sono di completamento.
+  completionIndex   Int?
   productionStatus  ProductionStatus @default(READY_TO_PRODUCE)
   status            OrderStatus      @default(TO_ORDER)
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)
@@ -74,6 +81,8 @@ model ProductOrder {
 
   @@index([skuId])
   @@index([assemblyOrderId])
+  @@index([isCompletionOrder])
+  @@unique([assemblyOrderId, completionIndex])
   @@index([producedByUserId])
   @@index([productionStatus])
   @@index([priority])
