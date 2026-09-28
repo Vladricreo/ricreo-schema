@@ -2207,6 +2207,10 @@ model SpoolSwapDraft {
   aisleCode String
   /// Chiave riga preparazione (slot/runout) per non collidere su dual-nozzle.
   rowKey    String
+  /// Job (PrinterAssignment) per cui la bozza è stata scritta. La rowKey è solo
+  /// stampante+slot: senza questo una scelta operatore sopravviveva ai job
+  /// successivi sullo stesso slot. NULL = bozza precedente alla colonna.
+  assignmentId String? @db.Uuid
 
   /// RUNOUT | SWAP
   trigger String @default("SWAP")
