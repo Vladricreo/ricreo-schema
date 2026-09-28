@@ -1091,7 +1091,11 @@ model PrinterAssignment {
   /// Timestamp "claim" (lock) usato SOLO dallo scheduler backend per evitare doppio start.
   /// Non rappresenta l'inizio stampa: serve solo come mutex soft recuperabile (stale) in caso di crash.
   claimedAt              DateTime?  @db.Timestamptz(6)
-  startedAt              DateTime?  @db.Timestamptz(6) // Inizio stampa effettivo
+  /// Prenotazione UI: finché è nel futuro il dialog "Avvia stampe" ha l'assignment
+  /// aperta e lo scheduler non può riassegnarla né cancellarla (come un QueueTask in-flight).
+  /// Rinnovata con heartbeat dal dialog; scade da sola se il browser sparisce.
+  reservedUntil          DateTime?  @db.Timestamptz(6)
+  startedAt             DateTime?  @db.Timestamptz(6) // Inizio stampa effettivo
   completedAt            DateTime?  @db.Timestamptz(6) // Fine stampa
   /// Snapshot immutabile del piano quando il task Gantt viene collegato.
   plannedStart           DateTime?  @db.Timestamptz(6)
