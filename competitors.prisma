@@ -221,6 +221,8 @@ model CompetitorProduct {
   @@index([sku])
   @@index([ean])
   @@index([matchId])
+  /// Ricerca «Collega listing»: ILIKE sul titolo senza scansione del catalogo.
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "CompetitorProduct_title_trgm_idx")
   @@schema("product")
 }
 
