@@ -32,6 +32,9 @@ enum SettingsName {
   AMAZON_ORDER_FIXED_COST
   AMAZON_STORAGE_FEE_LOW
   AMAZON_STORAGE_FEE_HIGH
+  /// Tetto del lotto FBA come multiplo dell'EOQ (default applicativo: 1.5).
+  /// Lotto = min(velocity × AMAZON_OPTIMAL_STOCK_DAYS, EOQ × fattore).
+  AMAZON_EOQ_MAX_FACTOR
   /// Credenziali SP-API/LWA (cifrate a DB) usate per import Amazon (solo admin).
   AMAZON_SP_API_CREDENTIALS
   /// Token API ZonWizard (cifrato a DB) usato per sincronizzare costi prodotti (solo admin).

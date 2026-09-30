@@ -727,6 +727,8 @@ view VFbaInventory {
   stockDays         Int       @map("stock_days")
   restockTime       Int       @map("restock_time")
   optimalLotSize    Int       @map("optimal_lot_size")
+  /// true se il lotto è limitato da EOQ × fattore invece che dai giorni di stock ottimale
+  lotCappedByCost   Boolean   @map("lot_capped_by_cost")
   restockAction     String    @map("restock_action")
   salesData         Json      @map("sales_data")
   listingStatus     String    @map("listing_status")
