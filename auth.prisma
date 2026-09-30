@@ -19,6 +19,8 @@ model User {
   email                     String              @unique
   username                  String              @unique
   password                  String
+  /// Id dell'utente Supabase Auth (`auth.users.id`) collegato a questa riga.
+  authUserId                String?             @unique @db.Uuid
   name                      String?
   isActive                  Boolean             @default(true)
   /// Ordine di intervento nella distribuzione automatica degli ordini di assemblaggio.
