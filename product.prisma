@@ -296,6 +296,10 @@ model StoreOrderLine {
   vatExclusiveShippingPrice Decimal? @db.Decimal(12, 2)
   itemStatus  String?
   currency    String?
+  /// Stato grezzo dell'ordine sul marketplace (Etsy: receipt.status, es. Canceled,
+  /// Fully Refunded, Completed). `itemStatus` è la nostra classificazione P&L;
+  /// questo serve ai corrispettivi, che seguono il marketplace. Null se non noto.
+  channelStatus String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -418,6 +422,9 @@ model StoreReturnLine {
   /// Testo libero descrittivo (FBA: customer-comments).
   reasonDescription  String?
   status             String?
+  /// Importo rimborsato al cliente su questa riga (valuta dell'ordine, lordo).
+  /// Etsy: quota del rimborso del receipt; la data è `returnDate`. Null se ignoto.
+  refundAmount       Decimal? @db.Decimal(12, 2)
   /// Amazon: FBA o FBM. Null sugli altri canali.
   amazonFulfillment  String?
 
@@ -426,6 +433,31 @@ model StoreReturnLine {
 
   @@index([sku, returnDate])
   @@index([storeKey, returnDate])
+  @@schema("product")
+}
+
+/// Rimborso marketplace a livello ordine, così come lo manda il canale (Etsy: receipt.refunds).
+/// Uno per rimborso, con importo e momento esatti: base dei corrispettivi.
+/// Indipendente dalla classificazione P&L (StoreReturnLine / itemStatus): un annullo
+/// prima della spedizione resta qui anche se l'ordine è Cancelled senza reso.
+model StoreOrderRefund {
+  id        String       @id @default(cuid())
+  channel   StoreChannel
+  storeKey  String
+  /// Chiave idempotente (Etsy: ETSY:<receipt>:<created_timestamp>:<cent>).
+  refundKey String       @unique
+  orderId   String
+  amount    Decimal      @db.Decimal(12, 2)
+  currency  String?
+  refundedAt DateTime    @db.Timestamptz(6)
+  reason    String?
+  status    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([channel, refundedAt])
+  @@index([channel, orderId])
   @@schema("product")
 }
 
@@ -1377,6 +1409,26 @@ model ExchangeRate {
 
   @@unique([currency], map: "ExchangeRate_currency")
   @@index([rateDate], map: "ExchangeRate_rateDate")
+  @@schema("product")
+}
+
+/// Storico giornaliero dei tassi verso EUR: ogni ordine si converte al cambio
+/// del suo giorno (come ZonWizard), non a quello dell'ultimo refresh.
+model ExchangeRateDaily {
+  /// Valuta quotata (ISO 4217), es. GBP, PLN, SEK.
+  currency String
+  /// Base sempre EUR.
+  base String @default("EUR")
+  /// Giorno della rilevazione Frankfurter.
+  rateDate DateTime @db.Date
+  /// Quante unità di `currency` equivalgono a 1 EUR.
+  rate Decimal @db.Decimal(18, 8)
+  /// Origine del dato (es. frankfurter).
+  source String @default("frankfurter")
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@id([currency, rateDate], map: "ExchangeRateDaily_pkey")
   @@schema("product")
 }
 
