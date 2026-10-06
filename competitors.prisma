@@ -120,6 +120,11 @@ model CompetitorChannel {
   lastFetchError String?
   /// Stato del sync catalogo (snapshot Bright Data, fase, ASIN in coda).
   lastSyncMeta   Json?
+  /// Ultimo passaggio della cron import inserzioni (ordine del ciclo: più vecchio prima).
+  cronCheckedAt  DateTime?    @db.Timestamptz(6)
+  /// Conferma utente all'import automatico oltre la soglia (dalla pagina notifiche).
+  largeImportApprovedAt       DateTime? @db.Timestamptz(6)
+  largeImportApprovedByUserId Int?
   createdAt      DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
 
