@@ -138,6 +138,13 @@ model ProjectFileMaterial {
   materialSpecId String?   @db.Uuid
   materialSpec   ItemSpec? @relation("FileMaterialSpec", fields: [materialSpecId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Brand obbligatorio per QUESTO file (decisione 2026-10-07, punto 1): con `true`
+  /// l'Item `materialId` è un vincolo duro — niente sostituzione con la variante
+  /// del gruppo di coerenza né con altre varianti della spec. Senza scorta di
+  /// quell'Item il file non parte (lo scheduler può usare un altro file del pezzo,
+  /// es. P1S con un brand e X2D con un altro). `false` = matching spec-first.
+  brandLocked Boolean @default(false)
+
   usedWeight Decimal @db.Decimal(12, 2) // Grammi usati nel file (per quel filamento)
   colorUsed  String? // Colore usato (tipicamente il colore del filamento nel file)
 
@@ -957,6 +964,7 @@ enum SettingsType {
   PRINTER
   TOTAL_AVAILABLE_POWER
   COST_PER_KWH
+  /// Deprecato dal 2026-10-07: la riga Settings 'work_hours' resta a DB ma non è più letta (presidio = operator-presence.ts). NON rimuovere finché la riga esiste.
   WORKHOURS
   WORKDAYS
   USER
@@ -2211,6 +2219,12 @@ model SpoolSwapDraft {
   /// stampante+slot: senza questo una scelta operatore sopravviveva ai job
   /// successivi sullo stesso slot. NULL = bozza precedente alla colonna.
   assignmentId String? @db.Uuid
+  /// ProductionJob dell'assignment quando la bozza è stata scritta. Lo
+  /// scheduler riusa la stessa riga PrinterAssignment cambiandone il job
+  /// (generate-assignments, gantt-slice-apply): se il job attuale è diverso la
+  /// bozza appartiene al job precedente. NULL = ignoto (bozza precedente alla
+  /// colonna o assignment senza job): vale solo il confronto su assignmentId.
+  productionJobId String? @db.Uuid
 
   /// RUNOUT | SWAP
   trigger String @default("SWAP")

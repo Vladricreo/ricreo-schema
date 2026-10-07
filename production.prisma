@@ -46,6 +46,15 @@ model ProductOrder {
   /// Quale completamento è, sullo stesso assemblaggio (1, poi 2, …).
   /// NULL sugli ordini che non sono di completamento.
   completionIndex   Int?
+  /// Ordine PRODUCED "storico": pezzi già consumati da mesi, fuori dal ciclo
+  /// prodotto → assemblaggio. Neutro ovunque: niente completamento set né AO
+  /// (`/api/assembly-orders/generate`, collegamento manuale), niente
+  /// disponibilità/allocazione (`complete-set-availability`), niente
+  /// pipeline né blocco della generazione automatica.
+  /// Oggi lo imposta solo la bonifica degli 83 PRODUCED annullati dalla
+  /// vecchia auto-pulizia "fantasma" di generate (aprile-luglio 2026,
+  /// script INV `bonifica-2026-10-produced-legacy-cleanup.ts`).
+  excludeFromSetCompletion Boolean @default(false)
   productionStatus  ProductionStatus @default(READY_TO_PRODUCE)
   status            OrderStatus      @default(TO_ORDER)
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)

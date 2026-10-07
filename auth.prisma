@@ -27,6 +27,15 @@ model User {
   /// Valore minore = riempito prima (es. operatore dedicato = 0, backup = 1).
   /// Se NULL, viene derivato dai ruoli RBAC (Assemblatore senza GestoreStampanti = dedicato).
   assemblyInterventionOrder Int?                @db.SmallInt
+  /// Capacità operativa per persona "può scaricare le stampanti" (harvest, carico e
+  /// cambio bobina). Il calendario di presidio della print farm è fatto SOLO dai
+  /// turni (WorkShift − WorkAbsence − CompanyHoliday) e dalle presenze extra degli
+  /// utenti attivi con questo flag: gate avvii non presidiati, coda operatore,
+  /// finestre setup Gantt, asciugatura, kiosk e grafici di scarico
+  /// (`lib/scheduler/operator-presence.ts` del Print Farm). Non è un permesso RBAC:
+  /// i ruoli decidono cosa si può fare nell'app, questo flag chi copre il reparto.
+  /// Backfill (20261007120000): utenti con ruolo "Operatore stampanti" o "GestoreStampanti".
+  canUnloadPrinters         Boolean             @default(false)
   createdAt                 DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt                 DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
   posts                     Post[]

@@ -58,7 +58,11 @@ model PrinterMaintenanceLog {
   pdfUrl            String?
 
   /// --- PIANIFICAZIONE / ISO ---
-  /// Data/ora prevista per l'esecuzione (presente per log generati da pianificazione o programmati ad-hoc).
+  /// Inizio della FINESTRA ORARIA prevista (istante concreto, ora di Roma
+  /// collocata nel turno di presidio) per log generati da pianificazione o
+  /// programmati ad-hoc. Durata = `plan.estimatedDurationMin` (fallback
+  /// `MAINTENANCE_DEFAULT_WINDOW_MINUTES`). Una finestra PENDING passata non
+  /// blocca più gli scheduler: è "scaduta" (diagnostica + notifica).
   /// NULL per interventi straordinari avviati al momento.
   scheduledFor DateTime? @db.Timestamptz(6)
 
@@ -116,8 +120,14 @@ model PrinterMaintenancePlan {
   /// All'esecuzione viene clonata sul log e popolata con lo stato `done`.
   checklistTemplate Json?
 
-  /// Stima durata intervento (minuti) - per capacity planning e UI.
+  /// Durata della finestra di manutenzione (minuti): indisponibilità hard della
+  /// stampante per entrambi gli scheduler, capacity planning e UI.
   estimatedDurationMin Int?
+
+  /// Ora preferita di inizio finestra: minuti dalla mezzanotte di Roma (0-1439).
+  /// NULL = inizio del primo turno di presidio del giorno di scadenza (o del
+  /// primo giorno lavorativo dopo), dal calendario WorkShift di chi può scaricare.
+  windowStartMinute Int?
 
   /// Ricambi tipicamente usati (suggerimento operatore). Formato: [{ itemId, quantity }].
   suggestedParts Json?
@@ -127,13 +137,17 @@ model PrinterMaintenancePlan {
   /// Numero di unità tra un'occorrenza e la successiva (giorni / settimane / mesi / anni).
   /// Esempio: recurrenceMode=MONTHLY, intervalValue=1 → ogni mese.
   intervalValue  Int?
-  /// Tolleranza in giorni prima di considerare la pianificazione "in ritardo" (highlight rosso UI).
+  /// Tolleranza in giorni dopo la fine della finestra: SOLO evidenziazione UI
+  /// (ambra entro la tolleranza, rosso oltre). Non è un input degli scheduler.
   graceDays      Int?                      @default(7)
-  /// Data di riferimento (es. installazione macchina) per calcolare la prossima scadenza.
+  /// Giorno della prima scadenza (giorno civile di Roma; l'orario è ignorato).
   anchorDate     DateTime?                 @db.Timestamptz(6)
 
-  /// Prossima scadenza prevista. Aggiornata automaticamente al completamento dell'occorrenza.
-  /// Per piani NONE (una tantum) coincide con la data di esecuzione singola.
+  /// Inizio della PROSSIMA FINESTRA ORARIA (istante concreto): giorno di
+  /// scadenza (prima volta `anchorDate`, poi ultimo completamento + intervallo)
+  /// collocato all'ora preferita o all'inizio del primo turno di presidio.
+  /// Aggiornato al completamento/annullamento dell'occorrenza
+  /// (`lib/maintenance/window-placement.ts`). NULL per piani una tantum eseguiti.
   nextDueAt       DateTime? @db.Timestamptz(6)
   /// Ultimo trigger eseguito (=performedAt dell'ultimo log COMPLETED collegato).
   lastTriggeredAt DateTime? @db.Timestamptz(6)
