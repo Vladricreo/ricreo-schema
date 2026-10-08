@@ -90,6 +90,16 @@ model FilamentProfile {
   // Traccia/asciuga in AMS HT, ma carico e stampa usano la spool esterna del nozzle del file (come TPU, senza forzare sinistra).
   trackOnAmsHtPrintFromExternal Boolean              @default(false)
 
+  // Montaggio in AMS (decisione utente 2026-10-08, vincolo hard). Vale per
+  // AMS e AMS-HT; la spool esterna resta sempre ammessa.
+  // - amsIncompatible: la bobina non entra o non gira nell'AMS (troppo
+  //   pesante, bordo/rocchetto non compatibile): mai in AMS.
+  // - amsMaxFillPercent: in AMS solo se il residuo è al massimo questa
+  //   percentuale del peso iniziale (es. 80 per Smart Print abs+: piena non
+  //   ruota). Null = nessun limite. Una busta sigillata conta come 100%.
+  amsIncompatible   Boolean @default(false)
+  amsMaxFillPercent Int?
+
   // Riscaldamento mantenuto durante la stampa (non e' un ciclo di asciugatura):
   // il backend lo avvia allo start sull'unita' che alimenta la stampa.
   keepAmsHeatedDuringPrint Boolean @default(false)
