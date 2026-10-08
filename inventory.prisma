@@ -221,6 +221,13 @@ model WarehouseShelf {
   /// Codice corridoio per scaffali senza fila (se in fila, prevale `group.aisleCode`).
   aisleCode String?
 
+  /// Misure utili standard dei ripiani in mm (di base i ripiani di uno scaffale sono uguali).
+  /// Larghezza = lato su cui si affiancano le sezioni; profondità = dal fronte al fondo;
+  /// altezza = spazio libero fino al ripiano sopra. Override per ripiano su `WarehouseRow`.
+  tierWidthMm  Int?
+  tierDepthMm  Int?
+  tierHeightMm Int?
+
   /// Ripiani/righe fisiche appartenenti allo scaffale.
   rows WarehouseRow[]
 
@@ -258,6 +265,12 @@ model WarehouseRow {
   /// Filtro opzionale per tipo ITEM: sottocategoria.
   categoryId String?   @db.Uuid
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Misure utili del ripiano in mm, solo se diverse da quelle standard dello scaffale
+  /// (`WarehouseShelf.tier*Mm`). Null = usa lo standard.
+  widthMm  Int?
+  depthMm  Int?
+  heightMm Int?
 
   /// Tutte le posizioni (slot) appartenenti a questa fila.
   locations WarehouseLocation[]
@@ -312,6 +325,17 @@ model WarehouseLocation {
   /// Tipo di posizione (slot generico, testa odette, scaffale materiali, area assemblaggio, ...).
   kind WarehouseLocationKind @default(SLOT)
 
+  /// Larghezza del ripiano occupata da questa sezione (mm). Con profondità e altezza del ripiano
+  /// e le misure del pacco dà la capienza calcolata.
+  widthMm        Int?
+  /// Capienza inserita a mano (pezzi). Se presente prevale sul calcolo da misure.
+  manualCapacity Int?
+  /// Prodotto a cui la sezione è dedicata, anche quando è vuota.
+  /// Il selettore posizione dell'assemblaggio propone questa sezione per lo SKU
+  /// e non la offre ad altri SKU.
+  dedicatedSkuId String? @db.Uuid
+  dedicatedSku   Sku?    @relation("LocationDedicatedSku", fields: [dedicatedSkuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   printers Printer[]
 
   /// Tipo di articolo associato a questa posizione.
@@ -346,6 +370,7 @@ model WarehouseLocation {
   @@index([rowId, positionInRow])
   @@index([kind])
   @@index([associatedItemType])
+  @@index([dedicatedSkuId])
   @@schema("inventory")
 }
 
