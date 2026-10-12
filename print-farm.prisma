@@ -447,10 +447,12 @@ model Printer {
   lastPrintAt          DateTime? @db.Timestamptz(6)
 
   /// --- HEALTH / TELEMETRIA ---
-  /// Ultimo aggiornamento ricevuto dalla stampante via WebSocket.
+  /// DEPRECATI dal 12/10: non più scritti. L'heartbeat sta in `PrinterHeartbeat`
+  /// (tabella fuori dalla pubblicazione Realtime). Da eliminare in una migrazione successiva.
   lastWssAt  DateTime? @db.Timestamptz(6)
-  /// Ultimo aggiornamento ricevuto via MQTT (errori/eventi).
+  /// DEPRECATO dal 12/10: vedi `PrinterHeartbeat.lastMqttAt`.
   lastMqttAt DateTime? @db.Timestamptz(6)
+  heartbeat  PrinterHeartbeat?
 
   /// --- OVERRIDE MANUALE (OPERATORE) ---
   /// Override esplicito impostato dall'operatore (es. MAINTENANCE/DISABLED).
@@ -609,6 +611,22 @@ model PrinterNozzle {
 
   @@unique([printerId, extruderId])
   @@index([printerId])
+  @@schema("print-farm")
+}
+
+/// Heartbeat della telemetria (ultimo messaggio MQTT/WSS), scritto dal backend
+/// al massimo ogni 15 s per stampante.
+/// Sta fuori da `Printer` perché `Printer` è nella pubblicazione Realtime:
+/// ogni heartbeat diventava un evento per tutte le schede aperte (S-119, 12/10).
+/// Non aggiungere questa tabella alla pubblicazione `supabase_realtime`.
+model PrinterHeartbeat {
+  printerId  String    @id @db.Uuid
+  printer    Printer   @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// Ultimo messaggio MQTT (Bambu).
+  lastMqttAt DateTime? @db.Timestamptz(6)
+  /// Ultimo messaggio WebSocket (Klipper).
+  lastWssAt  DateTime? @db.Timestamptz(6)
+
   @@schema("print-farm")
 }
 
