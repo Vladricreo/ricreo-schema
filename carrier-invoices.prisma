@@ -1,0 +1,115 @@
+/// Corriere di una fattura importata (UPS da CSV, FedEx da PDF).
+enum CarrierCode {
+  UPS
+  FEDEX
+
+  @@schema("product")
+}
+
+/// Tipo documento corriere: fattura o nota di credito.
+enum CarrierInvoiceKind {
+  INVOICE
+  CREDIT_NOTE
+
+  @@schema("product")
+}
+
+/// Tipo normalizzato di un addebito corriere, indipendente dai codici UPS.
+enum CarrierChargeType {
+  /// Nolo base del servizio (FRT su spedizione).
+  FREIGHT
+  /// Supplemento carburante (FSC).
+  FUEL
+  /// Supplementi accessori: residenziale, surge, fuori misura, ecc.
+  SURCHARGE
+  /// Rettifiche successive: peso/dimensioni ricalcolati, indirizzo corretto.
+  ADJUSTMENT
+  /// Rientro al mittente / pacco non consegnato.
+  RETURN
+  /// Ritiri a domicilio e servizi non legati a un pacco.
+  PICKUP
+  /// Accredito da nota di credito.
+  CREDIT
+  /// IVA: esclusa dal costo (recuperabile).
+  TAX
+  /// Righe informative a importo zero (misure rilevate).
+  INFO
+  OTHER
+
+  @@schema("product")
+}
+
+/// Testata di una fattura o nota di credito corriere importata da CSV.
+/// Reimportare lo stesso numero documento sostituisce le righe.
+model CarrierInvoice {
+  id               String             @id @default(uuid()) @db.Uuid
+  carrier          CarrierCode        @default(UPS)
+  kind             CarrierInvoiceKind @default(INVOICE)
+  invoiceNumber    String
+  accountNumber    String?
+  invoiceDate      DateTime           @db.Date
+  dueDate          DateTime?          @db.Date
+  currency         String             @default("EUR") @db.VarChar(3)
+  /// Totale documento come riportato dal corriere (IVA inclusa, negativo sulle note di credito).
+  totalAmount      Decimal            @db.Decimal(12, 2)
+  /// Somma degli addebiti al netto IVA (negativa sulle note di credito).
+  netAmount        Decimal            @db.Decimal(12, 2)
+  taxAmount        Decimal            @db.Decimal(12, 2)
+  fileName         String?
+  /// Utente `public.users` che ha caricato il file (senza FK: schema condiviso).
+  uploadedByUserId Int?
+
+  charges CarrierInvoiceCharge[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([carrier, invoiceNumber])
+  @@index([invoiceDate])
+  @@schema("product")
+}
+
+/// Singolo addebito di una fattura corriere (una riga CSV).
+/// Collegato agli ordini via tracking (inventory.Shipment / SendcloudParcel) o riferimento spedizione.
+model CarrierInvoiceCharge {
+  id        String         @id @default(uuid()) @db.Uuid
+  invoiceId String         @db.Uuid
+  invoice   CarrierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  lineNo    Int
+
+  trackingNumber     String?
+  /// Tracking del pacco originale (sui resi è quello di andata).
+  leadTrackingNumber String?
+  /// Riferimento spedizione 1: numero ordine della piattaforma di spedizione (es. ShippyPro).
+  reference          String?
+  transactionDate    DateTime?         @db.Date
+  type               CarrierChargeType
+  /// Codici originali del corriere, utili per audit e raggruppamenti.
+  categoryCode       String?
+  categoryDetailCode String?
+  classCode          String?
+  chargeCode         String?
+  description        String?
+  /// Importo netto IVA esclusa (negativo per accrediti).
+  netAmount          Decimal           @db.Decimal(12, 2)
+  /// Sconto contrattuale applicato dal corriere su questa riga.
+  incentiveAmount    Decimal           @default(0) @db.Decimal(12, 2)
+  enteredWeightKg    Decimal?          @db.Decimal(8, 2)
+  billedWeightKg     Decimal?          @db.Decimal(8, 2)
+  zone               String?
+  packageDimensions  String?
+  receiverCountry    String?           @db.VarChar(2)
+  receiverPostalCode String?
+  receiverCity       String?
+  /// Motivo reso / mancata consegna riportato dal corriere.
+  note               String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([invoiceId])
+  @@index([trackingNumber])
+  @@index([leadTrackingNumber])
+  @@index([reference])
+  @@index([transactionDate])
+  @@schema("product")
+}
