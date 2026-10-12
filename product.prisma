@@ -981,6 +981,19 @@ model SalesAnalyticsRefresh {
   @@schema("product")
 }
 
+/// Singleton: ultimo refresh delle matview della Panoramica (cron ogni 6 ore
+/// o bottone Aggiorna), per l'etichetta «Aggiornato N minuti fa».
+model OverviewRefresh {
+  id          Int      @id @default(1)
+  refreshedAt DateTime @db.Timestamptz(6)
+  rowCount    Int      @default(0)
+  durationMs  Int      @default(0)
+  /// `cron` o `ui`: distingue il giro schedulato dal bottone Aggiorna.
+  source      String   @default("cron")
+
+  @@schema("product")
+}
+
 /// Job Reports SP-API: watermark e deduplica di createReport (non idempotente).
 model StoreReportJob {
   id               String            @id @default(cuid())
