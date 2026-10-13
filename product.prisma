@@ -650,6 +650,59 @@ model StoreListingInactivityPeriod {
   @@schema("product")
 }
 
+/// Avvisi Amazon correnti (issues ERROR / WARNING) per SKU × paese.
+/// Sostituiti a ogni import listing: le righe riflettono l'ultima osservazione.
+model StoreListingIssue {
+  id          String       @id @default(cuid())
+  channel     StoreChannel
+  storeKey    String
+  countryCode String
+  sku         String
+  asin        String?
+  /// Codice issue Amazon (es. `90220`).
+  code        String
+  /// ERROR | WARNING
+  severity    String
+  message     String
+  /// Categorie Amazon (MISSING_ATTRIBUTE, QUALIFICATION_REQUIRED, …).
+  categories         String[] @default([])
+  /// Azioni di enforcement (LISTING_SUPPRESSED, ATTRIBUTE_SUPPRESSED, …).
+  enforcementActions String[] @default([])
+  /// Attributi coinvolti (es. `compliance_media`).
+  attributeNames     String[] @default([])
+  /// Prima osservazione dell'issue (SKU × store × codice), conservata tra le
+  /// sostituzioni. NULL = già presente prima del tracciamento: mai notificata.
+  firstSeenAt DateTime?    @db.Timestamptz(6)
+  observedAt  DateTime     @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([channel, storeKey, sku], map: "StoreListingIssue_store_sku")
+  @@index([countryCode, observedAt], map: "StoreListingIssue_country_observed")
+  @@index([firstSeenAt], map: "StoreListingIssue_first_seen")
+  @@schema("product")
+}
+
+/// Stato account Amazon per marketplace (GET_V2_SELLER_PERFORMANCE_REPORT).
+/// Una riga per marketplace con l'ultima lettura, sovrascritta a ogni import.
+model AmazonAccountHealth {
+  marketplaceId String   @id
+  countryCode   String
+  /// NORMAL | AT_RISK | DEACTIVATED
+  accountStatus String?
+  /// Account Health Rating (0–1000).
+  ahrScore      Float?
+  ahrStatus     String?
+  /// Violazioni e metriche normalizzate (src/lib/amazon-account-health/parse.ts).
+  snapshot      Json
+  /// Voce `performanceMetrics` grezza, per i campi non ancora mappati.
+  raw           Json
+  reportId      String?
+  fetchedAt     DateTime @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  @@schema("product")
+}
+
 /// Job resumable per l'import giornaliero qualità (bottone UI o cron).
 model StoreQualityDailyJob {
   id                 String            @id @default(cuid())

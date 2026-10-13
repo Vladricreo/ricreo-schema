@@ -140,3 +140,76 @@ model CrossplatformSyncJob {
   @@index([status, updatedAt], map: "CrossplatformSyncJob_status")
   @@schema("product")
 }
+
+/// Stato di una bozza listing creata da zero nel wizard multi-store.
+enum CrossplatformListingDraftStatus {
+  /// In compilazione: nessuno store ancora pubblicato.
+  DRAFT
+  /// Almeno uno store pubblicato, altri ancora da fare o falliti.
+  PARTIAL
+  /// Tutti gli store scelti pubblicati.
+  PUBLISHED
+  ARCHIVED
+
+  @@schema("product")
+}
+
+/// Listing creato da zero (anche senza Amazon): bozza resumable con i dati di ogni store.
+/// `data` contiene prodotto base, foto, attributi Amazon e bozze eBay/Etsy/Temu.
+model CrossplatformListingDraft {
+  id            String                          @id @default(cuid())
+  sku           String                          @default("")
+  title         String                          @default("")
+  status        CrossplatformListingDraftStatus @default(DRAFT)
+  /// Store scelti per la pubblicazione.
+  channels      StoreChannel[]
+  /// Ultimo passo aperto nel wizard (product, amazon, ebay, etsy, temu, review).
+  currentStep   String                          @default("product")
+  data          Json                            @default("{}")
+  /// Object path della foto principale nel bucket inventory (anteprima lista).
+  coverPath     String?
+  createdById   Int?
+  createdByName String?
+  publishedAt   DateTime?                       @db.Timestamptz(6)
+  createdAt     DateTime                        @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime                        @updatedAt @db.Timestamptz(6)
+
+  publications CrossplatformListingDraftPublication[]
+
+  @@index([status, updatedAt], map: "CrossplatformListingDraft_status")
+  @@index([sku], map: "CrossplatformListingDraft_sku")
+  @@schema("product")
+}
+
+/// Esito della pubblicazione di una bozza su uno store, con il controllo a 24 ore.
+model CrossplatformListingDraftPublication {
+  id            String       @id @default(cuid())
+  draftId       String
+  channel       StoreChannel
+  /// Amazon: marketplaceId. eBay: EBAY_IT. Etsy: shopId. Temu: TEMU_EU.
+  storeKey      String       @default("")
+  /// SUBMITTED | FAILED
+  status        String
+  /// ASIN non noto subito: per Amazon resta lo SKU, per gli altri l'ID inserzione.
+  externalId    String?
+  submissionId  String?
+  error         String?
+  /// Avvisi restituiti dallo store in pubblicazione o al controllo.
+  issues        Json?
+  submittedAt   DateTime     @db.Timestamptz(6)
+  /// Prossimo controllo automatico (24 h dopo l'invio, poi ogni 24 h se ancora in revisione).
+  checkDueAt    DateTime?    @db.Timestamptz(6)
+  checkAttempts Int          @default(0)
+  /// PENDING | LIVE | ISSUES | MISSING | ERROR
+  checkStatus   String?
+  checkMessage  String?
+  checkedAt     DateTime?    @db.Timestamptz(6)
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+
+  draft CrossplatformListingDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, channel], map: "CrossplatformListingDraftPublication_draft_channel")
+  @@index([checkDueAt], map: "CrossplatformListingDraftPublication_check_due")
+  @@schema("product")
+}
