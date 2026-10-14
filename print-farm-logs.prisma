@@ -82,6 +82,17 @@ model PrinterMaintenanceLog {
   verifiedBy String? // User ID o nome
   verifiedAt DateTime? @db.Timestamptz(6)
 
+  /// Categoria del problema (guasto/motivo) scelta all'avvio o corretta in chiusura.
+  /// È la chiave di statistiche e dashboard; `reason` resta come descrizione
+  /// facoltativa (obbligatoria solo con la categoria «Altro»).
+  issueCategoryId     String?              @db.Uuid
+  issueCategory       MaintenanceCategory? @relation("MaintenanceLogIssueCategory", fields: [issueCategoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Chi ha assegnato la categoria: OPERATOR (dialog), AUTO (parole chiave, es. voce),
+  /// BACKFILL (bonifica dello storico), PLAN (occorrenza di un piano).
+  issueCategorySource String?
+  /// Interventi eseguiti (scelti in chiusura, anche più di uno).
+  resolutions         PrinterMaintenanceLogResolution[]
+
   chatMessages MaintenanceChatMessage[]
   /// Movimenti inventario (es. USO ricambi) collegati a questo log.
   movements    Movement[]
@@ -92,6 +103,7 @@ model PrinterMaintenanceLog {
   @@index([printerId, scheduledFor])
   @@index([status, scheduledFor])
   @@index([planId])
+  @@index([issueCategoryId])
   @@schema("print-farm")
 }
 
@@ -169,6 +181,72 @@ model PrinterMaintenancePlan {
 
   @@index([printerId, active])
   @@index([nextDueAt])
+  @@schema("print-farm")
+}
+
+/// Categorie gestite da Impostazioni → Manutenzione: problemi (ISSUE, scelti
+/// all'avvio) e interventi (RESOLUTION, scelti alla chiusura).
+model MaintenanceCategory {
+  id          String                  @id @default(uuid()) @db.Uuid
+  kind        MaintenanceCategoryKind
+  /// Slug stabile: non cambia quando si rinomina l'etichetta.
+  code        String
+  label       String
+  description String?
+  /// Macro area per raggruppare nel selettore e in dashboard (es. Filamento, Hotend, AMS).
+  group       String?
+  /// Chiave colore della palette UI (amber, red, blue, ...).
+  color       String?
+  /// Chiave icona della palette UI (vedi `lib/maintenance/categories.ts`).
+  icon        String?
+  /// Parole o frasi che riconoscono la categoria in un testo libero (minuscole,
+  /// senza accenti): suggerimento nel dialog, voce, backfill dello storico.
+  keywords    String[]                @default([])
+  /// Categoria «Altro»: con questa la descrizione è obbligatoria.
+  isOther     Boolean                 @default(false)
+  sortOrder   Int                     @default(0)
+  active      Boolean                 @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  issueLogs            PrinterMaintenanceLog[]           @relation("MaintenanceLogIssueCategory")
+  resolutionLogs       PrinterMaintenanceLogResolution[]
+  /// Solo ISSUE: interventi suggeriti a mano (oltre a quelli ricavati dallo storico).
+  suggestedResolutions MaintenanceCategorySuggestion[]   @relation("SuggestionIssue")
+  /// Solo RESOLUTION: problemi per cui l'intervento è suggerito.
+  suggestedForIssues   MaintenanceCategorySuggestion[]   @relation("SuggestionResolution")
+
+  @@unique([kind, code])
+  @@index([kind, active, sortOrder])
+  @@schema("print-farm")
+}
+
+/// Interventi suggeriti per una categoria di problema (curati in Impostazioni).
+model MaintenanceCategorySuggestion {
+  issueCategoryId      String              @db.Uuid
+  issueCategory        MaintenanceCategory @relation("SuggestionIssue", fields: [issueCategoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  resolutionCategoryId String              @db.Uuid
+  resolutionCategory   MaintenanceCategory @relation("SuggestionResolution", fields: [resolutionCategoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sortOrder            Int                 @default(0)
+
+  @@id([issueCategoryId, resolutionCategoryId])
+  @@index([resolutionCategoryId])
+  @@schema("print-farm")
+}
+
+/// Intervento eseguito in una manutenzione (una riga per intervento).
+model PrinterMaintenanceLogResolution {
+  maintenanceLogId String                @db.Uuid
+  maintenanceLog   PrinterMaintenanceLog @relation(fields: [maintenanceLogId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  categoryId       String                @db.Uuid
+  category         MaintenanceCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// OPERATOR, AUTO, BACKFILL, BACKFILL_INFERRED (dedotto dal problema, senza testo).
+  source           String                @default("OPERATOR")
+  createdAt        DateTime              @default(now()) @db.Timestamptz(6)
+
+  @@id([maintenanceLogId, categoryId])
+  @@index([categoryId])
   @@schema("print-farm")
 }
 
@@ -335,6 +413,16 @@ enum MaintenanceSessionStatus {
   PAUSED
   COMPLETED
   CANCELLED
+
+  @@schema("print-farm")
+}
+
+/// Tipo di categoria di manutenzione.
+enum MaintenanceCategoryKind {
+  /// Problema o motivo (scelto all'avvio).
+  ISSUE
+  /// Intervento eseguito (scelto alla chiusura).
+  RESOLUTION
 
   @@schema("print-farm")
 }
