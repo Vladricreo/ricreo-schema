@@ -900,6 +900,8 @@ enum PrinterMacroCategory {
 model ErrorCode {
   id            Int            @id @default(autoincrement())
   code          String         @unique
+  /// Titolo breve leggibile (es. «Motore asse Z bloccato»), mostrato prima della descrizione.
+  title         String?
   description   String?
   printerModels PrinterModel[] @relation("PrinterModelErrorCode")
   solutions     String[]
