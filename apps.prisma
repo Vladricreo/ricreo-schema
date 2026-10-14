@@ -27,8 +27,8 @@ model RicreoApp {
 /// Regola: il selettore mostra l'app corrente più le app attive con una riga
 /// qui per l'utente collegato. Un utente senza righe vede solo l'app corrente.
 /// Non è un controllo di accesso all'app: login e permessi restano quelli di
-/// ciascuna app. Gestione in Inventory → Impostazioni → Generali → "App Ricreo"
-/// (solo ruolo Admin).
+/// ciascuna app. Gestione in Inventory → Utenti → scheda "Accessi app"
+/// (solo ruolo Admin). Link e loghi delle app: Impostazioni → Generali → "App Ricreo".
 model RicreoAppAccess {
   userId Int
   appId  String @db.Uuid
