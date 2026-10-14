@@ -1,0 +1,22 @@
+/// App Ricreo mostrate nel selettore app della sidebar.
+/// Tabella condivisa: ogni app (Inventory, Print Farm, Finance, Product Console,
+/// Preventivatore) può leggerla per costruire lo stesso selettore.
+model RicreoApp {
+  id        String  @id @default(uuid()) @db.Uuid
+  /// Identificativo stabile usato dal codice (es. "inventory", "print-farm").
+  slug      String  @unique
+  name      String
+  /// URL di apertura dell'app (origin o pagina iniziale).
+  url       String
+  /// Logo: URL assoluto o percorso pubblico dell'app che lo mostra (es. "/RI.svg").
+  logoUrl   String?
+  /// Ordine nel selettore (crescente).
+  sortOrder Int     @default(0)
+  /// Se false l'app non compare nel selettore.
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@schema("public")
+}
