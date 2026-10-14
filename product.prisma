@@ -1114,6 +1114,48 @@ model StoreFinanceCursor {
   @@schema("product")
 }
 
+enum StoreFinanceEventKind {
+  /// AdjustmentEventList: rimborsi e rettifiche (WAREHOUSE_LOST, REVERSAL_REIMBURSEMENT, …).
+  ADJUSTMENT
+  /// ProductAdsPaymentEventList: pubblicità addebitata sul saldo.
+  ADS
+
+  @@schema("product")
+}
+
+/// Eventi Finances non legati a un ordine: rimborsi/rettifiche e pubblicità.
+/// Importi con segno Amazon (+ accredito al seller, − addebito), in valuta
+/// del marketplace: in EUR con product.eur_factor(currency, "postedDate"::date).
+model StoreFinanceEvent {
+  id      String                @id @default(cuid())
+  channel StoreChannel
+  /// Marketplace dell'endpoint regionale da cui arriva l'evento.
+  storeKey String
+  kind     StoreFinanceEventKind
+  /// AdjustmentType (ADJUSTMENT) o transactionType (ADS).
+  type       String
+  postedDate DateTime @db.Timestamptz(6)
+  sku        String?
+  quantity   Int?
+  /// Totale con segno: TotalAmount o PerUnitAmount × quantity (ADJUSTMENT), transactionValue (ADS).
+  amount   Decimal @db.Decimal(14, 4)
+  /// IVA inclusa in amount (ADS: taxValue). 0 per gli adjustment.
+  tax      Decimal @default(0) @db.Decimal(14, 4)
+  currency String
+  /// invoiceId (ADS) o TransactionNumber dell'item (ADJUSTMENT), se presenti.
+  reference String?
+  /// Chiave stabile dell'evento: la sync rilegge gli stessi periodi senza doppioni.
+  idempotencyKey String @unique
+  /// Evento (o item) Amazon originale.
+  rawJson Json
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([channel, kind, postedDate], map: "StoreFinanceEvent_kind_posted_idx")
+  @@schema("product")
+}
+
 /// Credenziali OAuth Gmail (Workspace) per leggere/rispondere ai messaggi Amazon inoltrati.
 /// mailboxEmail è il gruppo/alias Amazon; OAuth avviene con un utente membro (GMAIL_OAUTH_EMAIL).
 model GmailOAuthCredential {
