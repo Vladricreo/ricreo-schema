@@ -78,6 +78,8 @@ model User {
   printFarmNotificationRecipients  PrintFarmNotificationRecipient[]
   /// Preferenze notifiche Print Farm per questo utente.
   printFarmNotificationPreferences PrintFarmNotificationPreference[]
+  /// Dispositivi (PWA) sottoscritti alle notifiche push Print Farm.
+  printFarmPushSubscriptions       PrintFarmPushSubscription[]
 
   /// Notifiche Product Console create da questo utente (audit/actor).
   consoleNotificationsCreated ConsoleNotification[] @relation("ConsoleNotificationCreatedBy")
