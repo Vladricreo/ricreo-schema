@@ -122,15 +122,47 @@ model PrintFarmNotificationPreference {
   /// Es: se minSeverity=WARNING, le notifiche INFO e SUCCESS non vengono mostrate.
   minSeverity PrintFarmNotificationSeverity @default(INFO)
 
-  /// Canali di consegna (per estensioni future).
+  /// Canali di consegna. `push` = notifica push sui dispositivi sottoscritti
+  /// (`PrintFarmPushSubscription`); `inApp` ed `email` non sono ancora usati.
   inApp Boolean @default(true)
   email Boolean @default(false)
-  push  Boolean @default(false)
+  push  Boolean @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@unique([userId, type])
+  @@index([userId])
+  @@schema("print-farm")
+}
+
+/// Sottoscrizione Web Push di un dispositivo (PWA installata) per un utente.
+/// Un utente può avere più dispositivi; l'`endpoint` identifica il dispositivo/browser.
+/// Ricevono push solo le notifiche Print Farm (`PrintFarmNotification`), filtrate
+/// dalle preferenze dell'utente (`enabled`, `push`, `minSeverity` per tipo).
+/// Le notifiche delle altre app (Inventory, Finance, Product Console) non passano di qui.
+model PrintFarmPushSubscription {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// URL del push service del browser (univoco per dispositivo/browser).
+  endpoint String @unique
+  /// Chiavi della sottoscrizione (base64url), servono a cifrare il payload.
+  p256dh   String
+  auth     String
+
+  /// User agent del dispositivo al momento della sottoscrizione (diagnostica).
+  userAgent String?
+
+  /// Ultimo invio riuscito e invii falliti consecutivi (diagnostica).
+  lastSuccessAt DateTime? @db.Timestamptz(6)
+  failureCount  Int       @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
   @@index([userId])
   @@schema("print-farm")
 }

@@ -82,6 +82,8 @@ model User {
   printFarmNotificationRecipients  PrintFarmNotificationRecipient[]
   /// Preferenze notifiche Print Farm per questo utente.
   printFarmNotificationPreferences PrintFarmNotificationPreference[]
+  /// Dispositivi (PWA) sottoscritti alle notifiche push Print Farm.
+  printFarmPushSubscriptions       PrintFarmPushSubscription[]
 
   /// Notifiche Product Console create da questo utente (audit/actor).
   consoleNotificationsCreated ConsoleNotification[] @relation("ConsoleNotificationCreatedBy")
@@ -89,6 +91,8 @@ model User {
   consoleNotificationRecipients ConsoleNotificationRecipient[]
   /// Preferenze inbox Product Console per questo utente.
   consoleNotificationPreferences ConsoleNotificationPreference[]
+  /// Dispositivi registrati per le push di Product Console.
+  consolePushSubscriptions ConsolePushSubscription[]
 
   /// Override di spec approvati da questo utente (audit).
   approvedItemSpecOverrides ItemSpecOverride[] @relation("ApprovedItemSpecOverrides")
