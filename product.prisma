@@ -1811,6 +1811,8 @@ view VOverviewCountryDaily {
 /// arbitrari con un GROUP BY sku, fulfillment. Nessuna finestra temporale, il filtro "tutto"
 /// deve restare esatto. Le voci di costo sono già reali o provvisorie secondo
 /// StoreOrderFee.realCosts; referralEur include la DSF, digitalEur è dettaglio.
+/// Dal 16/10/2026 è una vista (il nome mv_ è rimasto): somme da SalesAnalyticsDaily,
+/// anagrafica, immagine, costo unitario e COGS da mv_overview_sku_meta al momento.
 view VSalesAnalyticsDaily {
   day                    DateTime @db.Date
   channel                String
@@ -1843,6 +1845,54 @@ view VSalesAnalyticsDaily {
 
   @@unique([day, channel, storeKey, salesChannel, sku, fulfillment, shipCountry])
   @@map("mv_sales_analytics_daily")
+  @@schema("product")
+}
+
+/// Somme vendite per giorno dietro VSalesAnalyticsDaily. La scrive solo la
+/// funzione SQL product.sync_sales_analytics_daily(): a ogni giro ricalcola i
+/// giorni con ordini, fee, spedizioni o cambi modificati, di notte tutto.
+/// Non scrivere da Prisma; leggere da VSalesAnalyticsDaily.
+model SalesAnalyticsDaily {
+  day                    DateTime @db.Date
+  channel                String
+  storeKey               String   @map("store_key")
+  salesChannel           String   @map("sales_channel")
+  sku                    String
+  fulfillment            String
+  shipCountry            String   @map("ship_country")
+  /// Dalla riga ordine: la vista preferisce l'anagrafica di mv_overview_sku_meta.
+  asin                   String?
+  productName            String?  @map("product_name")
+  units                  Int
+  grossEur               Decimal  @map("gross_eur") @db.Decimal(16, 4)
+  vatEur                 Decimal  @map("vat_eur") @db.Decimal(16, 4)
+  customerShippingEur    Decimal  @map("customer_shipping_eur") @db.Decimal(16, 4)
+  customerShippingTaxEur Decimal  @map("customer_shipping_tax_eur") @db.Decimal(16, 4)
+  referralEur            Decimal  @map("referral_eur") @db.Decimal(16, 4)
+  digitalEur             Decimal  @map("digital_eur") @db.Decimal(16, 4)
+  fbaFeeEur              Decimal  @map("fba_fee_eur") @db.Decimal(16, 4)
+  chargebackEur          Decimal  @map("chargeback_eur") @db.Decimal(16, 4)
+  otherFeeEur            Decimal  @map("other_fee_eur") @db.Decimal(16, 4)
+  refundCommissionEur    Decimal  @map("refund_commission_eur") @db.Decimal(16, 4)
+  fbmShippingEur         Decimal  @map("fbm_shipping_eur") @db.Decimal(16, 4)
+  hasFeeEstimate         Boolean  @map("has_fee_estimate")
+  realCostUnits          Int      @map("real_cost_units")
+  provisionalCostUnits   Int      @map("provisional_cost_units")
+
+  @@id([day, channel, storeKey, salesChannel, sku, fulfillment, shipCountry])
+  @@index([sku, day])
+  @@map("sales_analytics_daily")
+  @@schema("product")
+}
+
+/// Singleton di product.sync_sales_analytics_daily(): inizio dell'ultimo giro
+/// riuscito (watermark sugli updatedAt) e dell'ultima ricostruzione completa.
+model SalesAnalyticsDailySync {
+  id       Int       @id @default(1)
+  syncedAt DateTime? @map("synced_at") @db.Timestamptz(6)
+  fullAt   DateTime? @map("full_at") @db.Timestamptz(6)
+
+  @@map("sales_analytics_daily_sync")
   @@schema("product")
 }
 
