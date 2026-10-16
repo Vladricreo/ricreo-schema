@@ -202,11 +202,39 @@ model ConsoleNotificationPreference {
   minSeverity ConsoleNotificationSeverity @default(INFO)
   inApp     Boolean @default(true)
   email     Boolean @default(false)
+  /// Notifica push (PWA) sui dispositivi registrati dall'utente.
+  push      Boolean @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@unique([userId, topic])
+  @@index([userId])
+  @@schema("product")
+}
+
+/// Dispositivo registrato per le notifiche push (Web Push / PWA) di Product Console.
+/// Una riga per endpoint: lo stesso utente può avere telefono, tablet e desktop.
+model ConsolePushSubscription {
+  id String @id @default(cuid())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// URL del push service del browser (univoco per dispositivo/browser).
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  userAgent String?
+
+  /// Ultimo invio riuscito e invii falliti consecutivi.
+  lastSuccessAt DateTime? @db.Timestamptz(6)
+  failureCount  Int       @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
   @@index([userId])
   @@schema("product")
 }
