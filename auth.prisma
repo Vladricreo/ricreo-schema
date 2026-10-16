@@ -71,6 +71,10 @@ model User {
   notificationsCreated   Notification[]          @relation("NotificationCreatedBy")
   /// Stato notifiche ricevute da questo utente.
   notificationRecipients NotificationRecipient[]
+  /// Preferenze per categoria delle notifiche di sistema (`public."Notification"`).
+  notificationPreferences NotificationPreference[]
+  /// Dispositivi registrati per le notifiche push (Web Push), per app.
+  pushSubscriptions       PushSubscription[]
 
   /// Notifiche Print Farm create da questo utente (audit/actor).
   printFarmNotificationsCreated    PrintFarmNotification[]           @relation("PrintFarmNotificationCreatedBy")

@@ -113,3 +113,55 @@ model NotificationRecipient {
   @@index([notificationId])
   @@schema("public")
 }
+
+/// Preferenze per categoria (`type`) delle notifiche di sistema, per utente.
+/// Nessuna riga = tutto attivo (campanella e push).
+/// Le notifiche ERROR o CRITICAL arrivano sempre in campanella anche con `inApp=false`:
+/// sono gli allarmi ops (coverage-watch, ordini incagliati, FBA da reclamare…) e non si spengono.
+model NotificationPreference {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  type NotificationType
+
+  /// Se false, le notifiche di questa categoria non arrivano in campanella (salvo ERROR/CRITICAL).
+  inApp Boolean @default(true)
+  /// Se false, niente push sul telefono/PC per questa categoria.
+  push  Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@schema("public")
+}
+
+/// Dispositivo registrato per le notifiche push (Web Push / VAPID).
+/// Ogni app ha la sua origine e il suo service worker, quindi la subscription è per app (`appSlug`
+/// = `RicreoApp.slug`, es. "inventory"): ogni app manda solo dalle proprie.
+/// Se sullo stesso browser entra un altro utente, l'endpoint passa a lui (endpoint unico).
+model PushSubscription {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  appSlug   String
+  endpoint  String  @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+
+  lastSuccessAt DateTime? @db.Timestamptz(6)
+  /// Invii falliti di fila (non 404/410, che cancellano subito la riga).
+  failureCount  Int       @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([userId, appSlug])
+  @@schema("public")
+}
