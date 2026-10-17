@@ -100,6 +100,8 @@ model Competitor {
   products             CompetitorProduct[]
   storeResearches      CompetitorStoreResearch[]
   consoleNotifications ConsoleNotification[]
+  duplicateDismissalsA CompetitorDuplicateDismissal[] @relation("DuplicateDismissalA")
+  duplicateDismissalsB CompetitorDuplicateDismissal[] @relation("DuplicateDismissalB")
 
   @@index([status])
   @@index([name])
@@ -132,7 +134,24 @@ model CompetitorChannel {
   products   CompetitorProduct[]
 
   @@unique([competitorId, channel, storeId])
-  @@index([channel, storeId])
+  /// Uno store appartiene a un solo venditore: niente doppioni fra anagrafiche.
+  @@unique([channel, storeId])
+  @@schema("product")
+}
+
+/// Coppia di anagrafiche con nome simile segnata "non sono lo stesso venditore".
+/// La coppia è salvata ordinata (competitorAId < competitorBId).
+model CompetitorDuplicateDismissal {
+  id            String   @id @default(cuid())
+  competitorAId String
+  competitorBId String
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  competitorA Competitor @relation("DuplicateDismissalA", fields: [competitorAId], references: [id], onDelete: Cascade)
+  competitorB Competitor @relation("DuplicateDismissalB", fields: [competitorBId], references: [id], onDelete: Cascade)
+
+  @@unique([competitorAId, competitorBId])
+  @@index([competitorBId])
   @@schema("product")
 }
 
