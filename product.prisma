@@ -713,6 +713,9 @@ model StoreQualityDailyJob {
   nextAmazonPage     Int               @default(1)
   /// Offset nella coda SKU extra (inventory / vendite / snapshot precedenti).
   nextExtraOffset    Int               @default(0)
+  /// Token Amazon della prossima pagina listing: il giro dopo riprende da qui
+  /// invece di risfogliare da pagina 1 (la cache cursori è solo in memoria).
+  nextPageToken      String?
   processedListings  Int               @default(0)
   processedReviews   Int               @default(0)
   totalListings      Int               @default(0)
