@@ -2092,3 +2092,36 @@ model SyncTaskSchedule {
   @@index([enabled, nextRunAt, priority], map: "SyncTaskSchedule_due")
   @@schema("product")
 }
+
+/// Risposta pronta della messaggistica (Amazon, eBay, Help): testo italiano con variabili
+/// `{{numero_ordine}}`, `{{tracking}}`… sostituite al momento dell'inserimento nel composer.
+model MessagingReplyTemplate {
+  id            String                              @id @default(cuid())
+  title         String
+  bodyIt        String
+  /// Cresce a ogni modifica del testo italiano: le traduzioni ferme a una versione
+  /// precedente sono da ritradurre.
+  version       Int                                 @default(1)
+  updatedByName String?
+  createdAt     DateTime                            @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime                            @updatedAt @db.Timestamptz(6)
+  translations  MessagingReplyTemplateTranslation[]
+
+  @@schema("product")
+}
+
+/// Traduzione di una risposta pronta in una lingua scelta (codice target DeepL: DE, FR, EN-GB…).
+model MessagingReplyTemplateTranslation {
+  id            String                 @id @default(cuid())
+  templateId    String
+  template      MessagingReplyTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  lang          String
+  body          String
+  /// Versione del testo italiano su cui è allineata (`< template.version` = da ritradurre).
+  sourceVersion Int
+  createdAt     DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime               @updatedAt @db.Timestamptz(6)
+
+  @@unique([templateId, lang], map: "MessagingReplyTemplateTranslation_lang")
+  @@schema("product")
+}
