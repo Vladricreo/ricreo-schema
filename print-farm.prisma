@@ -1918,6 +1918,26 @@ model SchedulerRolloutMetric {
   @@schema("print-farm")
 }
 
+/// Fotografia di capacità di un giro di `generate-assignments` (23/10): per ogni
+/// stampante lo stato e, se ferma, il motivo (file, materiale, set, …); per ogni
+/// job il lavoro residuo e le varianti per modello. Alimenta la sezione
+/// «Capacità e colli di bottiglia» della dashboard. Solo diagnostica: nessuna
+/// decisione dello scheduler la legge. `detail` si azzera dopo 48 ore, le righe
+/// si cancellano dopo 60 giorni (`lib/scheduler/capacity-insight-persistence.ts`).
+model SchedulerCapacitySnapshot {
+  id      String @id @default(uuid()) @db.Uuid
+  version Int    @default(1)
+  /// Conteggi per pool (modello + ugello): stampanti per stato e ferme per motivo, minuti di lavoro in coda.
+  summary Json   @db.JsonB
+  /// Stampanti e job del giro (vedi `CapacitySnapshotDetail`); null dopo 48 ore.
+  detail  Json?  @db.JsonB
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@schema("print-farm")
+}
+
 /// Snapshot prospettico dell'ETA ordine prodotto da un piano Gantt valido.
 /// Consente di misurare T-24h/T-72h solo da quando gli snapshot esistono.
 model SchedulerOrderEtaSnapshot {
