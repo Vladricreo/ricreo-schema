@@ -1326,6 +1326,9 @@ model ChannelSaleFeeSetting {
   etsyFixedEur Decimal  @default(0.30) @db.Decimal(8, 2)
   temuPercent  Decimal  @default(15) @db.Decimal(5, 2)
   temuFixedEur Decimal  @default(0) @db.Decimal(8, 2)
+  /// Shopify Payments EU piano Basic; le fee reali dell'ordine hanno la precedenza.
+  shopifyPercent  Decimal @default(1.9) @db.Decimal(5, 2)
+  shopifyFixedEur Decimal @default(0.25) @db.Decimal(8, 2)
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
