@@ -92,12 +92,13 @@ model EbayAccountDeletion {
   @@schema("product")
 }
 
-/// Canale store su cui vive uno SKU (stesso SKU su Amazon, Etsy, eBay, Temu).
+/// Canale store su cui vive uno SKU (stesso SKU su Amazon, Etsy, eBay, Temu, Shopify).
 enum StoreChannel {
   AMAZON
   ETSY
   EBAY
   TEMU
+  SHOPIFY
 
   @@schema("product")
 }

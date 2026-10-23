@@ -499,6 +499,7 @@ enum ShipmentSalesChannel {
   TEMU
   EBAY
   ETSY
+  SHOPIFY
 
   @@schema("inventory")
 }
