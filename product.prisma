@@ -2019,6 +2019,11 @@ model AmazonBuyerConversationRead {
   readByName           String?
   /// Ultimo inbound visto al momento della lettura: un nuovo inbound riapre "da leggere".
   lastInboundMessageId String?
+  /// Caso chiuso a mano su Seller Central: Amazon non lo espone via API.
+  amazonClosedAt       DateTime? @db.Timestamptz(6)
+  amazonClosedByName   String?
+  /// Ultimo inbound al momento della chiusura: un nuovo messaggio riapre il caso.
+  amazonClosedInboundMessageId String?
   createdAt            DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
 
