@@ -2125,3 +2125,23 @@ model MessagingReplyTemplateTranslation {
   @@unique([templateId, lang], map: "MessagingReplyTemplateTranslation_lang")
   @@schema("product")
 }
+
+/// Risposta inviata dalla console (Amazon email / eBay): chi l'ha mandata, per l'avatar in chat.
+/// Le risposte scritte fuori dalla console (Seller Central, sito eBay) non hanno riga.
+model MessagingSentReply {
+  id              String   @id @default(cuid())
+  /// amazon-email | amazon-order | ebay
+  channel         String
+  /// Conversazione (`buyer:…` Amazon, conversationId eBay).
+  conversationKey String
+  /// Id del messaggio restituito dal provider (Gmail message id, eBay messageId).
+  messageId       String?
+  userId          Int?
+  userName        String?
+  /// Inizio del testo inviato: abbina il messaggio se il provider cambia l'id.
+  textPreview     String
+  sentAt          DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([channel, conversationKey], map: "MessagingSentReply_conversation")
+  @@schema("product")
+}
