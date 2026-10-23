@@ -115,6 +115,13 @@ model CrossplatformPublishDefaults {
   etsyShippingProfileId BigInt?
   etsyReadinessStateId  BigInt?
 
+  /// Shopify: marca e tipo precompilati, stato iniziale (ACTIVE | DRAFT), pubblicazione sull'Online Store.
+  shopifyVendor             String   @default("")
+  shopifyProductType        String   @default("")
+  shopifyStatus             String   @default("ACTIVE")
+  shopifyPublishOnlineStore Boolean  @default(true)
+  shopifyTags               String[] @default([])
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
