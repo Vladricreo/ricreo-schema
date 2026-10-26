@@ -360,6 +360,8 @@ model PrintRun {
   @@index([spoolId])
   @@index([status])
   @@index([startedAt])
+  /// Serie di fallimenti stampante × job: legge le ultime 2 run concluse invece di tutte quelle della stampante.
+  @@index([printerId, productionJobId, finishedAt(sort: Desc)])
   @@schema("print-farm")
 }
 
@@ -524,6 +526,8 @@ model Printer {
 
   /// Storico raccolte pezzi da questa stampante
   harvests      PrinterHarvest[]
+  /// Scarichi annullati su questa stampante
+  harvestReverts PrinterHarvestRevert[]
   /// Storico carichi filamento su questa stampante
   filamentLoads PrinterFilamentLoad[]
   /// Sessioni cronometrate di cambio/ricarica filamento su questa stampante
@@ -1138,6 +1142,8 @@ model PrinterAssignment {
 
   /// Operazioni di raccolta pezzi associate a questa assegnazione
   harvests PrinterHarvest[]
+  /// Scarichi annullati di questa assegnazione
+  harvestReverts PrinterHarvestRevert[]
   /// Bozza scarico corrente (una per assignment attivo).
   harvestDraft HarvestDraft?
 
@@ -1491,16 +1497,66 @@ model PrinterHarvest {
   productionLotId String?        @db.Uuid
   productionLot   ProductionLot? @relation(fields: [productionLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Chiave del tablet per invio e ritentativi (doc `docs/harvest-rpc-progetto.md` §8).
+  /// Unica: il DB rifiuta un secondo scarico con la stessa chiave. Le righe storiche la
+  /// tengono anche nelle note JSON (`lib/harvest/idempotency.ts`), da cui è stata riempita.
+  idempotencyKey String? @unique
+
+  /// Effetti dello scarico oltre ai contatori (ristampe, SCHEDULED cancellati, quantità
+  /// alzate per scarti a fine job, spostamento odetta, grammi per bobina, lotto creato).
+  /// Lo legge l'annullamento per togliere esattamente quello che lo scarico ha fatto (§9).
+  effects Json?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
-  @@index([assignmentId])
+  /// Copre anche le ricerche per solo `assignmentId`; ordinato per «scarico più recente».
+  @@index([assignmentId, harvestedAt(sort: Desc)])
   @@index([printerId])
   @@index([printRunId])
   @@index([odetteId])
   @@index([harvestedByUserId])
   @@index([harvestedAt])
   @@index([productionLotId])
+  @@schema("print-farm")
+}
+
+/// Annullamento di uno scarico (Cronologia → Annulla, o voce «ripristina scarico»).
+/// Lo scarico viene cancellato: qui resta chi l'ha annullato, quando e una copia della riga,
+/// con l'elenco di ciò che l'annullamento ha rimesso a posto (doc `harvest-rpc-progetto.md` §11, D-11).
+model PrinterHarvestRevert {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Id dello scarico annullato (la riga non esiste più: nessuna FK).
+  harvestId String @db.Uuid
+
+  assignmentId String?            @db.Uuid
+  assignment   PrinterAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  revertedByUserId Int
+  revertedByUser   User     @relation("PrinterHarvestReverts", fields: [revertedByUserId], references: [id], onDelete: Restrict)
+  revertedAt       DateTime @default(now()) @db.Timestamptz(6)
+  /// HISTORY (Cronologia) o VOICE.
+  source           String   @default("HISTORY")
+
+  /// Dati dello scarico annullato, ripetuti per le ricerche senza aprire il JSON.
+  harvestedAt       DateTime @db.Timestamptz(6)
+  harvestedByUserId Int
+  partsAccepted     Int
+  partsRejected     Int
+
+  /// Copia completa della riga `PrinterHarvest` al momento dell'annullamento.
+  harvestSnapshot Json
+  /// Cosa l'annullamento ha rimesso a posto (contatori, ristampe, quantità, odetta, grammi).
+  undone          Json?
+
+  @@index([printerId, revertedAt(sort: Desc)])
+  @@index([harvestId])
+  @@index([assignmentId])
+  @@index([revertedByUserId])
   @@schema("print-farm")
 }
 

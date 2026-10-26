@@ -62,6 +62,8 @@ model User {
 
   /// Operazioni di raccolta pezzi effettuate da questo utente
   printerHarvests      PrinterHarvest[]      @relation("PrinterHarvests")
+  /// Scarichi annullati da questo utente
+  printerHarvestReverts PrinterHarvestRevert[] @relation("PrinterHarvestReverts")
   /// Operazioni di carico filamento effettuate da questo utente
   printerFilamentLoads PrinterFilamentLoad[] @relation("PrinterFilamentLoads")
   /// Sessioni cronometrate di cambio/ricarica filamento eseguite da questo utente
