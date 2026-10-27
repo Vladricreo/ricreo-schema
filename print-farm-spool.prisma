@@ -513,7 +513,7 @@ enum DryingPlanRecordStatus {
   @@schema("print-farm")
 }
 
-/// Piano asciugatura dello scheduler (R-109, 27/10): un record per ciclo
+/// Piano asciugatura dello scheduler (R-118, 27/10): un record per ciclo
 /// previsto (stampante + materiale), aggiornato a ogni piano Gantt e
 /// collegato a quello che succede davvero (ciclo, stampa). Serve a vedere
 /// cosa è previsto, cosa è in ritardo e cosa è stato fatto, e quando.
