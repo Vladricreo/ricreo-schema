@@ -65,6 +65,10 @@ model Sku {
   projectFiles        ProjectThreeMFFile[] @relation("ProjectRelatedSku")
   customerReturnLines CustomerReturnLine[]
   assemblyBoxes       AssemblyBox[]
+  /// Righe di rimozioni Amazon riconosciute su questo SKU.
+  amazonRemovalLines   AmazonRemovalLine[]
+  /// Prelievi di questo SKU dalle odette OMA.
+  odetteSkuWithdrawals OdetteSkuWithdrawal[]
 
   productPackages   ProductToPackage[]
   productComponents ProductToComponent[]

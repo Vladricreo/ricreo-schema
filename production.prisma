@@ -440,6 +440,9 @@ model Odette {
   /// Righe reso che hanno pianificato questa odette come destinazione (REUSABLE).
   customerReturnLineTargets CustomerReturnLine[] @relation("CustomerReturnLineTargetOdette")
 
+  /// Prelievi di SKU da questa odette (OMA, tab Rimozioni Amazon).
+  skuWithdrawals OdetteSkuWithdrawal[]
+
   @@index([status])
   @@index([lockedStage])
   @@index([locationId])
@@ -495,6 +498,10 @@ model OdetteContent {
 
   inventoryLotId String?       @db.Uuid
   inventoryLot   InventoryLot? @relation(fields: [inventoryLotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Ultima volta che qualcuno ha contato o messo i pezzi (righe SKU nelle OMA).
+  /// NULL su una riga SKU = contenuto vecchio, da verificare a mano.
+  checkedAt DateTime? @db.Timestamptz(6)
 
   createdAt         DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime            @default(now()) @updatedAt @db.Timestamptz(6)

@@ -1,0 +1,138 @@
+/// Tipo di ordine di rimozione Amazon (colonna `order-type` del report rimozioni).
+/// Solo RETURN torna fisicamente a magazzino; DISPOSAL e LIQUIDATION restano ad Amazon.
+enum AmazonRemovalOrderType {
+  RETURN
+  DISPOSAL
+  LIQUIDATION
+  OTHER
+
+  @@schema("inventory")
+}
+
+/// Stato locale della rimozione: quanto è già arrivato rispetto a quanto Amazon ha spedito.
+enum AmazonRemovalStatus {
+  /// Richiesta o spedita da Amazon, nulla ancora ricevuto.
+  IN_TRANSIT
+  /// Ricevuta in parte.
+  PARTIALLY_RECEIVED
+  /// Ricevuto tutto lo spedito (o chiusa a mano).
+  RECEIVED
+  /// Annullata su Amazon senza nulla spedito.
+  CANCELLED
+
+  @@schema("inventory")
+}
+
+/// Motivo per cui uno SKU esce da un'odetta OMA (prelievo a mano dal tab Rimozioni Amazon).
+enum OdetteSkuWithdrawalReason {
+  /// Messo in una spedizione FBA: lo stock lo scala la spedizione.
+  FBA_SHIPMENT
+  /// Venduto/spedito FBM: lo stock lo scala la spedizione.
+  FBM_SALE
+  /// Messo sullo scaffale dello SKU: lo stock non cambia, sale l'allocazione dello slot.
+  SHELF
+  /// Scartato: movimento TRASH, lo stock scende.
+  SCRAP
+  /// Correzione del solo contenuto (pezzi che non ci sono): lo stock non cambia.
+  CORRECTION
+
+  @@schema("inventory")
+}
+
+/// Ordine di rimozione Amazon (FBA → nostro magazzino), importato dal report
+/// `GET_FBA_FULFILLMENT_REMOVAL_ORDER_DETAIL_DATA`.
+model AmazonRemovalOrder {
+  id              String                 @id @default(uuid()) @db.Uuid
+  /// `order-id` del report (chiave idempotente dell'import).
+  amazonOrderId   String                 @unique
+  orderType       AmazonRemovalOrderType @default(RETURN)
+  /// `order-status` grezzo di Amazon (Pending, Completed, Cancelled, ...).
+  amazonStatus    String?
+  requestDate     DateTime?              @db.Timestamptz(6)
+  /// `last-updated-date` del report.
+  amazonUpdatedAt DateTime?              @db.Timestamptz(6)
+  /// Tracking e corrieri dal report spedizioni rimozione (se disponibile).
+  trackingNumbers String[]               @default([])
+  carriers        String[]               @default([])
+  /// Prima data di spedizione da Amazon (report spedizioni rimozione).
+  shippedAt       DateTime?              @db.Timestamptz(6)
+
+  status     AmazonRemovalStatus @default(IN_TRANSIT)
+  receivedAt DateTime?           @db.Timestamptz(6)
+  notes      String?
+
+  lines AmazonRemovalLine[]
+
+  importedAt DateTime @default(now()) @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([requestDate(sort: Desc)])
+  @@schema("inventory")
+}
+
+/// Riga di una rimozione: uno SKU con una disposition (Sellable / Unsellable / ...).
+model AmazonRemovalLine {
+  id      String             @id @default(uuid()) @db.Uuid
+  orderId String             @db.Uuid
+  order   AmazonRemovalOrder @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Seller SKU come lo riporta Amazon.
+  sellerSku   String
+  fnsku       String?
+  /// `disposition` del report (Sellable, Unsellable, Customer Damaged, ...); "" se assente.
+  disposition String  @default("")
+
+  /// SKU locale riconosciuto dal seller SKU (o scelto a mano in ricezione).
+  skuId String? @db.Uuid
+  sku   Sku?    @relation(fields: [skuId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  requestedQty Int @default(0)
+  shippedQty   Int @default(0)
+  cancelledQty Int @default(0)
+  disposedQty  Int @default(0)
+  inProcessQty Int @default(0)
+  /// Pezzi già ricevuti a magazzino (somma dei RESO_IN della riga).
+  receivedQty  Int @default(0)
+
+  movements Movement[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([orderId, sellerSku, disposition])
+  @@index([skuId])
+  @@schema("inventory")
+}
+
+/// Storico dei prelievi di SKU dalle odette OMA (il contenuto scende, lo stock dipende dal motivo).
+model OdetteSkuWithdrawal {
+  id       String @id @default(uuid()) @db.Uuid
+  odetteId String @db.Uuid
+  odette   Odette @relation(fields: [odetteId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  skuId    String @db.Uuid
+  sku      Sku    @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantity Int
+  reason   OdetteSkuWithdrawalReason
+  note     String?
+
+  /// Slot di scaffale dove sono andati i pezzi (solo SHELF).
+  toLocationId String?            @db.Uuid
+  toLocation   WarehouseLocation? @relation(fields: [toLocationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Movimento di stock generato (solo SCRAP → TRASH).
+  movementId String?   @db.Uuid
+  movement   Movement? @relation(fields: [movementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  byUserId Int?
+  byUser   User? @relation(fields: [byUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([odetteId])
+  @@index([skuId])
+  @@index([createdAt(sort: Desc)])
+  @@schema("inventory")
+}

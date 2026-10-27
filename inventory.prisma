@@ -42,6 +42,11 @@ model Movement {
   /// Audit: movimento legato a una riga reso (recupero / RESO_IN).
   returnLineId           String?                 @db.Uuid
   returnLine             CustomerReturnLine?     @relation(fields: [returnLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Audit: movimento legato a una riga di rimozione Amazon (RESO_IN all'arrivo dei pezzi).
+  amazonRemovalLineId    String?                 @db.Uuid
+  amazonRemovalLine      AmazonRemovalLine?      @relation(fields: [amazonRemovalLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Prelievi da odette OMA che hanno generato questo movimento (scarto).
+  odetteSkuWithdrawals   OdetteSkuWithdrawal[]
   /// Allocazioni lotto/spedizione generate da questo movimento (tracciabilità ISO).
   shipmentLotAllocations ShipmentLotAllocation[]
 
@@ -85,6 +90,7 @@ model Movement {
   @@index([assemblyOrderId, date(sort: Desc)])
   @@index([date(sort: Desc)])
   @@index([returnLineId])
+  @@index([amazonRemovalLineId])
   @@index([fbaShipmentPlanId])
   @@index([assemblyBoxId])
   @@index([maintenanceLogId])
@@ -362,6 +368,8 @@ model WarehouseLocation {
   harvestDrafts HarvestDraft[] @relation("HarvestDraftTargetLocation")
   /// Bozze swap con scarico bobina verso questa posizione.
   spoolSwapDrafts SpoolSwapDraft[] @relation("SpoolSwapDraftUnloadLocation")
+  /// Prelievi da odette OMA messi su questo slot.
+  odetteSkuWithdrawals OdetteSkuWithdrawal[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

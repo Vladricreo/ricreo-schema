@@ -124,6 +124,9 @@ model User {
   /// App Ricreo visibili a questo utente nel selettore app (vedi `RicreoAppAccess`).
   ricreoAppAccess RicreoAppAccess[]
 
+  /// Prelievi di SKU dalle odette OMA fatti da questo utente.
+  odetteSkuWithdrawals OdetteSkuWithdrawal[]
+
   @@index([isActive]) /// Indice pratico per filtri frequenti
   @@schema("public") ///  la tabella degli utenti
 }
