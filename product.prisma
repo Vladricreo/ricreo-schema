@@ -745,6 +745,31 @@ model QualityAiPrompt {
   @@schema("product")
 }
 
+/// Consiglio AI della Panoramica: domanda, dati inviati e risposta di OpenAI.
+/// Salvato per rileggerlo dopo il ricaricamento della pagina.
+model OverviewAiInsight {
+  id String @id @default(cuid())
+  /// Domanda predefinita usata (`sales-drop`, `priorities`…), null se libera.
+  presetKey String?
+  /// Testo della domanda inviata.
+  question String
+  /// Periodo della Panoramica in giorni (`7`, `30`, `90`, `365`).
+  period String
+  /// JSON strutturato: headline, summary, findings, actions, watch.
+  answer Json
+  /// Riepilogo dati inviato al modello (testo compatto).
+  dataSnapshot String
+  model String
+  reasoningEffort String?
+  durationMs Int?
+  /// `User.id` di chi ha fatto la domanda.
+  createdByUserId Int?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([createdAt(sort: Desc)])
+  @@schema("product")
+}
+
 /// Versione di titolo, bullet e descrizione per SKU × paese.
 /// `published` = inviata ad Amazon; il live può tardare giorni.
 model QualityListingContentVersion {
