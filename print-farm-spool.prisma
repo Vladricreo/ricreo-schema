@@ -208,6 +208,7 @@ model FilamentSpool {
   assignmentDryingPlans AssignmentDryingPlan[] @relation("DryingPlanSpool")
   /// Cicli di asciugatura avviati sulla bobina (non legati a un assignment).
   dryingSessions        SpoolDryingSession[]   @relation("SpoolDryingSessions")
+  dryingPlanRecords     DryingPlanRecord[]     @relation("SpoolDryingPlanRecords")
   /// Bozze swap in cui questa bobina è quella da smontare.
   swapDraftsFrom SpoolSwapDraft[] @relation("SpoolSwapDraftFrom")
   /// Bozze swap in cui questa bobina è quella da montare.
@@ -303,6 +304,55 @@ model PreparationReservation {
   @@index([printerId, expiresAt])
   @@index([assignmentId, expiresAt])
   @@index([expiresAt])
+  @@schema("print-farm")
+}
+
+/// Ricarica prevista per uno slot in runout (S-183, 27/10): la scrive la cron
+/// `generate-assignments` a ogni giro dal calcolo della preparazione. Una riga
+/// per episodio di runout dello slot (`rowKey` + `closedAt` nullo = aperto),
+/// aggiornata finché il runout resta in preparazione, chiusa quando sparisce.
+/// Solo indicazione: non blocca bobine e non entra nel piano bobine
+/// (`AssignmentSpoolPlan`). Relazioni scalari come `PreparationReservation`.
+model RunoutRechargePlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Id della riga runout della preparazione (`runout:<assignment>:<slot>`).
+  rowKey       String
+  printerId    String  @db.Uuid
+  printerName  String?
+  assignmentId String? @db.Uuid
+  slotLabel    String?
+
+  /// Articolo da ricaricare (quello della bobina finita).
+  targetItemId   String? @db.Uuid
+  targetItemName String?
+  /// Grammi che mancano alla stampa ferma.
+  requiredGrams  Decimal? @db.Decimal(10, 2)
+
+  /// Bobina proposta (null = nessuna aperta: busta o niente).
+  spoolId      String?  @db.Uuid
+  tagCode      String?
+  /// `partial` (scaffale), `relocate` (da un'altra stampante), `inventory` (busta).
+  sourceKind   String?
+  /// Dove si trova la ricarica: «Cerbero 22 · A3», posizione a scaffale, «Busta».
+  sourceLabel  String?
+  proposedItemId String? @db.Uuid
+  proposedGrams Decimal? @db.Decimal(10, 2)
+  /// Nessuna ricarica disponibile per l'articolo («Esaurito»).
+  outOfStock   Boolean  @default(false)
+
+  /// Bobine valutate con il motivo e buste (`PreparationRunoutReport`).
+  report     Json? @db.JsonB
+  /// Bobine montate altrove da aspettare (`PreparationWaitingSpool[]`).
+  waitingFor Json? @db.JsonB
+
+  openedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  computedAt DateTime  @default(now()) @db.Timestamptz(6)
+  closedAt   DateTime? @db.Timestamptz(6)
+
+  @@index([rowKey, closedAt])
+  @@index([printerId, openedAt])
+  @@index([closedAt])
   @@schema("print-farm")
 }
 
@@ -432,6 +482,9 @@ model SpoolDryingSession {
 
   metadata Json? @db.JsonB
 
+  /// Record del piano asciugatura che questo ciclo ha soddisfatto.
+  dryingPlanRecords DryingPlanRecord[] @relation("SessionDryingPlanRecords")
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -439,5 +492,94 @@ model SpoolDryingSession {
   @@index([printerId, status])
   @@index([amsUnitId, status])
   @@index([status, startedAt(sort: Desc)])
+  @@schema("print-farm")
+}
+
+/// Stato di un ciclo del piano asciugatura dello scheduler.
+enum DryingPlanRecordStatus {
+  /// Previsto dal piano, bobina non ancora nell'unità o ciclo non partito.
+  PLANNED
+  /// L'ora di carico (o di inizio) è passata e il ciclo non è partito.
+  LATE
+  /// Ciclo in corso (sessione collegata).
+  DRYING
+  /// Ciclo concluso: la bobina è asciutta e aspetta la stampa.
+  READY
+  /// La stampa che aspettava il ciclo è partita.
+  CONSUMED
+  /// Uscito dal piano o non più necessario (motivo in `note`).
+  CANCELLED
+
+  @@schema("print-farm")
+}
+
+/// Piano asciugatura dello scheduler (R-118, 27/10): un record per ciclo
+/// previsto (stampante + materiale), aggiornato a ogni piano Gantt e
+/// collegato a quello che succede davvero (ciclo, stampa). Serve a vedere
+/// cosa è previsto, cosa è in ritardo e cosa è stato fatto, e quando.
+///
+/// Diverso da `GanttDryingTask` (una copia per piano, sostituita ogni giro) e
+/// da `SpoolDryingSession` (il ciclo vero): qui il previsto e il reale stanno
+/// nella stessa riga, con il primo orario previsto e l'ultimo.
+model DryingPlanRecord {
+  id String @id @default(uuid()) @db.Uuid
+
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterDryingPlanRecords", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Unità che asciuga (id MQTT) e modello (AMS_HT | AMS_2_PRO).
+  amsId    Int
+  amsModel String
+
+  /// Chiave materiale `CAT|hex` (o `CAT|*`), categoria e colore per la UI.
+  materialKey      String
+  materialCategory String?
+  colorHex         String?
+
+  /// Bobina da asciugare (già nell'unità, o la candidata scelta a scaffale).
+  spoolId String?        @db.Uuid
+  spool   FilamentSpool? @relation("SpoolDryingPlanRecords", fields: [spoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  status DryingPlanRecordStatus @default(PLANNED)
+  /// Situazione all'ultimo piano: PLANNED (da caricare) | IN_PLACE | IN_PROGRESS.
+  source String @default("PLANNED")
+
+  tempC           Int
+  durationMinutes Int
+
+  /// Primo orario previsto (alla creazione): misura quanto il piano è slittato.
+  firstPlannedLoadAt DateTime? @db.Timestamptz(6)
+  firstPlannedStart  DateTime  @db.Timestamptz(6)
+  /// Ultimo orario previsto dal piano.
+  plannedLoadAt DateTime? @db.Timestamptz(6)
+  plannedStart  DateTime  @db.Timestamptz(6)
+  plannedEnd    DateTime  @db.Timestamptz(6)
+  readyAt       DateTime  @db.Timestamptz(6)
+
+  /// Prima stampa del piano che aspetta il ciclo.
+  unlocksProductionJobId String?  @db.Uuid
+  unlocksAt              DateTime @db.Timestamptz(6)
+
+  /// Quante volte un piano nuovo ha spostato l'inizio di oltre 5 minuti.
+  replanCount     Int     @default(0)
+  lastGanttPlanId String? @db.Uuid
+
+  /// Ciclo vero che lo ha soddisfatto.
+  sessionId       String?             @db.Uuid
+  session         SpoolDryingSession? @relation("SessionDryingPlanRecords", fields: [sessionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  actualStartedAt   DateTime? @db.Timestamptz(6)
+  actualCompletedAt DateTime? @db.Timestamptz(6)
+  consumedAt        DateTime? @db.Timestamptz(6)
+  closedAt          DateTime? @db.Timestamptz(6)
+
+  /// Motivo dell'ultimo cambio di stato rilevante (annullo, ciclo fallito…).
+  note String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([printerId, status])
+  @@index([createdAt])
   @@schema("print-farm")
 }
