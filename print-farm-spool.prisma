@@ -306,6 +306,55 @@ model PreparationReservation {
   @@schema("print-farm")
 }
 
+/// Ricarica prevista per uno slot in runout (S-183, 27/10): la scrive la cron
+/// `generate-assignments` a ogni giro dal calcolo della preparazione. Una riga
+/// per episodio di runout dello slot (`rowKey` + `closedAt` nullo = aperto),
+/// aggiornata finché il runout resta in preparazione, chiusa quando sparisce.
+/// Solo indicazione: non blocca bobine e non entra nel piano bobine
+/// (`AssignmentSpoolPlan`). Relazioni scalari come `PreparationReservation`.
+model RunoutRechargePlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Id della riga runout della preparazione (`runout:<assignment>:<slot>`).
+  rowKey       String
+  printerId    String  @db.Uuid
+  printerName  String?
+  assignmentId String? @db.Uuid
+  slotLabel    String?
+
+  /// Articolo da ricaricare (quello della bobina finita).
+  targetItemId   String? @db.Uuid
+  targetItemName String?
+  /// Grammi che mancano alla stampa ferma.
+  requiredGrams  Decimal? @db.Decimal(10, 2)
+
+  /// Bobina proposta (null = nessuna aperta: busta o niente).
+  spoolId      String?  @db.Uuid
+  tagCode      String?
+  /// `partial` (scaffale), `relocate` (da un'altra stampante), `inventory` (busta).
+  sourceKind   String?
+  /// Dove si trova la ricarica: «Cerbero 22 · A3», posizione a scaffale, «Busta».
+  sourceLabel  String?
+  proposedItemId String? @db.Uuid
+  proposedGrams Decimal? @db.Decimal(10, 2)
+  /// Nessuna ricarica disponibile per l'articolo («Esaurito»).
+  outOfStock   Boolean  @default(false)
+
+  /// Bobine valutate con il motivo e buste (`PreparationRunoutReport`).
+  report     Json? @db.JsonB
+  /// Bobine montate altrove da aspettare (`PreparationWaitingSpool[]`).
+  waitingFor Json? @db.JsonB
+
+  openedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  computedAt DateTime  @default(now()) @db.Timestamptz(6)
+  closedAt   DateTime? @db.Timestamptz(6)
+
+  @@index([rowKey, closedAt])
+  @@index([printerId, openedAt])
+  @@index([closedAt])
+  @@schema("print-farm")
+}
+
 /// Slot AMS di una stampante.
 /// Ogni stampante con AMS può avere fino a 4 unità (A-D), ciascuna con 4 slot (1-4).
 /// Questo model traccia quale spool è caricata in ogni slot.
