@@ -96,6 +96,12 @@ model AmazonRemovalLine {
   /// Pezzi già ricevuti a magazzino (somma dei RESO_IN della riga).
   receivedQty  Int @default(0)
 
+  /// Tariffa di rimozione Amazon della riga (`removal-fee`, copre la spedizione fino a noi;
+  /// 0 per le liquidazioni). NULL se Amazon non la riporta (righe non spedite).
+  removalFee Decimal? @db.Decimal(12, 2)
+  /// Valuta della tariffa (`currency`, es. EUR).
+  currency   String?
+
   movements Movement[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
