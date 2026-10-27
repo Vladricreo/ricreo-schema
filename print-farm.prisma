@@ -562,6 +562,8 @@ model Printer {
 
   /// Task Gantt pianificati su questa stampante
   ganttTasks             GanttTask[]
+  /// Cicli di asciugatura del piano Gantt sulle unità AMS di questa stampante.
+  ganttDryingTasks       GanttDryingTask[]          @relation("PrinterGanttDryingTasks")
   /// Interventi operatore registrati dal client.
   schedulerInterventions SchedulerInterventionLog[]
   /// Cicli di asciugatura JIT pianificati sulla stampante.
@@ -1795,12 +1797,67 @@ model GanttPlan {
   dryingPlans       AssignmentDryingPlan[]      @relation("DryingPlanGanttPlan")
   /// Metriche di rollout F8 misurate contro questo piano (append-only).
   rolloutMetrics    SchedulerRolloutMetric[]
+  /// Cicli di asciugatura del piano (unità AMS, non la stampante).
+  dryingTasks       GanttDryingTask[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([status])
   @@index([createdAt])
+  @@schema("print-farm")
+}
+
+/// Ciclo di asciugatura pianificato dal Gantt su un'unità AMS che asciuga
+/// (AMS HT o 2 Pro), prima della prima stampa che usa il materiale (R-104).
+///
+/// Occupa l'unità, non la stampante: nello stesso intervallo la stampante può
+/// stampare con l'altro ugello o le altre AMS (es. TPU nell'HT, ugello
+/// sinistro libero). Per questo sta in una tabella sua e non fra i `GanttTask`,
+/// che contano come tempo macchina in capacità, ETA e lock.
+/// Solo diagnostica e guida operatore: nessuna decisione di assignment lo legge.
+model GanttDryingTask {
+  id String @id @default(uuid()) @db.Uuid
+
+  ganttPlanId String    @db.Uuid
+  ganttPlan   GanttPlan @relation(fields: [ganttPlanId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterGanttDryingTasks", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Unità AMS che asciuga (id MQTT) e modello (AMS_HT | AMS_2_PRO).
+  amsId    Int
+  amsModel String
+
+  /// Chiave materiale `CAT|hex` (o `CAT|*`), categoria e colore per la UI.
+  materialKey      String
+  materialCategory String?
+  colorHex         String?
+
+  tempC           Int
+  durationMinutes Int
+
+  /// Carico dell'operatore (null: la bobina è già nell'unità o il ciclo è in corso).
+  loadStart    DateTime? @db.Timestamptz(6)
+  plannedStart DateTime  @db.Timestamptz(6)
+  plannedEnd   DateTime  @db.Timestamptz(6)
+  /// Fine del raffreddamento: da qui la stampa sbloccata può partire.
+  readyAt      DateTime  @db.Timestamptz(6)
+
+  /// PLANNED (da caricare) | IN_PLACE (bobina già nell'unità) | IN_PROGRESS (ciclo in corso).
+  source String @default("PLANNED")
+
+  /// Prima stampa del piano che aspetta questo ciclo (job e inizio pianificato).
+  unlocksProductionJobId String?  @db.Uuid
+  unlocksAt              DateTime @db.Timestamptz(6)
+
+  /// Stampe dello stesso piano che nello stesso intervallo userebbero l'unità.
+  conflictNote String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([ganttPlanId])
+  @@index([printerId, plannedStart])
   @@schema("print-farm")
 }
 
