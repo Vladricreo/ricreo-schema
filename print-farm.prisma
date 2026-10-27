@@ -564,6 +564,8 @@ model Printer {
   ganttTasks             GanttTask[]
   /// Cicli di asciugatura del piano Gantt sulle unità AMS di questa stampante.
   ganttDryingTasks       GanttDryingTask[]          @relation("PrinterGanttDryingTasks")
+  /// Piano asciugatura dello scheduler su questa stampante (R-109).
+  dryingPlanRecords      DryingPlanRecord[]         @relation("PrinterDryingPlanRecords")
   /// Interventi operatore registrati dal client.
   schedulerInterventions SchedulerInterventionLog[]
   /// Cicli di asciugatura JIT pianificati sulla stampante.
