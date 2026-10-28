@@ -762,6 +762,19 @@ model OverviewAiInsight {
   model String
   reasoningEffort String?
   durationMs Int?
+  /// `pending` mentre il server elabora in background, poi `done` o `error`.
+  status String @default("done")
+  /// Messaggio d'errore se `status = error`.
+  error String?
+  /// Token dell'ultima chiamata OpenAI (reasoning compresi nell'output).
+  inputTokens Int?
+  cachedInputTokens Int?
+  outputTokens Int?
+  reasoningTokens Int?
+  /// Costo dai token e dal listino in codice (`chat-pricing.ts`).
+  costUsd Float?
+  costEur Float?
+  completedAt DateTime? @db.Timestamptz(6)
   /// `User.id` di chi ha fatto la domanda.
   createdByUserId Int?
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -1371,6 +1384,22 @@ model SalesMarginThreshold {
   createdAt      DateTime @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)
 
+  @@schema("product")
+}
+
+/// Storico costo unitario per SKU: periodi [validFrom, validTo), validTo null = in vigore.
+/// Lo scrive solo product.snapshot_sku_unit_cost() dopo il refresh di mv_overview_sku_meta;
+/// v_order_line_pnl e mv_sales_analytics_daily usano il costo del giorno dell'ordine.
+model SkuUnitCostHistory {
+  /// Codice SKU (inventory.Sku.code), come StoreOrderLine.sku.
+  sku         String
+  validFrom   DateTime  @db.Date
+  validTo     DateTime? @db.Date
+  unitCostEur Decimal   @db.Decimal
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@id([sku, validFrom])
   @@schema("product")
 }
 
