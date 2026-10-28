@@ -21,7 +21,10 @@
 --   - pezzi buoni = residuo se l'assignment ha un job, o se la stampa fuori
 --     programma ha un file tracciato e la stampante non è in stampa manuale
 --     (o l'operatore chiede di registrare i movimenti); altrimenti 0;
---   - nessuno scarto, nessuna odetta, nessuna ristampa né manutenzione;
+--   - nessuno scarto, ristampa né manutenzione;
+--   - con l'odetta scelta a schermo i pezzi buoni vanno lì, con gli stessi
+--     controlli dello scarico (piena, capienza, posizione); senza, restano
+--     sciolti (R-139, utente 29/10);
 --   - l'assignment si chiude sempre; se ha già uno scarico non se ne scrive un
 --     altro (come oggi). Le righe marcate «D-09» sono le sole differenze.
 -- ---------------------------------------------------------------------------
@@ -171,9 +174,9 @@ BEGIN
   v_reprint := CASE WHEN jsonb_typeof(p->'reprint') = 'object' THEN p->'reprint' END;
   v_failure_streak := coalesce((v_reprint->>'failureStreak')::boolean, false);
   v_note_prefix := CASE WHEN p_source = 'DETAIL' THEN 'Scarico singolo' ELSE 'Scarico bulk progressivo' END;
-  -- D-09: senza conteggio niente odetta, scarti, manutenzione, ristampa o job collegato a mano.
+  -- D-09: senza conteggio niente scarti, manutenzione, ristampa o job collegato a mano.
+  -- L'odetta scelta a schermo resta: i pezzi buoni vanno lì come nello scarico (R-139).
   IF v_mark_unloaded THEN
-    v_odette_in := NULL; v_odette_req := NULL; v_mark_full := false; v_move := NULL; v_to_location := NULL;
     v_set_maint := false; v_maint_reason := NULL; v_reject_reason := NULL; v_override := NULL;
     v_reprint := NULL; v_failure_streak := false; v_link_job := NULL;
   END IF;
