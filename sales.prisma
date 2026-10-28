@@ -20,6 +20,9 @@ model Sku {
   currentStock             Int                @default(0)
   dimensionsId             String?            @db.Uuid
   dimensions               Dimensions?        @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Quale misura del pacco va in verticale sullo scaffale (il lato a terra è
+  /// formato dalle altre due). Null = automatico: il verso che ne tiene di più.
+  shelfUpAxis              BoxUpAxis?
   requiresSecondaryPackage Boolean            @default(false)
   finalStageType           AssemblyStageType  @default(SECOND_STAGE) // stato del prodotto effettivamente finito se ha bisogno del packaging primario o secondario di default: prodotto finito con packaging primario e secondario
   locationId               String?            @db.Uuid
@@ -514,6 +517,15 @@ enum FbaLabelOwner {
   AMAZON
   SELLER
   NONE
+
+  @@schema("inventory")
+}
+
+/// Misura del pacco (`Sku.dimensions`) che sta in verticale sullo scaffale.
+enum BoxUpAxis {
+  WIDTH
+  DEPTH
+  HEIGHT
 
   @@schema("inventory")
 }
