@@ -226,6 +226,12 @@ model ProjectFileObject {
   /// Area occupata nell'immagine (frazione 0..1).
   boxArea Float?
 
+  /// Grammi dell'oggetto per filamento del file, letti dal G-code (estrusione fra i
+  /// marcatori dell'oggetto): `{ "<fileFilamentIndex>": grammi }`. Servono a consumo
+  /// bobine e piano bobine dei piatti combinati con oggetti saltati (A-165). Null se
+  /// il G-code non marca gli oggetti o il file è a parte singola.
+  filamentGrams Json? @db.JsonB
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
