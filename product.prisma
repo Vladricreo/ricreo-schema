@@ -64,6 +64,26 @@ model EbayOAuthCredential {
   @@schema("product")
 }
 
+/// Access token Temu Partner EU per mercato (un mall per paese: IT, DE, FR…).
+/// Gli ordini `PO-{regionId}-` si leggono solo col token del loro mercato.
+/// `accessToken` è AES-256-GCM (SETTINGS_ENCRYPTION_KEY).
+model TemuSellerCredential {
+  id          String    @id @default(cuid())
+  /// ISO del mercato Temu (`IT`, `DE`, `GB`…).
+  market      String
+  /// Access token cifrato, generato in Seller Center → Gestisci le tue app.
+  accessToken String
+  /// Mall del token (`bg.open.accesstoken.info.get`).
+  mallId      String?
+  /// Scadenza del token (UTC).
+  expiresAt   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([market])
+  @@schema("product")
+}
+
 /// Notifica eBay MARKETPLACE_ACCOUNT_DELETION ricevuta dalla Edge Function pubblica.
 /// Identificativi utente e payload sono cifrati con SETTINGS_ENCRYPTION_KEY.
 model EbayAccountDeletion {
