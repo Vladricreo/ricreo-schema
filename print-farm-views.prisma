@@ -307,3 +307,22 @@ view VPfOrderEta {
   @@map("v_pf_order_eta")
   @@schema("print_farm_views")
 }
+
+/// Modello stampante suggerito per un file 3MF, imparato dai file gia' caricati:
+/// per ogni `printer_model_id` di Bambu Studio (N6, C12, BL-P001, ...) quota dei
+/// file messi su ciascun modello (`compatiblePrinters`). Esclusi i REJECTED.
+view VPfFilePrinterModelHint {
+  slicerModelId    String   @map("slicerModelId")
+  printerModelName String   @map("printerModelName")
+  nozzleCount      Int      @map("nozzleCount")
+  filesCount       Int      @map("filesCount")
+  totalFiles       Int      @map("totalFiles")
+  /// filesCount / totalFiles (0..1).
+  share            Decimal  @map("share") @db.Decimal(6, 3)
+  /// Media degli extruder dichiarati dai file con questo codice (1 = single, ~2 = dual).
+  avgFileExtruders Decimal? @map("avgFileExtruders") @db.Decimal(6, 2)
+
+  @@unique([slicerModelId, printerModelName])
+  @@map("v_pf_file_printer_model_hints")
+  @@schema("print_farm_views")
+}
