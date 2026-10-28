@@ -1263,6 +1263,33 @@ model StoreFbaInventoryDaily {
   @@schema("product")
 }
 
+/// Spedizioni FBA per riga ordine (GET_AMAZON_FULFILLED_SHIPMENTS_DATA_GENERAL).
+/// Il centro logistico dice da quale paese è partito l'ordine: Amazon può
+/// spedire da un magazzino dove lo stock non era previsto.
+model StoreFbaShipmentItem {
+  /// shipment-item-id Amazon (unico per riga spedita).
+  shipmentItemId      String   @id
+  shipmentId          String
+  amazonOrderId       String
+  orderItemId         String
+  sku                 String   @default("")
+  quantity            Int      @default(0)
+  shipmentDate        DateTime @db.Timestamptz(6)
+  /// Es. BLQ1, LYS2, BCN4: le prime tre lettere sono il codice aeroporto.
+  fulfillmentCenterId String
+  /// Es. amazon.it, amazon.se (minuscolo come nel report).
+  salesChannel        String   @default("")
+  shipCountry         String   @default("")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([orderItemId])
+  @@index([amazonOrderId])
+  @@index([shipmentDate])
+  @@schema("product")
+}
+
 /// Catalogo veicoli Amazon (Vehicles API EU) per mappare marca/modello → KTYPE.
 model AmazonVehicle {
   id             String   @id @default(cuid())
