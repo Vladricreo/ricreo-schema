@@ -367,6 +367,10 @@ model ProductPart {
   sourceProjectPlates SourceProjectPlate[] @relation("ProductPartSourcePlates")
   /// Job di slicing che producono file per questa parte.
   sliceJobs           SliceJob[]           @relation("ProductPartSliceJobs")
+  /// Oggetti dei piatti 3MF mappati su questa parte (piatti combinati, 28/10).
+  fileObjects         ProjectFileObject[]  @relation("ProductPartFileObjects")
+  /// Righe di piatti combinati che stampano questa parte (S-188, 28/10).
+  assignmentPlateParts PrinterAssignmentPart[] @relation("ProductPartAssignmentPlateParts")
 
   @@index([productId])
   @@index([supplierId])

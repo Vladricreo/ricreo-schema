@@ -100,6 +100,12 @@ model ProjectThreeMFFile {
   /// Job di slicing che hanno prodotto questo file (inverso di `SliceJob.resultFile`).
   sliceJob SliceJob? @relation("SliceJobResultFile")
 
+  /// Oggetti del piatto con parte e posizione (piatti combinati, 28/10).
+  objects     ProjectFileObject[]
+  /// Key Storage della foto dall'alto del piatto (`Metadata/top_N.png`), su cui
+  /// si mostrano le posizioni degli oggetti. Null per i file caricati prima del 28/10.
+  topImageUrl String?
+
   @@index([productId])
   @@index([productPartId])
   @@index([status])
@@ -186,6 +192,83 @@ model ProjectPart {
   @@schema("print-farm")
 }
 
+/// Oggetto del piatto di un file 3MF (piatti combinati, decisione 28/10, R-122/R-123).
+/// Un oggetto = un `identify_id` di `slice_info.config`, cioè l'id del comando
+/// `skip_objects`. Dice a quale parte appartiene e dove sta sul piatto (dalla
+/// `pick_N.png`, coordinate 0..1 sulla foto dall'alto). Per un file a parte singola
+/// tutti gli oggetti sono della parte del file.
+model ProjectFileObject {
+  id String @id @default(uuid()) @db.Uuid
+
+  fileId String             @db.Uuid
+  file   ProjectThreeMFFile @relation(fields: [fileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// `identify_id` dell'oggetto nel 3MF (id dello skip objects).
+  identifyId    Int
+  /// Nome dell'oggetto nel 3MF (es. "staffa sx 1").
+  name          String?
+  /// Oggetto già escluso nel file (`skipped="true"` in slice_info): non si stampa mai.
+  skippedInFile Boolean @default(false)
+
+  /// Parte a cui appartiene l'oggetto. Null = non ancora mappato.
+  productPartId String?      @db.Uuid
+  productPart   ProductPart? @relation("ProductPartFileObjects", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Come è stata decisa la parte: 'FILE_PART' (file a parte singola), 'NAME' (proposta dal nome), 'MANUAL'.
+  mappingSource String?
+
+  /// Posizione sul piatto dalla pick (0..1, x verso destra, y verso il basso). Null se la pick manca.
+  boxCx   Float?
+  boxCy   Float?
+  boxMinX Float?
+  boxMinY Float?
+  boxMaxX Float?
+  boxMaxY Float?
+  /// Area occupata nell'immagine (frazione 0..1).
+  boxArea Float?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([fileId, identifyId])
+  @@index([productPartId])
+  @@schema("print-farm")
+}
+
+/// Riga parte di un piatto combinato (S-188, decisione 28/10, R-122/R-124).
+/// Un piatto (= un `PrinterAssignment`, una run, un bed flag) produce pezzi di più
+/// job dello stesso ordine: una riga per job/parte con attesi, buoni e scarti, e gli
+/// oggetti del piatto (`identify_id`) che quella parte stampa. Il job principale
+/// dell'assignment ha anche lui la sua riga; `PrinterAssignment.partsExpected` resta
+/// quello del job principale.
+model PrinterAssignmentPart {
+  id String @id @default(uuid()) @db.Uuid
+
+  assignmentId String            @db.Uuid
+  assignment   PrinterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  productionJobId String        @db.Uuid
+  productionJob   ProductionJob @relation(fields: [productionJobId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  productPartId String?      @db.Uuid
+  productPart   ProductPart? @relation("ProductPartAssignmentPlateParts", fields: [productPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Pezzi di questa parte attesi dal piatto (oggetti stampati della parte).
+  partsExpected Int
+  /// Pezzi buoni e scarti registrati allo scarico.
+  partsProduced Int @default(0)
+  partsRejected Int @default(0)
+  /// `identify_id` degli oggetti del piatto che questa parte stampa.
+  objectIds     Int[] @default([])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([assignmentId, productionJobId])
+  @@index([productionJobId])
+  @@index([productPartId])
+  @@schema("print-farm")
+}
+
 /// Job di stampa 3D per una specifica parte.
 /// Collegato a un ProductOrder (ordine di produzione dall'inventario).
 /// Ogni ProductionJob produce N pezzi di una singola parte usando un file 3MF.
@@ -250,6 +333,9 @@ model ProductionJob {
 
   /// Task Gantt che coinvolgono questo job
   ganttTasks GanttTask[]
+
+  /// Righe di piatti combinati che producono pezzi di questo job (S-188, 28/10).
+  assignmentPlateParts PrinterAssignmentPart[]
 
   /// Segnalazioni sui file rilevate durante questo job.
   feedbacks FarmFeedback[]
@@ -1176,6 +1262,9 @@ model PrinterAssignment {
   spoolPlans             AssignmentSpoolPlan[]
   /// Cicli di asciugatura JIT richiesti prima della stampa.
   dryingPlans            AssignmentDryingPlan[]     @relation("DryingPlanAssignment")
+  /// Righe parte di un piatto combinato (S-188, 28/10): una per job/parte del piatto.
+  /// Vuote per i piatti a parte singola, che usano i contatori qui sotto.
+  plateParts             PrinterAssignmentPart[]
 
   // === Conteggi parti ===
   partsExpected Int // Parti totali attese per questa stampa (micro-assignment)
@@ -1474,6 +1563,11 @@ model PrinterHarvest {
   /// Serve per annullare uno scarico ripristinando lo stato originale: senza questo dato
   /// l'assignment tornava sempre in TO_HARVEST, cambiando il comportamento del ri-scarico.
   assignmentStatusAtHarvest String?
+
+  /// Piatto combinato (S-188, 28/10): pezzi per parte di questo scarico,
+  /// [{ productionJobId, productPartId, partsAccepted, partsRejected }]. I contatori
+  /// sopra sono la somma. Null per i piatti a parte singola.
+  partsBreakdown Json?
 
   // === Qualità ===
   /// Scarico "saltato": il piatto è stato liberato senza raccogliere i pezzi.
@@ -1911,6 +2005,9 @@ model GanttTask {
 
   /// Parti attese da questa stampa
   partsExpected Int @default(0)
+  /// Piatto combinato (S-188, 28/10): pezzi per parte del task,
+  /// [{ productionJobId, productPartId, partName, partsExpected }]. Null a parte singola.
+  partsBreakdown Json?
 
   /// Stato runtime del task
   taskStatus GanttTaskStatus @default(PLANNED)
@@ -2351,6 +2448,9 @@ model HarvestDraft {
   state               String   @default("DRAFT")
   /// VOICE | UI | AUTO
   lastTouchedBy       String?
+  /// Piatto combinato (S-188, 28/10): conteggi per parte della bozza,
+  /// [{ productionJobId, productPartId, partsAccepted, partsRejected }]. Null a parte singola.
+  partsBreakdown      Json?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
