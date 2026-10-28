@@ -75,6 +75,8 @@ model TemuSellerCredential {
   accessToken String
   /// Mall del token (`bg.open.accesstoken.info.get`).
   mallId      String?
+  /// regionId Temu del mercato (`PO-{regionId}-`), letto dalla lista ordini del token.
+  regionId    Int?
   /// Scadenza del token (UTC).
   expiresAt   DateTime? @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
