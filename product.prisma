@@ -805,6 +805,46 @@ model OverviewAiInsight {
   @@schema("product")
 }
 
+/// Analisi AI delle recensioni di un listing (Qualità › dettaglio): problemi
+/// ricorrenti e miglioramenti proposti, da cui nascono le attività.
+model QualityReviewAnalysis {
+  id String @id @default(cuid())
+  /// Store del listing (`AMAZON`, `EBAY`, `ETSY`, `TEMU`).
+  store String
+  sku String
+  /// Marketplace aperto al momento dell'analisi (solo Amazon).
+  marketplaceId String?
+  /// Filtro usato: stelle massime incluse (5 = tutte) e numero massimo di recensioni.
+  maxRating Int
+  reviewLimit Int
+  /// Recensioni effettivamente inviate.
+  reviewCount Int
+  /// JSON strutturato: headline, summary, problems, strengths.
+  answer Json
+  /// Recensioni inviate al modello (testo numerato, per rileggere le citazioni).
+  reviewsSnapshot String
+  /// Id esterni delle recensioni inviate, nello stesso ordine dei numeri `#n`.
+  reviewIds String[]
+  model String
+  reasoningEffort String?
+  durationMs Int?
+  /// `pending` mentre il server elabora in background, poi `done` o `error`.
+  status String @default("pending")
+  error String?
+  inputTokens Int?
+  cachedInputTokens Int?
+  outputTokens Int?
+  reasoningTokens Int?
+  costUsd Float?
+  costEur Float?
+  completedAt DateTime? @db.Timestamptz(6)
+  createdByUserId Int?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([store, sku, createdAt(sort: Desc)])
+  @@schema("product")
+}
+
 /// Versione di titolo, bullet e descrizione per SKU × paese.
 /// `published` = inviata ad Amazon; il live può tardare giorni.
 model QualityListingContentVersion {
