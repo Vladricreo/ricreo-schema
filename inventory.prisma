@@ -205,6 +205,23 @@ model WarehouseShelfGroup {
   @@schema("inventory")
 }
 
+/// Scatola riciclata (di recupero) con le sue misure esterne, da usare come
+/// pacco degli SKU sugli scaffali (pagina «Dimensioni scaffali», R-143).
+/// Non è un articolo di catalogo: niente giacenze né distinte.
+model RecycledPackaging {
+  id       String  @id @default(uuid()) @db.Uuid
+  name     String
+  widthMm  Int
+  depthMm  Int
+  heightMm Int
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@schema("inventory")
+}
+
 /// Rappresenta uno scaffale fisico (contenitore) che raggruppa più ripiani/righe.
 model WarehouseShelf {
   id          String  @id @default(uuid()) @db.Uuid
