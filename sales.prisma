@@ -43,6 +43,10 @@ model Sku {
   /// - NONE: nessuna prep richiesta.
   /// - AMAZON: prep gestita da Amazon (servizio a pagamento).
   fbaPrepOwner  FbaPrepOwner  @default(SELLER)
+  /// SKU FBA iscritto a Pan-EU. Amazon addebita la tariffa per stock basso
+  /// quando i giorni di copertura storici (90 e 30 gg) sono sotto 28: scorta
+  /// minima di 14 gg e lotto che tiene la media sopra 28 gg.
+  amazonPanEu   Boolean       @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)

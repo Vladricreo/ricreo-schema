@@ -729,6 +729,10 @@ view VFbaInventory {
   optimalLotSize    Int       @map("optimal_lot_size")
   /// true se il lotto è limitato da EOQ × fattore invece che dai giorni di stock ottimale
   lotCappedByCost   Boolean   @map("lot_capped_by_cost")
+  /// Scorta di sicurezza effettiva dello SKU (giorni; Pan-EU almeno 14)
+  safetyStockDays   Int       @map("safety_stock_days")
+  /// SKU iscritto a Pan-EU (`Sku.amazonPanEu`)
+  amazonPanEu       Boolean   @map("amazon_pan_eu")
   restockAction     String    @map("restock_action")
   salesData         Json      @map("sales_data")
   listingStatus     String    @map("listing_status")
