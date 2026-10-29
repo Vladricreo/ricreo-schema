@@ -4,6 +4,9 @@ model Profile {
   bio       String?
   avatarUrl String?
   language  String? @default("it")
+  /// Tablet condiviso: hash (scrypt) del PIN di 4 cifre, uno per persona e valido in tutte le app.
+  /// Obbligatorio per admin e manager quando il tablet ha più persone; facoltativo per gli altri.
+  tabletPinHash String?
   userId    Int     @unique ///
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
