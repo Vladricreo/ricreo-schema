@@ -334,6 +334,12 @@ model ProductPart {
   /// prima del backfill; l'applicazione assegna sempre il piano attivo alle nuove parti.
   planId                   String?                   @db.Uuid
   plan                     ProductPartPlan?          @relation(fields: [planId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Tutte le revisioni del piano parti che contengono questa parte (strategia "move", 29/10).
+  /// Una parte che resta uguale in una nuova revisione NON viene clonata: passa al nuovo piano
+  /// (`planId` = revisione più recente) e qui si aggiunge il suo id, così il piano vecchio
+  /// conserva la sua composizione. Leggere le parti di un piano con
+  /// `planId = X OR X = ANY(planIds)` (servizio `product-part-plan-service`).
+  planIds                  String[]                  @default([]) @db.Uuid
   quantityNeeded           Int                       @default(0)
   dimensionsId             String?                   @db.Uuid
   dimensions               Dimensions?               @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
