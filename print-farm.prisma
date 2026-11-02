@@ -105,6 +105,10 @@ model ProjectThreeMFFile {
   /// Key Storage della foto dall'alto del piatto (`Metadata/top_N.png`), su cui
   /// si mostrano le posizioni degli oggetti. Null per i file caricati prima del 28/10.
   topImageUrl String?
+  /// Piatto combinato: le righe `ProjectPart` del file puntano ad almeno due
+  /// `ProductPart` diverse. Lo tiene aggiornato un trigger su `ProjectPart`
+  /// (migrazione `20261102120000_file_is_combined`): non scriverlo dall'app.
+  isCombined  Boolean @default(false)
 
   @@index([productId])
   @@index([productPartId])
