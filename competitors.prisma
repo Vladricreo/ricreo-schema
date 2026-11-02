@@ -466,6 +466,15 @@ model CompetitorListingMatchSuggestion {
   imageScore          Float
   combinedScore       Float
   status              CompetitorMatchSuggestionStatus @default(PENDING)
+  /// Verdetto Jev 0-2 (0 diverso, 1 correlato, 2 stesso): media titolo + foto.
+  jevScore            Float?
+  /// Certezza del verdetto Jev (0-1).
+  jevConfidence       Float?
+  /// Verdetto Jev sulle sole foto (0-2); null se una delle due foto mancava.
+  jevPhotoScore       Float?
+  /// Jev è sicuro che siano articoli diversi: fuori dalla coda «da rivedere».
+  jevRejected         Boolean                         @default(false)
+  jevCheckedAt        DateTime?                       @db.Timestamptz(6)
   reviewedAt          DateTime?                       @db.Timestamptz(6)
   createdAt           DateTime                        @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime                        @updatedAt @db.Timestamptz(6)
@@ -474,15 +483,16 @@ model CompetitorListingMatchSuggestion {
 
   @@unique([ourChannel, ourExternalId, competitorProductId])
   @@index([status, combinedScore])
+  @@index([status, jevCheckedAt])
   @@index([ourChannel, ourExternalId])
   @@index([competitorProductId])
   @@schema("product")
 }
 
-/// Job resumable: catalogo nostro → embeddings → scoring.
+/// Job resumable: catalogo nostro → embeddings → scoring → verifica Jev.
 model CompetitorMatchJob {
   id                  String            @id @default(cuid())
-  /// our_catalog | embed | score | done
+  /// our_catalog | embed | score | verify | done
   phase               String            @default("our_catalog")
   status              StoreReportStatus @default(REQUESTED)
   cursor              Json?
