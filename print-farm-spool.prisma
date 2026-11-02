@@ -100,6 +100,15 @@ model FilamentProfile {
   amsIncompatible   Boolean @default(false)
   amsMaxFillPercent Int?
 
+  // Camera riscaldata (decisione utente 2026-11-02, R-174): l'articolo si
+  // stampa solo su stampanti il cui modello ha la camera riscaldata
+  // (`PrinterModel.hasHeatedChamber`, oggi le X2D Cerbero). Vale per la
+  // variante concreta, non per la famiglia: sulle altre stampanti la spec
+  // ripiega sulle altre varianti. Scheduler, Gantt e piano bobine non la
+  // propongono né la contano; montaggio e avvio manuali restano ammessi con
+  // un avviso.
+  requireHeatedChamberForPrint Boolean @default(false)
+
   // Riscaldamento mantenuto durante la stampa (non e' un ciclo di asciugatura):
   // il backend lo avvia allo start sull'unita' che alimenta la stampa.
   keepAmsHeatedDuringPrint Boolean @default(false)

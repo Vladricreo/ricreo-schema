@@ -821,6 +821,11 @@ model PrinterModel {
   /// false (X2D): mappa rigida, il filamento deve usare l'extruder esatto del file.
   extruderAssignmentSwappable Boolean @default(false)
 
+  /// True se il modello ha la camera riscaldata (X2D, H2D, H2C, H2S, X1E; non
+  /// P1S né X1C). Solo queste stampanti ricevono gli articoli con
+  /// `FilamentProfile.requireHeatedChamberForPrint` (decisione 2026-11-02, R-174).
+  hasHeatedChamber Boolean @default(false)
+
   /// Dimensioni piano di stampa (mm)
   buildPlateWidth  Decimal? @db.Decimal(8, 2) // Larghezza piano (X) in mm
   buildPlateDepth  Decimal? @db.Decimal(8, 2) // Profondità piano (Y) in mm
