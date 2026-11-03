@@ -47,6 +47,10 @@ model Sku {
   /// quando i giorni di copertura storici (90 e 30 gg) sono sotto 28: scorta
   /// minima di 14 gg e lotto che tiene la media sopra 28 gg.
   amazonPanEu   Boolean       @default(false)
+  /// Seller SKU Amazon da usare nei piani di spedizione FBA al posto di `code`.
+  /// Serve quando Amazon tiene l'offerta col codice a barre del produttore su un
+  /// altro SKU della stessa ASIN (es. `TADO-1910-FBA-stickerless`). Null = `code`.
+  amazonInboundMsku String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
