@@ -509,6 +509,11 @@ model Printer {
   ams                      Boolean?
   /// Modello AMS collegato (se presente). Serve per stimare consumi AMS (standby/working/drying).
   amsModel                 AmsModel?
+  /// Slot AMS fuori uso (R-182): codici globali di `encodeAmsGlobalSlot` (unità × 4 + slot; AMS-HT = 128).
+  /// Si impostano in Impostazioni → Stampanti. Lo slot non alimenta più nulla: scheduler e flussi non ci
+  /// mappano né montano, una bobina già dentro è una posizione di deposito da cui si può prendere.
+  /// Sta qui e non su `PrinterAmsSlot` perché uno slot vuoto può non avere riga e l'HT ha righe gemelle.
+  outOfServiceAmsSlots     Int[]        @default([])
   pushAllTimeout           Int?
 
   /// Stato runtime dalla stampante (WebSocket) - volatile
