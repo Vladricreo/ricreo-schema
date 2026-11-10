@@ -633,6 +633,8 @@ model Printer {
   filamentLoads PrinterFilamentLoad[]
   /// Sessioni cronometrate di cambio/ricarica filamento su questa stampante
   swapSessions  FilamentSwapSession[]
+  /// Congelamenti della pianificazione scelti in UI (R-197)
+  planningFreezes PrinterPlanningFreeze[]
 
   /// Slot AMS per stampanti con AMS.
   /// Ogni slot può contenere una spool. Per stampanti senza AMS, usare currentSpoolId.
@@ -1832,6 +1834,41 @@ model FilamentSwapSession {
   @@index([operatorUserId, startedAt(sort: Desc)])
   @@index([trigger, startedAt(sort: Desc)])
   @@index([finishedAt(sort: Desc)])
+  @@schema("print-farm")
+}
+
+/// Congelamento della pianificazione per stampante, scelto dall'operatore in
+/// Production (R-197, 10/11). Finché è attivo il generatore non cambia la
+/// prossima stampa SCHEDULED della stampante (job, file, bobine) e, se non ne
+/// ha, non gliene dà una nuova. Finisce con «Scongela», quando la stampa
+/// congelata parte o sparisce, con una manutenzione/override, con il file
+/// ritirato o allo scadere di `expiresAt` (tetto di sicurezza).
+model PrinterPlanningFreeze {
+  id String @id @default(uuid()) @db.Uuid
+
+  printerId String  @db.Uuid
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// SCHEDULED primaria al momento del congelamento (null = stampante senza prossima stampa)
+  assignmentId    String? @db.Uuid
+  /// Job di quella SCHEDULED: se il giro gliene mette un altro il congelamento è finito
+  productionJobId String? @db.Uuid
+
+  /// Da dove è partito: SELECTION, VIEW, BULK_SWAP
+  source         String  @db.VarChar(20)
+  frozenByUserId Int?
+  frozenByName   String? @db.VarChar(120)
+
+  frozenAt  DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt DateTime @db.Timestamptz(6)
+
+  /// Chiusura: MANUAL, STARTED, ASSIGNMENT_GONE, JOB_CHANGED, OVERRIDE, FILE_WITHDRAWN, EXPIRED
+  releasedAt       DateTime? @db.Timestamptz(6)
+  releaseReason    String?   @db.VarChar(20)
+  releasedByUserId Int?
+
+  @@index([releasedAt, printerId])
+  @@index([printerId, frozenAt(sort: Desc)])
   @@schema("print-farm")
 }
 
