@@ -288,6 +288,11 @@ model ProductionJob {
   /// Nota: lasciamo `id` UUID come PK per non rompere relazioni/migrazioni; questo è solo un numero sequenziale.
   number             BigInt               @unique @default(autoincrement()) @db.BigInt
   priority           Int                  @default(1) // 1=low, 2=medium, 3=high, 4=critical
+  /// Urgenza manuale dalla pagina Job (15/11): finché il job è aperto lo scheduler
+  /// (legacy e Gantt) lo tratta un livello sopra la critica (P5). Null = non urgente.
+  /// `priority` resta quella dell'ordine (la riscrive update-production-status);
+  /// questo campo non lo tocca nessun cron. Si azzera quando il job si chiude.
+  urgentAt           DateTime?            @db.Timestamptz(6)
   assignedPrinterIds String[]
   estimatedTime      Decimal?             @db.Decimal(12, 2) // Tempo stimato in minuti
   eta                DateTime?            @db.Timestamptz(6)
