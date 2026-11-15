@@ -1259,6 +1259,14 @@ model PrinterAssignment {
   /// aperta e lo scheduler non può riassegnarla né cancellarla (come un QueueTask in-flight).
   /// Rinnovata con heartbeat dal dialog; scade da sola se il browser sparisce.
   reservedUntil          DateTime?  @db.Timestamptz(6)
+  /// P-20 (15/11): il backend lo scrive subito prima di mandare `project_file`. Dopo un
+  /// riavvio del backend una QUEUED con questo valore più vecchio dell'avvio non si
+  /// rimanda in automatico. Azzerato dal trigger a ogni cambio di `status`.
+  startSentAt            DateTime?  @db.Timestamptz(6)
+  /// P-22 (15/11): perché la QUEUED non parte (scheduler backend, scritto solo quando
+  /// cambia) e da quando. Azzerati dal trigger a ogni cambio di `status`.
+  waitingReason          String?
+  waitingSince           DateTime?  @db.Timestamptz(6)
   startedAt             DateTime?  @db.Timestamptz(6) // Inizio stampa effettivo
   completedAt            DateTime?  @db.Timestamptz(6) // Fine stampa
   /// Snapshot immutabile del piano quando il task Gantt viene collegato.
