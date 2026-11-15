@@ -417,6 +417,11 @@ model PrintRun {
   quantitySuccess    Int            @default(0)
   quantityFailed     Int            @default(0)
   status             PrintRunStatus @default(PENDING)
+  /// Motivo di fine di una run FAILED che in realtà è un annullamento (E-3, R-209, 15/11):
+  /// `CANCELLED_ON_PRINTER` (0300-400C / 0500-400E dallo schermo) o `CANCELLED_FROM_APP`
+  /// (stop dato dall'app nei 2 minuti prima). La run resta FAILED (scarico e ristampa urgente
+  /// invariati) ma non conta nell'affidabilità della stampante né nei cruscotti dei falliti.
+  endReason          String?        @db.VarChar(40)
   /// Percentuale di completamento al termine della run (0-100). Salvato alla finalizzazione (COMPLETED/FAILED).
   completionPercent  Int?           @db.SmallInt
   filaments          Item[]
