@@ -2630,6 +2630,44 @@ model KioskDevice {
   @@schema("print-farm")
 }
 
+/// PC di slicing (15/11, R-215): il plugin OrcaSlicer deposita i `.gcode.3mf`
+/// esportati con il token del PC. A DB solo l'hash SHA-256 (hex) del token: si
+/// vede una volta sola, alla creazione, in Impostazioni → Slicer.
+model SlicerDevice {
+  id          String         @id @default(uuid()) @db.Uuid
+  name        String
+  tokenHash   String         @unique
+  enabled     Boolean        @default(true)
+  lastSeenAt  DateTime?      @db.Timestamptz(6)
+  /// `public."User".id` di chi l'ha creato (senza relazione: solo traccia).
+  createdById Int?
+  createdAt   DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
+  uploads     SlicerUpload[]
+
+  @@schema("print-farm")
+}
+
+/// File depositato da un PC di slicing, in attesa del wizard di caricamento.
+/// Non è un file della farm: lo diventa solo quando un utente con sessione
+/// completa il wizard (`/api/mfupload`); poi la riga e l'oggetto si eliminano.
+model SlicerUpload {
+  id          String       @id @default(uuid()) @db.Uuid
+  deviceId    String       @db.Uuid
+  device      SlicerDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  filename    String
+  /// Key nel bucket privato di Print Farm (`slicer-staging/<uuid>/<nome>`).
+  storageKey  String
+  sizeBytes   Int
+  /// Nome del progetto Orca al momento dello slicing (solo indicativo).
+  projectName String?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([deviceId])
+  @@schema("print-farm")
+}
+
 /// Turno vocale su un dispositivo (operatore + snapshot handle).
 model VoiceSession {
   id         String      @id @default(uuid()) @db.Uuid
