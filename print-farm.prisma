@@ -404,7 +404,8 @@ model PrintRun {
 
   /// Identificativo task runtime riportato dalla stampante (NON unico globalmente: può ripetersi tra stampanti e nel tempo).
   /// Va sempre interpretato insieme a `printerId`/`assignment` e ad un timestamp di osservazione (`detectedAt`).
-  taskId Int? @db.SmallInt
+  /// Int (non SmallInt) dal 15/11 (L-4): con MQTT_UNIQUE_TASK_ID l'id è in secondi dal 1970.
+  taskId Int?
 
   /// Nome file riportato dalla stampante (es. `.3mf` o `.gcode`) anche se non presente come `ProjectThreeMFFile`.
   taskFileName String?
