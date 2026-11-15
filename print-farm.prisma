@@ -515,6 +515,11 @@ model Printer {
   /// Sta qui e non su `PrinterAmsSlot` perché uno slot vuoto può non avere riga e l'HT ha righe gemelle.
   outOfServiceAmsSlots     Int[]        @default([])
   pushAllTimeout           Int?
+  /// Versione firmware della stampante (modulo `ota` di `info.get_version`, M-10, 15/11).
+  /// La scrive il backend solo quando cambia; si vede in Impostazioni → Firmware.
+  firmwareVersion          String?      @db.VarChar(40)
+  /// Quando il backend ha visto per la prima volta `firmwareVersion` (cambio di versione).
+  firmwareVersionUpdatedAt DateTime?    @db.Timestamptz(6)
 
   /// Stato runtime dalla stampante (WebSocket) - volatile
   status PrinterStatus @default(OFFLINE)
