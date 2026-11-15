@@ -788,6 +788,8 @@ model PrinterAmsUnit {
   drySubStatus Int?
   /// Minuti rimanenti del ciclo di drying.
   dryTimeMin   Int?
+  /// Il backend tiene l'unità calda durante una stampa (non è asciugatura): fino a quando. Il rilevamento dei cicli esterni la salta (R-221).
+  heatHoldUntil DateTime? @db.Timestamptz(6)
 
   /// Slot AMS appartenenti a questa unità (relazione 1:N opzionale verso `PrinterAmsSlot.amsUnitId`).
   slots                 PrinterAmsSlot[]       @relation("AmsUnitSlots")
