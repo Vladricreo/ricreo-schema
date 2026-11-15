@@ -2611,6 +2611,24 @@ model VoiceDevice {
   @@schema("print-farm")
 }
 
+/// Tablet del kiosk `/dashboard/kiosk` (S-264, A-370, 15/11): il token del
+/// dispositivo dà un token di sola lettura verso il backend stampanti. A DB solo
+/// l'hash SHA-256 (hex) del token, mai il token in chiaro: il link
+/// `/dashboard/kiosk?device=<token>` si vede una volta sola, alla creazione.
+model KioskDevice {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  tokenHash   String    @unique
+  enabled     Boolean   @default(true)
+  lastSeenAt  DateTime? @db.Timestamptz(6)
+  /// `public."User".id` di chi l'ha creato (senza relazione: solo traccia).
+  createdById Int?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@schema("print-farm")
+}
+
 /// Turno vocale su un dispositivo (operatore + snapshot handle).
 model VoiceSession {
   id         String      @id @default(uuid()) @db.Uuid
