@@ -499,6 +499,10 @@ model Printer {
   filaTrackSwitchState     Json?
   /// Ultimo extruder attivo riportato dalla stampante (0 = right/main, 1 = left/auxiliary).
   activeExtruder           Int          @default(0)
+  /// «AMS Filament Backup» (ricarico automatico da uno slot con stessa categoria e colore)
+  /// riportato dalla stampante (`cfg` bit 18, `home_flag` bit 10). Null = mai letto.
+  /// False: il piano bobine non mette riserve anti-runout (B-3, A-335).
+  amsFilamentBackupEnabled Boolean?
   /// Tipo piatto attualmente montato (aggiornamento manuale operatore; usato per compatibilità con i file).
   currentPlateType         PlateType    @default(TEXTURED)
   /// True se la stampante ha il modulo per stampare TPU/TPE installato.
