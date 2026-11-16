@@ -62,6 +62,8 @@ model User {
   /// Operazioni di assemblaggio registrate nel diario (per il revert).
   assemblyJournalEntries    AssemblyJournalEntry[]
   lotInspections            LotInspection[]
+  /// Rettifiche di lotto registrate da questo utente (R-247).
+  lotAdjustments            InventoryLotAdjustment[]
 
   /// Operazioni di raccolta pezzi effettuate da questo utente
   printerHarvests      PrinterHarvest[]      @relation("PrinterHarvests")

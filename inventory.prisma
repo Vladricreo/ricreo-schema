@@ -62,6 +62,9 @@ model Movement {
   /// Permette di annullare uno scarico eliminando esattamente i suoi movimenti.
   harvestId         String?                @db.Uuid
   harvest           PrinterHarvest?        @relation(fields: [harvestId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Rettifiche di lotto create in automatico quando questa uscita superava il
+  /// residuo del suo lotto (R-247). Spariscono se il movimento viene annullato.
+  lotAdjustments    InventoryLotAdjustment[]
 
   /// Audit: operazione di assemblaggio che ha generato questo movimento.
   /// Permette di raggruppare i movimenti per operazione e di revertarla per intero
@@ -155,6 +158,8 @@ model InventoryLot {
   /// Bobine di filamento associate a questo lotto di inventario.
   filamentSpools FilamentSpool[] @relation("InventoryLotFilamentSpools")
   lotInspections LotInspection[]
+  /// Rettifiche di solo lotto (riallineamento e copertura automatica, R-247).
+  adjustments    InventoryLotAdjustment[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -517,6 +522,42 @@ model LotInspection {
   @@index([lotId])
   @@index([inspectedBy])
   @@index([assemblyOrderId])
+  @@schema("inventory")
+}
+
+/// Rettifica di SOLO lotto (R-247, 16/11/2026): sposta pezzi fra lotti della stessa
+/// entità o allinea il residuo di un lotto alla giacenza reale, senza toccare giacenze
+/// (`inStock`, `currentStock`) né movimenti. La sommano `v_inventory_lot_remaining`,
+/// `inventory.lot_stockable_quantity()` e lo stato aperto/chiuso.
+/// - REALIGN: riallineamento del passato (migrazione 20261117000000)
+/// - AUTO_COVER: coppia creata dal trigger `after_movement_lot_cover` quando un'uscita
+///   supera il residuo del lotto; legata al movimento, sparisce se lo si annulla.
+model InventoryLotAdjustment {
+  id         String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lotId      String              @db.Uuid
+  lot        InventoryLot        @relation(fields: [lotId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// Pezzi aggiunti (+) o tolti (−) al residuo del lotto. Mai 0.
+  quantity   Int
+  reason     LotAdjustmentReason
+  movementId String?             @db.Uuid
+  movement   Movement?           @relation(fields: [movementId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// Raggruppa le righe della stessa operazione (coppia AUTO_COVER, giro di riallineamento).
+  batchId    String?             @db.Uuid
+  note       String?
+  byUserId   Int?
+  byUser     User?               @relation(fields: [byUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdAt  DateTime            @default(now()) @db.Timestamptz(6)
+
+  @@index([lotId])
+  @@index([movementId])
+  @@index([batchId])
+  @@schema("inventory")
+}
+
+enum LotAdjustmentReason {
+  REALIGN
+  AUTO_COVER
+
   @@schema("inventory")
 }
 
