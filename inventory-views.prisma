@@ -830,22 +830,47 @@ view VProductLaborTimeStats {
   @@schema("inventory_views")
 }
 
-/// Breakdown tempi/costi per prodotto e operatore: stesso tempo/pezzo ufficiale
-/// dell'ordine (non qty di stage mid-order); quota tempo = sessioni dell'operatore.
+/// Tempi/costi per prodotto, operatore e fase (S-303, 16/11/2026): solo i suoi.
+/// Tempo delle sue sessioni ÷ pezzi registrati da lui nella stessa fase e ordine
+/// (`v_operator_labor_samples`), confrontati con la mediana della stessa fase
+/// (`v_product_phase_labor_stats`). Le fasi non si sommano fra loro come pezzi.
 view VProductLaborByOperator {
-  productId            String   @map("product_id") @db.Uuid
-  operatorId           Int      @map("operator_id")
-  operatorName         String?  @map("operator_name")
-  medianSecondsPerUnit Decimal  @map("median_seconds_per_unit") @db.Decimal(12, 2)
-  avgSecondsPerUnit    Decimal  @map("avg_seconds_per_unit") @db.Decimal(12, 2)
-  medianMinutesPerUnit Decimal  @map("median_minutes_per_unit") @db.Decimal(10, 2)
-  avgMinutesPerUnit    Decimal  @map("avg_minutes_per_unit") @db.Decimal(10, 2)
-  totalUnitsProduced   BigInt   @map("total_units_produced")
-  totalOperations      Int      @map("total_operations")
-  lastAssemblyAt       DateTime @map("last_assembly_at") @db.Timestamptz(6)
+  productId                    String                @map("product_id") @db.Uuid
+  operatorId                   Int                   @map("operator_id")
+  operatorName                 String?               @map("operator_name")
+  medianSecondsPerUnit         Decimal               @map("median_seconds_per_unit") @db.Decimal(12, 2)
+  avgSecondsPerUnit            Decimal               @map("avg_seconds_per_unit") @db.Decimal(12, 2)
+  medianMinutesPerUnit         Decimal               @map("median_minutes_per_unit") @db.Decimal(10, 2)
+  avgMinutesPerUnit            Decimal               @map("avg_minutes_per_unit") @db.Decimal(10, 2)
+  totalUnitsProduced           BigInt                @map("total_units_produced")
+  totalOperations              Int                   @map("total_operations")
+  lastAssemblyAt               DateTime              @map("last_assembly_at") @db.Timestamptz(6)
+  medianLaborCostPerUnit       Decimal?              @map("median_labor_cost_per_unit") @db.Decimal(12, 4)
+  avgLaborCostPerUnit          Decimal?              @map("avg_labor_cost_per_unit") @db.Decimal(12, 4)
+  operationType                AssemblyOperationType @map("operation_type")
+  totalSeconds                 Decimal               @map("total_seconds") @db.Decimal(14, 0)
+  phaseMedianMinutesPerUnit    Decimal?              @map("phase_median_minutes_per_unit") @db.Decimal(10, 2)
+  phaseMedianLaborCostPerUnit  Decimal?              @map("phase_median_labor_cost_per_unit") @db.Decimal(12, 4)
+  phaseSampleSize              Int?                  @map("phase_sample_size")
 
-  @@unique([productId, operatorId])
+  @@unique([productId, operatorId, operationType])
   @@map("v_product_labor_by_operator")
+  @@schema("inventory_views")
+}
+
+/// Mediana del tempo/pezzo per prodotto e fase su tutti i campioni operatore
+/// (S-303): termine di confronto dei tempi per operatore.
+view VProductPhaseLaborStats {
+  productId              String                @map("product_id") @db.Uuid
+  operationType          AssemblyOperationType @map("operation_type")
+  medianSecondsPerUnit   Decimal               @map("median_seconds_per_unit") @db.Decimal(12, 2)
+  medianMinutesPerUnit   Decimal               @map("median_minutes_per_unit") @db.Decimal(10, 2)
+  medianLaborCostPerUnit Decimal?              @map("median_labor_cost_per_unit") @db.Decimal(12, 4)
+  sampleSize             Int                   @map("sample_size")
+  operatorCount          Int                   @map("operator_count")
+
+  @@unique([productId, operationType])
+  @@map("v_product_phase_labor_stats")
   @@schema("inventory_views")
 }
 
