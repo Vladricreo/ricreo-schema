@@ -488,7 +488,7 @@ model LotInspection {
   result LotInspectionResult
   notes  String?
 
-  /// Da dove nasce il controllo (R-241, 16/11): registrato a mano, alla chiusura
+  /// Da dove nasce il controllo (R-243, 16/11): registrato a mano, alla chiusura
   /// dell'assemblaggio, o ricostruito dalle registrazioni originali (scarico, sessione
   /// di assemblaggio). Per i ricostruiti `inspectedAt`/`inspectedBy` sono quelli
   /// dell'evento originale e `createdAt` è la data di registrazione retroattiva.

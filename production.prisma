@@ -184,7 +184,7 @@ model AssemblyOrder {
   operations         AssemblyOperation[]
   /// Diario delle operazioni eseguite su questo ordine (per il revert).
   journalEntries     AssemblyJournalEntry[]
-  /// Controlli qualità registrati alla chiusura dell'ordine (R-241).
+  /// Controlli qualità registrati alla chiusura dell'ordine (R-243).
   lotInspections     LotInspection[]
   /// Righe picking per questo ordine di assemblaggio.
   pickingLines       PickingLine[]
@@ -233,7 +233,7 @@ model AssemblyOperation {
   // --- TRACCIABILITÀ ---
   lotId String?       @db.Uuid
   lot   InventoryLot? @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  /// Controlli qualità ricostruiti da questa sessione (R-241).
+  /// Controlli qualità ricostruiti da questa sessione (R-243).
   lotInspections LotInspection[]
 
   notes    String?
