@@ -700,6 +700,17 @@ model Printer {
   /// Bozze swap/runout precompilate (preparazione + voce).
   spoolSwapDrafts        SpoolSwapDraft[]
 
+  /// Scheda stampante per lo storico manutenzioni (A-406, 16/11).
+  /// Data di acquisto: se manca la pagina mostra `createdAt` (quando è stata inserita).
+  purchasedAt         DateTime? @db.Date
+  /// Prezzo d'acquisto (EUR, IVA esclusa) e fornitore, facoltativi.
+  purchasePrice       Decimal?  @db.Decimal(12, 2)
+  purchaseSupplier    String?   @db.VarChar(200)
+  /// Fattura d'acquisto nel bucket print-farm (`printers/<id>/invoice/...`).
+  purchaseInvoiceKey  String?
+  purchaseInvoiceName String?   @db.VarChar(255)
+  purchaseInvoiceAt   DateTime? @db.Timestamptz(6)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
