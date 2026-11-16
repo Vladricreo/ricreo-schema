@@ -701,6 +701,10 @@ model Printer {
   spoolSwapDrafts        SpoolSwapDraft[]
   /// Moduli hardware riportati da `info.get_version` (A-410).
   hardwareModules        PrinterHardwareModule[] @relation("PrinterHardwareModules")
+  /// Documenti della singola stampante (fattura, garanzia, …) — A-413.
+  documents              PrinterDocument[]       @relation("PrinterDocuments")
+  /// Azioni correttive sui problemi ricorrenti — A-413.
+  correctiveActions      MaintenanceCorrectiveAction[] @relation("PrinterCorrectiveActions")
 
   /// Scheda stampante per lo storico manutenzioni (A-406, 16/11).
   /// Data di acquisto: se manca la pagina mostra `createdAt` (quando è stata inserita).
@@ -771,6 +775,45 @@ model PrinterHeartbeat {
   /// Ultimo messaggio WebSocket (Klipper).
   lastWssAt  DateTime? @db.Timestamptz(6)
 
+  @@schema("print-farm")
+}
+
+/// Documento di una stampante o di un modello (A-413, 16/11): fattura, manuale, dichiarazione CE,
+/// garanzia, altro. Esattamente uno fra `printerId` e `printerModelId` (CHECK nella migrazione):
+/// manuale e CE di solito valgono per tutte le stampanti del modello.
+/// File nel bucket print-farm (`printers/<id>/docs/…` o `printer-models/<id>/docs/…`).
+/// Non si cancella mai: «Togli» imposta `deletedAt` (storico per gli audit).
+/// La fattura la vedono solo gli admin; caricare e togliere è solo per gli admin.
+model PrinterDocument {
+  id             String        @id @default(uuid()) @db.Uuid
+  printerId      String?       @db.Uuid
+  printer        Printer?      @relation("PrinterDocuments", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  printerModelId Int?
+  printerModel   PrinterModel? @relation("PrinterModelDocuments", fields: [printerModelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// INVOICE, MANUAL, CE_DECLARATION, WARRANTY, OTHER (validato nel codice).
+  kind         String    @db.VarChar(20)
+  title        String    @db.VarChar(200)
+  /// File caricato (bucket) oppure link esterno (es. pagina della wiki Bambu): esattamente uno dei due.
+  fileKey      String?
+  fileName     String?   @db.VarChar(255)
+  contentType  String?   @db.VarChar(100)
+  sizeBytes    Int?
+  externalUrl  String?   @db.VarChar(1000)
+  /// Data del documento (es. data fattura) e scadenza (es. fine garanzia), facoltative.
+  documentDate DateTime? @db.Date
+  validUntil   DateTime? @db.Date
+  uploadedBy   String?   @db.VarChar(120)
+  uploadedById Int?
+
+  deletedAt DateTime? @db.Timestamptz(6)
+  deletedBy String?   @db.VarChar(120)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([printerId, deletedAt])
+  @@index([printerModelId, deletedAt])
   @@schema("print-farm")
 }
 
@@ -921,6 +964,8 @@ model PrinterModel {
   sliceJobs             SliceJob[]                  @relation("PrinterModelSliceJobs")
   /// Fattori di calibrazione appresi per file e materiale.
   schedulerCalibrations SchedulerCalibration[]
+  /// Documenti validi per tutte le stampanti del modello (manuale, dichiarazione CE) — A-413.
+  documents             PrinterDocument[]           @relation("PrinterModelDocuments")
 
   @@schema("print-farm")
 }
