@@ -1690,6 +1690,8 @@ model PrinterHarvest {
   /// deve indovinare i movimenti per (parte, utente, finestra temporale) e può cancellare
   /// quelli di scarichi diversi avvenuti negli stessi secondi (tipico dello scarico massivo).
   movements Movement[]
+  /// Controlli qualità dei lotti ricostruiti da questo scarico (R-241).
+  lotInspections LotInspection[]
 
   // === Lotto ===
   /// Lotto di produzione associato
