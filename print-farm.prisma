@@ -699,6 +699,8 @@ model Printer {
   harvestDrafts          HarvestDraft[]
   /// Bozze swap/runout precompilate (preparazione + voce).
   spoolSwapDrafts        SpoolSwapDraft[]
+  /// Moduli hardware riportati da `info.get_version` (A-410).
+  hardwareModules        PrinterHardwareModule[] @relation("PrinterHardwareModules")
 
   /// Scheda stampante per lo storico manutenzioni (A-406, 16/11).
   /// Data di acquisto: se manca la pagina mostra `createdAt` (quando è stata inserita).
@@ -769,6 +771,42 @@ model PrinterHeartbeat {
   /// Ultimo messaggio WebSocket (Klipper).
   lastWssAt  DateTime? @db.Timestamptz(6)
 
+  @@schema("print-farm")
+}
+
+/// Modulo hardware di una stampante come lo riporta `info.get_version` (A-410, 16/11):
+/// scheda principale, testina, AMS, FTS, ecc., con numero di serie e versioni.
+/// Una riga per (stampante, nome modulo, seriale): se il seriale cambia nasce una riga nuova
+/// e la vecchia resta con `isCurrent = false` e `removedAt` (pezzo sostituito, storico per gli audit).
+/// La scrive il backend (`services/printer_hardware_modules.js`) solo quando la lista cambia.
+model PrinterHardwareModule {
+  id        String  @id @default(uuid()) @db.Uuid
+  printerId String  @db.Uuid
+  printer   Printer @relation("PrinterHardwareModules", fields: [printerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Nome firmware del modulo (es. `ota`, `mc`, `th`, `ahb`, `n3f/0`, `n3s/128`).
+  name         String  @db.VarChar(64)
+  /// Seriale riportato; stringa vuota se il modulo non ne ha (resta nella chiave unica).
+  serialNumber String  @default("") @db.VarChar(80)
+  hwVersion    String? @db.VarChar(80)
+  swVersion    String? @db.VarChar(80)
+  productName  String? @db.VarChar(120)
+  projectName  String? @db.VarChar(120)
+  /// Voce completa di `info.module[]`, per campi che oggi non usiamo.
+  raw          Json?   @db.JsonB
+
+  /// Presente nell'ultimo `get_version` della stampante.
+  isCurrent   Boolean   @default(true)
+  firstSeenAt DateTime  @default(now()) @db.Timestamptz(6)
+  lastSeenAt  DateTime  @default(now()) @db.Timestamptz(6)
+  /// Quando non è più comparso (sostituito o tolto).
+  removedAt   DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([printerId, name, serialNumber])
+  @@index([printerId, isCurrent])
   @@schema("print-farm")
 }
 
