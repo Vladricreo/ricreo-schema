@@ -2644,6 +2644,52 @@ model HarvestDraft {
   @@schema("print-farm")
 }
 
+/// Tempo di scarico (17/11): un giro del bulk, o uno scarico dalla pagina di
+/// dettaglio o dal dialog, dall'apertura alla conferma. Il timer parte quando si
+/// apre il bulk (o la pagina) e si ferma alla conferma dello scarico: lo scarico
+/// stesso dice che il lavoro è finito, nessun tocco «fatto» in più.
+/// Le ore sono già corrette con l'orologio del server. Le statistiche (mediana
+/// per stampante, giri fuori media valutati alla media, costo) si calcolano in
+/// lettura (`lib/harvest/harvest-timing-stats.ts`): qui solo il dato grezzo.
+model HarvestTimingSession {
+  /// Generato dal tablet all'apertura: un secondo invio dello stesso giro aggiorna la riga.
+  id String @id @db.Uuid
+
+  /// Operatore che ha confermato (User.id, schema public; nessuna FK per non toccare User).
+  userId Int
+
+  /// BULK | DETAIL | DIALOG
+  source String @db.VarChar(16)
+
+  openedAt    DateTime @db.Timestamptz(6)
+  submittedAt DateTime @db.Timestamptz(6)
+
+  /// Millisecondi con la pagina nascosta (schermo spento, altra app): solo diagnosi,
+  /// non tolti dal tempo perché si scarica anche con il tablet appoggiato.
+  hiddenMs Int @default(0)
+
+  /// Scarichi confermati in questo giro. Senza FK: uno scarico annullato sparisce
+  /// da PrinterHarvest e le statistiche contano solo quelli che esistono ancora.
+  harvestIds String[] @db.Uuid
+
+  printerCount  Int @default(0)
+  partsTotal    Int @default(0)
+  partsRejected Int @default(0)
+
+  /// Corridoi delle stampanti del giro.
+  aisleCodes String[] @default([])
+
+  /// Differenza orologio server − tablet al momento dell'invio (ms).
+  clockSkewMs Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([submittedAt])
+  @@index([userId, submittedAt])
+  @@schema("print-farm")
+}
+
 /// Bozza swap/runout: lista di prelievo, confermata in voce solo con tag.
 model SpoolSwapDraft {
   id String @id @default(uuid()) @db.Uuid
