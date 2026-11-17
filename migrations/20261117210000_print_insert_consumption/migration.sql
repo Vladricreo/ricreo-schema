@@ -179,16 +179,20 @@ BEGIN
     LEFT JOIN "print-farm"."ProductionJob" pj ON pj.id = pp.job_id
     LEFT JOIN "inventory"."ProductOrder" po ON po.id = pj."productOrderId"
    WHERE c."skuId" IS NULL OR c."skuId" = po."skuId"
+  -- Già esistente: si ricollega sempre allo scarico (anche rifatto dopo un annullo,
+  -- così resta in Cronologia); pezzi e proposta cambiano solo se non è confermata.
   ON CONFLICT ("assignmentId", "productToComponentId") DO UPDATE
      SET "harvestId"   = EXCLUDED."harvestId",
          "odetteId"    = EXCLUDED."odetteId",
          "harvestedAt" = EXCLUDED."harvestedAt",
-         "piecesCount" = EXCLUDED."piecesCount",
-         "perPiece"    = EXCLUDED."perPiece",
-         "proposedQty" = EXCLUDED."proposedQty",
+         "piecesCount" = CASE WHEN "PrintInsertConsumption"."confirmedQty" IS NULL
+                              THEN EXCLUDED."piecesCount" ELSE "PrintInsertConsumption"."piecesCount" END,
+         "perPiece"    = CASE WHEN "PrintInsertConsumption"."confirmedQty" IS NULL
+                              THEN EXCLUDED."perPiece" ELSE "PrintInsertConsumption"."perPiece" END,
+         "proposedQty" = CASE WHEN "PrintInsertConsumption"."confirmedQty" IS NULL
+                              THEN EXCLUDED."proposedQty" ELSE "PrintInsertConsumption"."proposedQty" END,
          "harvestReverted" = false,
-         "updatedAt"   = now()
-   WHERE "PrintInsertConsumption"."confirmedQty" IS NULL;
+         "updatedAt"   = now();
 
   RETURN NEW;
 END;
