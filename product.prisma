@@ -2292,8 +2292,116 @@ model MessagingSentReply {
   userName        String?
   /// Inizio del testo inviato: abbina il messaggio se il provider cambia l'id.
   textPreview     String
+  /// Chi ha scritto la risposta: `operator` (persona) oppure `ai` (bot).
+  authorKind      String   @default("operator")
   sentAt          DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([channel, conversationKey], map: "MessagingSentReply_conversation")
+  @@schema("product")
+}
+
+/// Conversazione di Messaggistica salvata dal cron `messaggistica` (ogni 5 minuti):
+/// Amazon e Help arrivano da Gmail, eBay dalla Message API. Le pagine leggono da qui,
+/// non dalle piattaforme.
+model MessagingConversation {
+  id            String             @id @default(cuid())
+  /// amazon | help | ebay
+  channel       String
+  /// eBay: FROM_MEMBERS | FROM_EBAY. Vuoto per Gmail.
+  kind          String             @default("")
+  /// Chiave del provider: `buyer:…` / `name:…` / `thread:…` per Gmail, conversationId per eBay.
+  externalId    String
+  title         String
+  preview       String             @default("")
+  lastMessageAt DateTime?          @db.Timestamptz(6)
+  /// eBay: messaggi non letti secondo eBay. Gmail: lo stato letto sta in AmazonBuyerConversationRead.
+  unreadCount   Int                @default(0)
+  /// eBay: stato della conversazione (ACTIVE, ARCHIVED…).
+  status        String?
+  /// Numeri d'ordine collegati (Amazon: citati nelle mail; eBay: ordini dell'acquirente sull'inserzione).
+  orderIds      String[]           @default([])
+  /// Vista della conversazione senza i messaggi, nella forma che le API restituiscono.
+  data          Json
+  /// Impronta di vista + messaggi: se non cambia il cron non riscrive nulla.
+  contentHash   String
+  /// eBay: impronta della riga in elenco; se non cambia i messaggi non si rileggono.
+  sourceHash    String?
+  createdAt     DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime           @updatedAt @db.Timestamptz(6)
+  messages      MessagingMessage[]
+
+  @@unique([channel, kind, externalId], map: "MessagingConversation_external")
+  @@index([channel, kind, lastMessageAt], map: "MessagingConversation_recent")
+  @@schema("product")
+}
+
+/// Messaggio di una conversazione salvata: del cliente, nostro (operatore o AI) o
+/// scritto fuori dalla console (Seller Central, sito eBay, Gmail).
+model MessagingMessage {
+  id             String                @id @default(cuid())
+  conversationId String
+  conversation   MessagingConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// Id del provider: Gmail message id, eBay messageId.
+  externalId     String
+  /// Thread Gmail del messaggio.
+  threadId       String?
+  /// Ordine del messaggio dentro la conversazione.
+  position       Int
+  /// inbound | outbound
+  direction      String
+  /// customer | operator | ai | external (risposta nostra scritta fuori dalla console)
+  authorKind     String
+  authorUserId   Int?
+  authorName     String?
+  body           String
+  sentAt         DateTime?             @db.Timestamptz(6)
+  /// Messaggio nella forma che le API restituiscono (allegati, intestazioni…).
+  data           Json
+  createdAt      DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(6)
+
+  @@unique([conversationId, externalId], map: "MessagingMessage_external")
+  @@index([conversationId, position], map: "MessagingMessage_order")
+  @@schema("product")
+}
+
+/// Thread Gmail già letto: il cron rilegge da Gmail solo quelli con `historyId` cambiato
+/// e da qui ricompone le conversazioni per acquirente.
+model MessagingGmailThread {
+  id            String    @id @default(cuid())
+  /// amazon | help
+  mailbox       String
+  threadId      String
+  historyId     String
+  lastMessageAt DateTime? @db.Timestamptz(6)
+  /// Thread normalizzato (`BuyerEmailThread`) con i suoi messaggi.
+  data          Json
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([mailbox, threadId], map: "MessagingGmailThread_thread")
+  @@index([mailbox, lastMessageAt], map: "MessagingGmailThread_recent")
+  @@schema("product")
+}
+
+/// Stato della sincronizzazione per canale (`amazon`, `help`, `ebay:FROM_MEMBERS`,
+/// `ebay:FROM_EBAY`) più la riga `cron` che fa da lock tra due giri.
+model MessagingSyncState {
+  key            String    @id
+  /// Cresce a ogni scrittura del canale: le API lo usano per dire «niente di nuovo».
+  version        Int       @default(0)
+  /// Gmail: thread cambiati ma conversazioni non ancora ricomposte (giro interrotto).
+  pendingRebuild Boolean   @default(false)
+  /// Riga `cron`: giro in corso fino a questo momento.
+  lockedUntil    DateTime? @db.Timestamptz(6)
+  lastRunAt      DateTime? @db.Timestamptz(6)
+  lastOkAt       DateTime? @db.Timestamptz(6)
+  /// Gmail: ultima rilettura dell'intera finestra (le altre guardano solo gli ultimi giorni).
+  lastFullAt     DateTime? @db.Timestamptz(6)
+  lastError      String?
+  /// eBay: username del seller, scope e sorgente dell'ultimo elenco.
+  info           Json?
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+
   @@schema("product")
 }
