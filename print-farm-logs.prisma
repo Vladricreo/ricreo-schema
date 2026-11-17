@@ -167,6 +167,16 @@ model PrinterMaintenancePlan {
   /// Giorni prima della scadenza in cui inviare il reminder/notifica.
   remindBeforeDays Int @default(3)
 
+  /// --- SOGLIE DI USO (R-266, 17/11) ---
+  /// Il piano scade alla PRIMA soglia raggiunta fra calendario (ricorrenza),
+  /// ore di stampa e kg di materiale (`lib/maintenance/usage.ts`).
+  /// Ore di stampa effettive (tutte le run: completate, fallite, manuali) dall'inizio del conteggio. NULL = nessuna soglia.
+  usagePrintHours    Int?
+  /// Soglie a materiale: [{ kg, families }] (`families` vuoto = tutti i materiali; es. ABRASIVE, ABS_ASA).
+  usageMaterialRules Json?
+  /// Inizio del conteggio ore/kg: riparte a ogni completamento e annullamento. NULL = ultimo completamento, altrimenti creazione del piano.
+  usageCountFrom     DateTime? @db.Timestamptz(6)
+
   /// Pianificazione attiva (se false, non genera nuove occorrenze ma resta visibile).
   active Boolean @default(true)
 
