@@ -165,6 +165,8 @@ model InventoryLot {
   lotInspections LotInspection[]
   /// Rettifiche di solo lotto (riallineamento e copertura automatica, R-247).
   adjustments    InventoryLotAdjustment[]
+  /// Costo pagato per il lotto, dalle fatture collegate all'ordine (R-258).
+  cost           InventoryLotCost?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -537,6 +539,41 @@ model LotInspection {
 /// - REALIGN: riallineamento del passato (migrazione 20261117000000)
 /// - AUTO_COVER: coppia creata dal trigger `after_movement_lot_cover` quando un'uscita
 ///   supera il residuo del lotto; legata al movimento, sparisce se lo si annulla.
+/// Costo pagato per un lotto d'acquisto, calcolato SOLO dalle fatture di Finance collegate
+/// all'ordine d'acquisto (R-258, 17/11/2026). Merce netta di IVA, meno sconti, più quote di
+/// spedizione, dazi e spese extra ripartite fra i lotti in proporzione al valore della merce.
+/// Un lotto senza fattura collegata non ha riga. Si ricalcola quando cambiano le fatture o le
+/// ricezioni dell'ordine (lib/finance-invoices/lot-costs.ts).
+model InventoryLotCost {
+  lotId           String       @id @db.Uuid
+  lot             InventoryLot @relation(fields: [lotId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// Pezzi del lotto su cui si divide il costo (ingresso del lotto).
+  quantity        Int
+  /// Merce del lotto, netta di IVA, prima degli sconti.
+  goodsCost       Decimal      @db.Decimal(14, 4)
+  /// Sconti della fattura attribuiti al lotto (positivo, si sottrae).
+  discount        Decimal      @default(0) @db.Decimal(14, 4)
+  shippingCost    Decimal      @default(0) @db.Decimal(14, 4)
+  dutyCost        Decimal      @default(0) @db.Decimal(14, 4)
+  /// Commissioni, contributi (CONAI), bolli e altre spese della fattura.
+  extraCost       Decimal      @default(0) @db.Decimal(14, 4)
+  /// goodsCost − discount + shippingCost + dutyCost + extraCost.
+  totalCost       Decimal      @db.Decimal(14, 4)
+  unitCost        Decimal      @db.Decimal(14, 6)
+  currency        String       @default("EUR")
+  /// righe = merce dalle righe della fattura (XML) abbinate all'articolo;
+  /// totale = totale della fattura diviso fra i lotti per valore d'ordine (PDF senza righe).
+  basis           String
+  purchaseOrderId String?      @db.Uuid
+  invoiceNumbers  String[]     @default([])
+  /// Dettaglio del calcolo (fatture, righe usate, quote).
+  detail          Json?
+  computedAt      DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([purchaseOrderId])
+  @@schema("inventory")
+}
+
 model InventoryLotAdjustment {
   id         String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   lotId      String              @db.Uuid
