@@ -77,6 +77,10 @@ model Movement {
   packagingRefundShipmentId String?   @db.Uuid
   packagingRefundShipment   Shipment? @relation("PackagingRefundMovement", fields: [packagingRefundShipmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Conferma dei corredi inseriti in stampa (R-264) che ha creato questo movimento.
+  printInsertConsumptionId String?                 @db.Uuid
+  printInsertConsumption   PrintInsertConsumption? @relation(fields: [printInsertConsumptionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   @@index([productPartId])
   @@index([assemblyStageId])
   @@index([productId])
@@ -100,6 +104,7 @@ model Movement {
   @@index([harvestId])
   @@index([journalEntryId])
   @@index([packagingRefundShipmentId])
+  @@index([printInsertConsumptionId])
   @@schema("inventory")
 }
 

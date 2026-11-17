@@ -1378,6 +1378,8 @@ model PrinterAssignment {
 
   /// Operazioni di raccolta pezzi associate a questa assegnazione
   harvests PrinterHarvest[]
+  /// Corredi inseriti in stampa da confermare/confermati (R-264).
+  printInsertConsumptions PrintInsertConsumption[]
   /// Scarichi annullati di questa assegnazione
   harvestReverts PrinterHarvestRevert[]
   /// Bozza scarico corrente (una per assignment attivo).
@@ -1740,6 +1742,8 @@ model PrinterHarvest {
   movements Movement[]
   /// Controlli qualità dei lotti ricostruiti da questo scarico (R-243).
   lotInspections LotInspection[]
+  /// Corredi inseriti in stampa nati da questo scarico (R-264).
+  printInsertConsumptions PrintInsertConsumption[]
 
   // === Lotto ===
   /// Lotto di produzione associato
@@ -2905,5 +2909,59 @@ model DataValidationSnapshot {
 
   @@index([capturedAt])
   @@index([checkId, capturedAt])
+  @@schema("print-farm")
+}
+
+/// R-264: corredi inseriti nel pezzo durante la pausa per inserimento.
+/// Una riga per stampa × riga distinta (`ProductToComponent.insertedAtPrint`),
+/// creata dal trigger su `PrinterHarvest` allo scarico. L'operatore la conferma
+/// in Preparazione: la conferma crea il movimento USO (giacenza dal trigger movimenti).
+model PrintInsertConsumption {
+  id String @id @default(uuid()) @db.Uuid
+
+  assignmentId String            @db.Uuid
+  assignment   PrinterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Scarico che l'ha creata; null se lo scarico è stato annullato dopo la conferma.
+  harvestId String?         @db.Uuid
+  harvest   PrinterHarvest? @relation(fields: [harvestId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// True se lo scarico è stato annullato dopo la conferma (i corredi restano consumati).
+  harvestReverted Boolean @default(false)
+
+  productToComponentId String?             @db.Uuid
+  productToComponent   ProductToComponent? @relation(fields: [productToComponentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Copie al momento dello scarico (storico stabile anche se la distinta cambia).
+  productPartId String    @db.Uuid
+  itemSpecId    String    @db.Uuid
+  productId     String?   @db.Uuid
+  productOrderId String?  @db.Uuid
+  printerId     String?   @db.Uuid
+  odetteId      String?   @db.Uuid
+  harvestedAt   DateTime? @db.Timestamptz(6)
+
+  /// Pezzi della parte nello scarico (buoni + scarti).
+  piecesCount Int    @default(0)
+  /// Corredi per pezzo = ProductToComponent.quantity / ProductPart.quantityNeeded.
+  perPiece    Float  @default(1)
+  /// Proposta = round(piecesCount × perPiece).
+  proposedQty Int    @default(0)
+
+  /// Articolo scelto e quantità confermata (null = da confermare; 0 ammesso).
+  itemId            String?   @db.Uuid
+  confirmedQty      Int?
+  confirmedAt       DateTime? @db.Timestamptz(6)
+  confirmedByUserId Int?
+  note              String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  movements Movement[]
+
+  @@unique([assignmentId, productToComponentId])
+  @@index([confirmedQty])
+  @@index([harvestId])
+  @@index([createdAt(sort: Desc)])
   @@schema("print-farm")
 }

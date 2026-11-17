@@ -358,6 +358,8 @@ model ProductPart {
   materials                Item[]                    @relation("ItemToItemPart")
   /// Distinta base (BOM) della parte: materiali e grammi per singola parte.
   materialBreakdown        ProductPartMaterial[]
+  /// Componenti del prodotto che si inseriscono in questa parte durante la stampa (R-264).
+  insertComponents         ProductToComponent[]      @relation("ComponentInsertPart")
 
   OdetteContent       OdetteContent[]
   pickingLines        PickingLine[]
@@ -910,6 +912,18 @@ model ProductToComponent {
   quantity Int @default(1)
   /// Ordine/precedenza nei componenti del prodotto (0 = prima scelta).
   priority Int @default(0)
+
+  /// R-264: il componente si mette nel pezzo durante la pausa per inserimento.
+  /// Non si consuma in assemblaggio: lo conferma l'operatore in Preparazione (PF)
+  /// dopo lo scarico, con `quantity / insertPart.quantityNeeded` corredi per pezzo.
+  insertedAtPrint      Boolean   @default(false)
+  /// Parte stampata in cui va il componente (obbligatoria se `insertedAtPrint`).
+  insertPartId         String?   @db.Uuid
+  /// Quando è stato acceso `insertedAtPrint` (passaggio dei pezzi già stampati).
+  insertedAtPrintSince DateTime? @db.Timestamptz(6)
+
+  insertPart              ProductPart?             @relation("ComponentInsertPart", fields: [insertPartId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  printInsertConsumptions PrintInsertConsumption[]
 
   itemSpec      ItemSpec       @relation(fields: [itemSpecId], references: [id], onDelete: Restrict)
   product       Product        @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
