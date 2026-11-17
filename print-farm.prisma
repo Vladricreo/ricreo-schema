@@ -1421,6 +1421,9 @@ model PrinterAssignment {
   /// per la prima pausa di questa assegnazione (file con `requiresAdditionalInsert = true`).
   /// Evita di ripetere il messaggio dedicato sulle pause successive della stessa stampa.
   insertPauseNoticeShown Boolean @default(false)
+  /// Ora della prima pausa registrata: ogni schermo che la segnala entro 10 minuti
+  /// riceve `isFirst` e dice «in pausa per inserimento» (non solo il più veloce).
+  insertPauseNoticeAt    DateTime? @db.Timestamptz(6)
 
   // === Materiale ===
   /// Categoria materiale richiesto dal file (es. "PETG", "PLA")
