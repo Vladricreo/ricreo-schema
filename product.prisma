@@ -2405,3 +2405,74 @@ model MessagingSyncState {
 
   @@schema("product")
 }
+
+/// Bozza di risposta preparata dall'AI per una conversazione Amazon o eBay: il cron
+/// `messaggistica` la genera quando arriva un messaggio del cliente, l'operatore la rivede
+/// e la invia (nessuna risposta parte da sola). Una riga per generazione: la bozza corrente
+/// della conversazione è la più recente.
+model MessagingAiDraft {
+  id                String    @id @default(cuid())
+  /// amazon | ebay
+  channel           String
+  /// Stessa chiave di MessagingConversation.externalId (`buyer:…` Amazon, conversationId eBay).
+  conversationKey   String
+  /// generating | ready | stale | cancelled | failed
+  status            String
+  /// auto (cron) | manual (operatore)
+  trigger           String    @default("auto")
+  /// Operatore che ha chiesto la generazione a mano.
+  requestedBy       String?
+  /// Id dell'ultimo messaggio del cliente su cui la bozza è basata.
+  basedOnMessageId  String?
+  replyText         String?
+  /// Anteprima in italiano, se il cliente scrive in un'altra lingua.
+  replyPreviewIt    String?
+  customerLanguage  String?
+  model             String?
+  inputTokens       Int?
+  cachedInputTokens Int?
+  outputTokens      Int?
+  reasoningTokens   Int?
+  /// Motivo dell'errore (status failed).
+  error             String?
+  /// Esito finale: sent_unchanged | sent_edited | superseded (nuovo messaggio o risposta
+  /// scritta altrove) | cancelled | failed.
+  outcome           String?
+  /// Somiglianza 0–1 tra bozza e risposta inviata.
+  outcomeSimilarity Float?
+  /// Operatore che ha inviato la risposta.
+  outcomeBy         String?
+  outcomeAt         DateTime? @db.Timestamptz(6)
+  completedAt       DateTime? @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([channel, conversationKey, createdAt], map: "MessagingAiDraft_conversation")
+  @@index([status, createdAt], map: "MessagingAiDraft_status")
+  @@schema("product")
+}
+
+/// «Nota appresa»: regola generale proposta dall'AI confrontando una bozza con la risposta
+/// inviata dall'operatore. Entra nel prompt solo dopo l'approvazione di un operatore.
+/// Non contiene mai testo del cliente ed è separata dal prompt modificabile (QualityAiPrompt).
+model MessagingAiNote {
+  id            String    @id @default(cuid())
+  text          String
+  /// pending | active | discarded | disabled
+  status        String    @default("pending")
+  /// amazon | ebay; null = vale per tutti i canali.
+  channel       String?
+  sourceChannel String?
+  sourceKey     String?
+  sourceDraftId String?
+  /// Operatore che ha inviato la risposta da cui nasce la nota.
+  sentBy        String?
+  /// Operatore che ha approvato, scartato o disattivato la nota.
+  decidedBy     String?
+  decidedAt     DateTime? @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt], map: "MessagingAiNote_status")
+  @@schema("product")
+}
