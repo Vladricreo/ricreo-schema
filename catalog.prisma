@@ -955,6 +955,10 @@ enum ItemType {
 enum AssemblyStageType {
   /// DEPRECATO: non usare. La disponibilità "da parti" viene calcolata virtualmente.
   RAW
+  /// Pulizia dei pezzi stampati prima dell'assemblaggio (R-276, 18/11/2026).
+  /// Facoltativa, sempre prima fase del prodotto. Non ha giacenza propria: i pezzi
+  /// restano parti nella loro odetta e si segnano puliti in OdetteContent.cleanedQuantity.
+  CLEANING
   ASSEMBLED // sotto-assieme assemblato
   FIRST_STAGE // prima fase di assemblaggio prodotto con packaging primario
   SECOND_STAGE // prodotto finito con packaging primario e secondario

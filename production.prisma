@@ -332,6 +332,7 @@ enum AssemblyJournalKind {
   SKU_COMPLETE // Chiusura SKU: WIP finito -> stock vendibile
   SCRAP // Scarto di WIP da una fase
   REVERT // Annullamento di un'altra entry
+  CLEAN // Pulizia di pezzi nelle odette (R-276): puliti + scarti
 
   @@schema("inventory")
 }
@@ -491,6 +492,11 @@ model OdetteContent {
 
   /// Quantità disponibile fisicamente nella odette (non prenotata)
   quantity Int
+
+  /// R-276: pezzi della riga già puliti (fase Pulizia), da 0 a `quantity`.
+  /// Solo righe parte (PartId). Un trigger lo riporta entro `quantity` quando la
+  /// riga cala; uno scarico che aggiunge pezzi lascia invariati i puliti.
+  cleanedQuantity Int @default(0)
 
   /// Opzionale: associazione diretta a uno SKU (FBA/FBM) per distinguere i pezzi già allocati
   skuId String? @db.Uuid
@@ -701,6 +707,7 @@ model OdetteLocationPreference {
 
 enum AssemblyOperationType {
   PICKING // Collezione parti
+  CLEANING // Pulizia dei pezzi stampati (R-276): quantità = pezzi (parti) puliti
   ASSEMBLY // Assemblaggio vero e proprio
   PRIMARY_PACKAGING // Impacchettamento primario
   SECONDARY_PACKAGING // Impacchettamento secondario
