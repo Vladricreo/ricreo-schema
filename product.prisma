@@ -2167,6 +2167,11 @@ model AmazonBuyerConversationRead {
   amazonClosedByName   String?
   /// Ultimo inbound al momento della chiusura: un nuovo messaggio riapre il caso.
   amazonClosedInboundMessageId String?
+  /// Conversazione chiusa a mano in console ("gestita"): esce da "Aperte".
+  closedAt             DateTime? @db.Timestamptz(6)
+  closedByName         String?
+  /// Ultimo inbound al momento della chiusura: un nuovo messaggio del cliente la riapre.
+  closedInboundMessageId String?
   createdAt            DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
 
