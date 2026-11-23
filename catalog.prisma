@@ -240,6 +240,18 @@ model Product {
   minStock Int @default(5)
   minOrder Int @default(0) // Lotto minimo di produzione (batching)
 
+  /// Link alla guida di montaggio per il cliente (R-278, 23/11/2026). Se valorizzato,
+  /// in assemblaggio si stampa un'etichetta QR «Installation guide» per ogni pezzo,
+  /// nella fase scelta in `installationGuideStage`, prima di poter avanzare.
+  installationGuideUrl   String?
+  /// Fase in cui si stampa e applica l'etichetta della guida: FIRST_STAGE o SECOND_STAGE.
+  /// Null = FIRST_STAGE. Se il prodotto non ha la fase scelta si usa l'altra.
+  installationGuideStage AssemblyStageType?
+  /// Da quando la guida è attiva nella fase scelta (impostata da trigger: link tolto = null,
+  /// link impostato o fase cambiata = now()). In assemblaggio le etichette servono solo per
+  /// i pezzi entrati nella fase da questo momento (R-278, 23/11/2026).
+  installationGuideSince DateTime? @db.Timestamptz(6)
+
   // Campi per ottimizzazione dinamica (Velocity)
   averageDailySales    Decimal?  @db.Decimal(12, 2)
   suggestedMinStock    Int?
