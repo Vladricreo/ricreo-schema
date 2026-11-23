@@ -2739,6 +2739,13 @@ model SpoolSwapDraft {
   state             String @default("DRAFT")
   lastTouchedBy     String?
 
+  /// Storico della bobina A (23/11, diagnosi del ping-pong): ultimi cambi di
+  /// `toSpoolId`, il più recente in fondo. Voci `{ at, toSpoolId, toTagCode,
+  /// prevToSpoolId, by (AUTO|UI|VOICE), via (generate|patch), frozen
+  /// (UI|SWAP_SESSION|null), assignmentId }`. Solo diagnosi: nessuno lo legge
+  /// per decidere.
+  toHistory Json? @db.JsonB
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
