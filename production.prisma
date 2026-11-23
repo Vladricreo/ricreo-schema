@@ -160,8 +160,11 @@ model AssemblyOrder {
   updatedAt  DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
   /// Versione per optimistic locking (concorrenza multi-operatore).
   version    Int            @default(0)
+  /// Etichette QR della guida di montaggio stampate per questo ordine (R-278).
+  /// Solo crescente: nella fase della guida non entrano più pezzi di quelli etichettati.
+  installationGuideLabelsPrinted Int @default(0)
 
-  product            Product             @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product            Product            @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   sku                Sku                 @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   /// Piano parti congelato per questo ordine di assemblaggio (vedi `productPartPlanId`).
   productPartPlan    ProductPartPlan?    @relation(fields: [productPartPlanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
