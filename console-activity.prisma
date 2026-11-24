@@ -1,0 +1,56 @@
+/// Cronologia di Product Console: una riga per ogni azione fatta nell'app.
+/// Schema Postgres `product`: di proprietà di Product Console.
+
+/// Chi ha fatto l'azione.
+enum ConsoleActivityActorKind {
+  /// Utente della console (actorUserId valorizzato).
+  USER
+  /// Operatore della console Customer service (solo nome).
+  OPERATOR
+  /// Nessuna sessione: cron, script, continuazioni automatiche.
+  SYSTEM
+
+  @@schema("product")
+}
+
+/// Evento di cronologia. Si scrive solo da `src/lib/activity/record.ts`.
+/// `area` e `action` sono stringhe (elenco in `src/lib/activity/catalog.ts`):
+/// aggiungere un'azione non richiede una migration.
+model ConsoleActivityEvent {
+  id          String                   @id @default(cuid())
+  createdAt   DateTime                 @default(now()) @db.Timestamptz(6)
+  actorKind   ConsoleActivityActorKind @default(SYSTEM)
+  /// `User.id` di chi ha agito (nessuna FK: la riga resta anche se l'utente viene tolto).
+  actorUserId Int?
+  /// Nome al momento dell'azione.
+  actorName   String?
+  /// LISTINGS, …
+  area        String
+  /// Es. listing.price, listing.update, draft.create.
+  action      String
+  /// Frase breve in italiano, già pronta da mostrare.
+  title       String
+  channel     StoreChannel?
+  /// Amazon: marketplaceId. eBay: EBAY_IT. Etsy: shopId. Temu: TEMU_EU.
+  storeKey    String?
+  sku         String?
+  /// ASIN / ItemID eBay / listingId Etsy / goodsId Temu / productId Shopify / id bozza.
+  entityId    String?
+  /// Titolo dell'oggetto al momento dell'azione, se noto.
+  entityLabel String?
+  /// Elenco `{ field, label, before?, after? }`.
+  changes     Json?
+  /// Dati extra dell'azione (conteggi, id invio, …).
+  data        Json?
+  ok          Boolean                  @default(true)
+  error       String?
+  /// Pagina dell'app dove rivedere l'oggetto.
+  url         String?
+
+  @@index([createdAt(sort: Desc)], map: "ConsoleActivityEvent_createdAt")
+  @@index([sku, createdAt(sort: Desc)], map: "ConsoleActivityEvent_sku")
+  @@index([actorUserId, createdAt(sort: Desc)], map: "ConsoleActivityEvent_actor")
+  @@index([area, action, createdAt(sort: Desc)], map: "ConsoleActivityEvent_action")
+  @@index([channel, storeKey, createdAt(sort: Desc)], map: "ConsoleActivityEvent_store")
+  @@schema("product")
+}
