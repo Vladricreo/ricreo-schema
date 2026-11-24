@@ -290,7 +290,80 @@ model Product {
   /// Piani parti (revisioni della composizione): uno ACTIVE, gli altri DEPLETED/DRAFT.
   partPlans ProductPartPlan[]
 
+  /// Disegni tecnici quotati calcolati dal 3MF (una riga per versione).
+  technicalDrawings ProductTechnicalDrawing[]
+
   @@index([itemId])
+  @@schema("inventory")
+}
+
+/// Versione del disegno tecnico quotato di un `Product` (24/11/2026). I file stanno nello
+/// Storage sotto `technical-drawings/<productId>/`. Oggi solo linee calcolate dal 3MF
+/// (`source` BASE, `status` DONE); il resto serve alle linee fatte con l'AI, rimandate.
+/// In DB, oltre ai CHECK su `status` e `source`, c'è un indice univoco parziale su
+/// `productId` dove `status = 'RUNNING'` (un solo lavoro in corso per prodotto).
+model ProductTechnicalDrawing {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId   String    @db.Uuid
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// RUNNING, DONE o FAILED.
+  status      String
+  error       String?
+  /// AI o BASE (linee calcolate dal 3MF).
+  source      String
+  /// Linee calcolate, senza quote.
+  baseUrl     String?
+  /// Linee dell'AI, senza quote.
+  linesUrl    String?
+  /// Disegno finito, con le quote.
+  finalUrl    String?
+  /// Vista, corpi nascosti e quote (`DrawingChoices`, con campo `version`).
+  choices     Json
+  prompt      String?
+  model       String?
+  /// `Product.treemfUrl` quando il disegno è stato creato.
+  treemfUrl   String
+  /// Id di `User`, senza vincolo: il disegno resta se l'utente viene tolto.
+  createdById Int
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  publications ProductTechnicalDrawingPublication[]
+
+  @@index([productId, createdAt])
+  @@schema("inventory")
+}
+
+/// Invio di un disegno tecnico come foto dell'inserzione Amazon: una riga per SKU e paese
+/// di ogni pubblicazione (`batchId`).
+model ProductTechnicalDrawingPublication {
+  id            String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  drawingId     String                  @db.Uuid
+  drawing       ProductTechnicalDrawing @relation(fields: [drawingId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// Pubblicazione di cui fa parte la riga.
+  batchId       String                  @db.Uuid
+  asin          String
+  skuCode       String
+  marketplaceId String
+  /// Posto della foto nell'inserzione (es. `other_product_image_locator_1`).
+  slot          String?
+  imageUrl      String?
+  /// Foto che stava in quel posto prima dell'invio.
+  previousUrl   String?
+  /// Impronta dell'anteprima: la conferma vale solo per quella.
+  previewHash   String?
+  /// PREVIEWED, SENDING, SUBMITTED o FAILED.
+  status        String
+  error         String?
+  submissionId  String?
+  /// Id di `User`, senza vincolo.
+  createdById   Int
+  createdAt     DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime                @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([batchId, skuCode, marketplaceId], map: "ProductTechnicalDrawingPublication_batch_sku_marketplace_key")
+  @@index([drawingId, createdAt])
   @@schema("inventory")
 }
 
