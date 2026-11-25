@@ -39,6 +39,9 @@ enum SettingsName {
   /// riordino + scorta e l'orizzonte è ottimale + riordino + scorta, così il
   /// lotto arriva con ancora `scorta` giorni su Amazon.
   AMAZON_SAFETY_STOCK_DAYS
+  /// Giorni dopo cui una spedizione FBA con 0 pezzi ricevuti è "da reclamare"
+  /// e non conta più come stock in arrivo (default applicativo: 45).
+  AMAZON_UNRECEIVED_SHIPMENT_CLAIM_DAYS
   /// Credenziali SP-API/LWA (cifrate a DB) usate per import Amazon (solo admin).
   AMAZON_SP_API_CREDENTIALS
   /// Token API ZonWizard (cifrato a DB) usato per sincronizzare costi prodotti (solo admin).
