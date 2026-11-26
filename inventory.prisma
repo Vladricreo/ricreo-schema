@@ -162,6 +162,9 @@ model InventoryLot {
 
   /// Bobine di filamento associate a questo lotto di inventario.
   filamentSpools FilamentSpool[] @relation("InventoryLotFilamentSpools")
+  /// Controlli qualità in assemblaggio che coprono questo lotto, e segnalazioni collegate.
+  qualityCheckLots QualityCheckLot[]
+  qualityIssues    QualityIssue[]
   lotInspections LotInspection[]
   /// Rettifiche di solo lotto (riallineamento e copertura automatica, R-247).
   adjustments    InventoryLotAdjustment[]

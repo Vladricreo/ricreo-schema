@@ -192,6 +192,11 @@ model AssemblyOrder {
   /// Righe picking per questo ordine di assemblaggio.
   pickingLines       PickingLine[]
   assemblyBoxes      AssemblyBox[]
+  /// Controllo qualità (tabelle `Quality*`): picco del bersaglio, controlli, segnalazioni, odette parcheggiate.
+  qualityState       QualityOrderState?
+  qualityChecks      QualityCheck[]
+  qualityIssues      QualityIssue[]
+  qualityParked      QualityParkedOdette[]
 
   @@index([assembledByUserId])
   @@index([assignedToUserId])
@@ -444,6 +449,8 @@ model Odette {
 
   /// Righe picking in cui questa odette è coinvolta.
   pickingLines PickingLine[]
+  /// Odette parcheggiate in attesa del controllo qualità.
+  qualityParked QualityParkedOdette[]
 
   /// Righe reso che hanno pianificato questa odette come destinazione (REUSABLE).
   customerReturnLineTargets CustomerReturnLine[] @relation("CustomerReturnLineTargetOdette")

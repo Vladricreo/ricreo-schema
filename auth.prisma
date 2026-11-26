@@ -132,6 +132,25 @@ model User {
   /// Prelievi di SKU dalle odette OMA fatti da questo utente.
   odetteSkuWithdrawals OdetteSkuWithdrawal[]
 
+  /// Controllo qualità in assemblaggio (tabelle `Quality*`, solo relazioni inverse).
+  qualitySettingsUpdates    QualityControlSettings[] @relation("QualitySettingsUpdatedBy")
+  qualityCallMember         QualityCallMember?       @relation("QualityCallMemberUser")
+  qualityChecksRequested    QualityCheck[]           @relation("QualityCheckRequestedBy")
+  qualityChecksOpened       QualityCheck[]           @relation("QualityCheckOpenedBy")
+  qualityChecksSigned       QualityCheck[]           @relation("QualityCheckSignedBy")
+  qualityChecksConfirmed    QualityCheck[]           @relation("QualityCheckConfirmedBy")
+  qualityCheckCalls         QualityCheckCall[]       @relation("QualityCheckCallUser")
+  qualityCheckCallsAnswered QualityCheckCall[]       @relation("QualityCheckCallAnsweredBy")
+  qualitySamples            QualityCheckSample[]     @relation("QualitySampleOperator")
+  qualityIssuesAbout        QualityIssue[]           @relation("QualityIssueOperator")
+  qualityIssuesCreated      QualityIssue[]           @relation("QualityIssueCreatedBy")
+  qualityIssuesResolved     QualityIssue[]           @relation("QualityIssueResolvedBy")
+  qualityOperatorCounter    QualityOperatorCounter?  @relation("QualityOperatorCounterUser")
+  qualityParkedOdettes      QualityParkedOdette[]    @relation("QualityParkedOdetteBy")
+  qualityScrapsReverted     QualityCheck[]           @relation("QualityCheckScrapRevertedBy")
+  qualityReworksFixed       QualityCheck[]           @relation("QualityCheckReworkFixedBy")
+  qualityPinLock            QualityPinLock?          @relation("QualityPinLockUser")
+
   @@index([isActive]) /// Indice pratico per filtri frequenti
   @@schema("public") ///  la tabella degli utenti
 }
@@ -153,6 +172,8 @@ model Role {
   updatedAt                    DateTime         @default(now()) @updatedAt @db.Timestamptz(6)
   users                        UserRole[]
   permissions                  RolePermission[]
+  /// Se presente, gli utenti con questo ruolo firmano i controlli qualità.
+  qualityRole                  QualityRole?
 
   @@schema("public")
 }
