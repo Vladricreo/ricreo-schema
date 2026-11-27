@@ -1,0 +1,26 @@
+-- Resi FBM: dettagli della richiesta dal report GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE.
+-- Colonne facoltative, solo informative: il P&L continua a usare "refundAmount".
+ALTER TABLE "product"."StoreReturnLine"
+  ADD COLUMN "amazonRmaId" TEXT,
+  ADD COLUMN "merchantRmaId" TEXT,
+  ADD COLUMN "amazonOrderItemId" TEXT,
+  ADD COLUMN "returnRequestStatus" TEXT,
+  ADD COLUMN "resolution" TEXT,
+  ADD COLUMN "returnType" TEXT,
+  ADD COLUMN "inPolicy" BOOLEAN,
+  ADD COLUMN "isPrime" BOOLEAN,
+  ADD COLUMN "aToZClaim" BOOLEAN,
+  ADD COLUMN "returnDeliveryDate" DATE,
+  ADD COLUMN "labelType" TEXT,
+  ADD COLUMN "labelCost" DECIMAL(12,2),
+  ADD COLUMN "labelPaidBy" TEXT,
+  ADD COLUMN "returnCarrier" TEXT,
+  ADD COLUMN "returnTrackingId" TEXT,
+  ADD COLUMN "returnCurrency" TEXT,
+  ADD COLUMN "amazonRefundedAmount" DECIMAL(12,2),
+  ADD COLUMN "invoiceNumber" TEXT,
+  ADD COLUMN "safetClaimId" TEXT,
+  ADD COLUMN "safetClaimState" TEXT,
+  ADD COLUMN "safetClaimReason" TEXT,
+  ADD COLUMN "safetClaimCreatedAt" TIMESTAMPTZ(6),
+  ADD COLUMN "safetReimbursementAmount" DECIMAL(12,2);

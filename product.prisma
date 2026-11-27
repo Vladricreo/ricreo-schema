@@ -451,6 +451,38 @@ model StoreReturnLine {
   /// Amazon: FBA o FBM. Null sugli altri canali.
   amazonFulfillment  String?
 
+  // Dettagli della richiesta di reso FBM (GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE).
+  // Null sugli altri canali e su FBA. Solo informativi: il P&L usa `refundAmount`.
+  amazonRmaId              String?
+  merchantRmaId            String?
+  amazonOrderItemId        String?
+  /// Stato della richiesta così come lo scrive Amazon (es. Approved, Closed).
+  returnRequestStatus      String?
+  /// Esito del reso (es. StandardRefund, ReturnlessRefund).
+  resolution               String?
+  returnType               String?
+  inPolicy                 Boolean?
+  isPrime                  Boolean?
+  aToZClaim                Boolean?
+  /// Data in cui il pacco di reso è stato consegnato al venditore.
+  returnDeliveryDate       DateTime? @db.Date
+  /// Etichetta: tipo (AmazonPrePaidLabel, SellerProvidedLabel…), costo e chi la paga.
+  labelType                String?
+  labelCost                Decimal?  @db.Decimal(12, 2)
+  labelPaidBy              String?
+  returnCarrier            String?
+  returnTrackingId         String?
+  /// Valuta di `labelCost` e `amazonRefundedAmount`.
+  returnCurrency           String?
+  /// Importo rimborsato secondo il report resi. Non entra nel P&L.
+  amazonRefundedAmount     Decimal?  @db.Decimal(12, 2)
+  invoiceNumber            String?
+  safetClaimId             String?
+  safetClaimState          String?
+  safetClaimReason         String?
+  safetClaimCreatedAt      DateTime? @db.Timestamptz(6)
+  safetReimbursementAmount Decimal?  @db.Decimal(12, 2)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
