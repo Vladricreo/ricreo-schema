@@ -273,6 +273,8 @@ model Product {
   utilities      ProductToUtility[]   @relation("ProductUtilities")
   shipments      Shipment[]
   assemblyOrders AssemblyOrder[]
+  /// Segnalazioni di non conformità su questo prodotto.
+  qualityIssues  QualityIssue[]
   dimensions     Dimensions?          @relation(fields: [dimensionsId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   finishedAllocations FinishedAllocation[]

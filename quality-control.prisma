@@ -1,0 +1,406 @@
+// Controllo qualità in assemblaggio (controllo qualità ISO, 26/11/2026).
+// Spec: docs/superpowers/specs/2026-11-25-controllo-qualita-assemblaggio-design.md
+//
+// Tutto in tabelle proprie: nessuna colonna nuova su tabelle esistenti e nessun valore nuovo
+// negli enum esistenti (`SettingsName`, `LotInspectionSource`), perché un valore sconosciuto
+// salvato prima del deploy romperebbe la lettura nelle versioni vecchie delle app.
+//
+// In DB, oltre a quanto descritto qui, ci sono due indici univoci parziali non esprimibili nel
+// modello Prisma: un solo controllo aperto per ordine (`QualityCheck`, stati CALLING, WAITING,
+// IN_PROGRESS, REWORK) e una sola odetta parcheggiata attiva (`QualityParkedOdette`, `releasedAt`
+// nullo). Un trigger su `AssemblyOrder` tiene aggiornato `QualityOrderState.peakTarget`.
+
+/// Perché si apre un controllo.
+enum QualityCheckReason {
+  /// L'ordine supera la soglia del canale.
+  LARGE_ORDER
+  /// Il contatore dell'operatore ha raggiunto il suo bersaglio.
+  COUNTER
+  /// Richiesto a mano da un responsabile.
+  ON_REQUEST
+
+  @@schema("inventory")
+}
+
+/// Avanzamento di un controllo.
+enum QualityCheckStatus {
+  /// Si stanno chiamando i responsabili in catena.
+  CALLING
+  /// Nessuno è in chiamata (catena finita, o controllo lasciato da chi l'aveva aperto): si aspetta senza suonare.
+  WAITING
+  /// Il controllo dei campioni è in corso.
+  IN_PROGRESS
+  /// Vecchio «Rifai» con un secondo giro: non si crea più (dal 26/11 «Rifai» chiude come REWORKED).
+  REWORK
+  APPROVED
+  /// Saltato (ordine chiuso o controllo non più necessario).
+  SKIPPED
+  /// Sbloccato a mano senza controllo.
+  UNLOCKED
+  /// Il controllo non è stato fatto.
+  NOT_DONE
+  /// «Rifai tutto» (dal 26/11): chiuso come una firma, i pezzi escono; l'operatore conferma di
+  /// aver sistemato. In fondo come nel DB (ADD VALUE lo aggiunge in coda).
+  REWORKED
+
+  @@schema("inventory")
+}
+
+/// Risposta di un responsabile alla chiamata.
+enum QualityCallAnswer {
+  COMING
+  CANNOT
+  ABSENT
+  /// Nessuna risposta entro `answerSeconds`.
+  TIMEOUT
+
+  @@schema("inventory")
+}
+
+enum QualityIssueStatus {
+  OPEN
+  RESOLVED
+
+  @@schema("inventory")
+}
+
+/// Impostazioni del controllo qualità: una sola riga, `id = 1`. In una tabella propria e non
+/// in `SettingsName`: un valore nuovo dell'enum salvato prima del deploy rompe la lettura di
+/// tutte le impostazioni nella versione vecchia.
+model QualityControlSettings {
+  id                  Int       @id @default(1)
+  /// Interruttore generale: spento di base. Da spento nessun blocco e nessuna chiamata.
+  enabled             Boolean   @default(false)
+  /// Da quando è acceso: contano solo i pezzi entrati in busta dopo questa data.
+  enabledSince        DateTime? @db.Timestamptz(6)
+  /// Soglia in pezzi sopra cui l'ordine va controllato, per canale (FBA, FBM, altro).
+  thresholdFba        Int       @default(50)
+  thresholdFbm        Int       @default(50)
+  thresholdOther      Int       @default(50)
+  /// Pezzi del contatore dell'operatore e scarto casuale in percentuale (100 ±30%).
+  smallOrderPieces    Int       @default(100)
+  smallOrderJitterPct Int       @default(30)
+  /// Resto di pezzi tollerato oltre il controllo (0 = nessuno).
+  freeRemainder       Int       @default(0)
+  /// Secondi a disposizione di un responsabile per rispondere alla chiamata.
+  answerSeconds       Int       @default(120)
+  /// Minuti entro cui chi ha risposto «arrivo» deve essere presente.
+  arrivalMinutes      Int       @default(15)
+  preAlertEnabled     Boolean   @default(true)
+  /// Percentuale del bersaglio a cui parte il preavviso.
+  preAlertPct         Int       @default(80)
+  soundEnabled        Boolean   @default(true)
+  /// Tabella dei campioni: elenco ordinato di `{ max, n }` (`max` nullo = oltre l'ultimo).
+  sampleTable         Json      @default("[{\"max\":15,\"n\":2},{\"max\":25,\"n\":3},{\"max\":90,\"n\":5},{\"max\":150,\"n\":8},{\"max\":280,\"n\":13},{\"max\":500,\"n\":20},{\"max\":null,\"n\":32}]")
+  updatedByUserId     Int?
+  updatedBy           User?     @relation("QualitySettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  updatedAt           DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([updatedByUserId])
+  @@schema("inventory")
+}
+
+/// Ruolo abilitato a firmare i controlli («Responsabile qualità»). Essere Admin o Manager non
+/// basta: firma solo chi ha un ruolo presente qui o è «ultima risorsa» in catena.
+model QualityRole {
+  roleId    String   @id @db.Uuid
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@schema("inventory")
+}
+
+/// Bersaglio massimo raggiunto da un ordine di assemblaggio. Lo tiene un trigger su
+/// `AssemblyOrder."quantityToAssemble"`: se l'ordine viene ridotto per sfuggire alla soglia
+/// vale comunque il picco.
+model QualityOrderState {
+  assemblyOrderId String        @id @db.Uuid
+  assemblyOrder   AssemblyOrder @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  peakTarget      Int           @default(0)
+  /// Quando è partito il preavviso per questo ordine (una sola volta).
+  preAlertSentAt  DateTime?     @db.Timestamptz(6)
+  updatedAt       DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@schema("inventory")
+}
+
+/// Catena di chiamata dei responsabili, in ordine di `position`.
+model QualityCallMember {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       Int      @unique
+  user         User     @relation("QualityCallMemberUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// Ordine di chiamata (minore = chiamato prima).
+  position     Int
+  /// Ultima risorsa: firma anche senza ruolo, e solo se nessun altro risponde.
+  isLastResort Boolean  @default(false)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([position])
+  @@schema("inventory")
+}
+
+/// Controllo qualità di un ordine di assemblaggio in una fase. Dal 26/11 un giro solo: «Rifai»
+/// chiude come REWORKED (`round` resta per i controlli di prima). Un solo controllo aperto per
+/// ordine (indice parziale in DB).
+model QualityCheck {
+  id                 String             @id @default(uuid()) @db.Uuid
+  assemblyOrderId    String             @db.Uuid
+  assemblyOrder      AssemblyOrder      @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  stageType          AssemblyStageType
+  reason             QualityCheckReason
+  status             QualityCheckStatus @default(CALLING)
+  round              Int                @default(1)
+  /// Pezzi coperti dal controllo, approvati e scartati.
+  coveredQuantity    Int                @default(0)
+  approvedQuantity   Int                @default(0)
+  scrappedQuantity   Int                @default(0)
+  /// Pezzi già firmati da un controllo prima, ancora in busta all'apertura: non si
+  /// ricontrollano e restano firmati insieme a quelli approvati qui.
+  carriedQuantity    Int                @default(0)
+  /// Scarto del controllo annullato dal diario (solo ruolo qualità o Admin): i pezzi
+  /// tornano in busta non firmati. Quantità sommata, ultimo annullo.
+  scrapRevertedQuantity Int             @default(0)
+  scrapRevertedAt    DateTime?          @db.Timestamptz(6)
+  scrapRevertedByUserId Int?
+  scrapRevertedBy    User?              @relation("QualityCheckScrapRevertedBy", fields: [scrapRevertedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Piano dei campioni (numero e punti): non arriva al browser prima dell'apertura autorizzata.
+  samplePlan         Json?
+  /// Operatori che hanno lavorato l'ordine, per fase.
+  operatorsByStage   Json?
+  requestedByUserId  Int?
+  requestedBy        User?              @relation("QualityCheckRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  openedByUserId     Int?
+  openedBy           User?              @relation("QualityCheckOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  openedAt           DateTime?          @db.Timestamptz(6)
+  signedByUserId     Int?
+  signedBy           User?              @relation("QualityCheckSignedBy", fields: [signedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  signedAt           DateTime?          @db.Timestamptz(6)
+  /// Firmato da chi è in catena come ultima risorsa (senza ruolo).
+  signedAsLastResort Boolean            @default(false)
+  confirmedByUserId  Int?
+  confirmedBy        User?              @relation("QualityCheckConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  confirmedAt        DateTime?          @db.Timestamptz(6)
+  /// Solo REWORKED: l'operatore ha confermato di aver sistemato i pezzi («Ho sistemato, continuo»).
+  reworkFixedAt      DateTime?          @db.Timestamptz(6)
+  reworkFixedByUserId Int?
+  reworkFixedBy      User?              @relation("QualityCheckReworkFixedBy", fields: [reworkFixedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  note               String?
+  /// Motivo con cui il controllo è stato chiuso senza esito (saltato, sbloccato, non fatto).
+  closeReason        String?
+  /// Stato del contatore dell'operatore quando il controllo è partito.
+  counterSnapshot    Json?
+  /// Secondi che l'operatore ha aspettato il controllo.
+  waitingSeconds     Int                @default(0)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
+
+  calls   QualityCheckCall[]
+  samples QualityCheckSample[]
+  lots    QualityCheckLot[]
+  issues  QualityIssue[]
+  parked  QualityParkedOdette[]
+
+  @@index([assemblyOrderId, status])
+  @@index([status])
+  @@index([requestedByUserId])
+  @@index([openedByUserId])
+  @@index([signedByUserId])
+  @@index([confirmedByUserId])
+  @@index([reworkFixedByUserId])
+  @@index([scrapRevertedByUserId])
+  @@schema("inventory")
+}
+
+/// Una chiamata a un responsabile della catena e la sua risposta.
+model QualityCheckCall {
+  id               String             @id @default(uuid()) @db.Uuid
+  checkId          String             @db.Uuid
+  check            QualityCheck       @relation(fields: [checkId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  userId           Int
+  user             User               @relation("QualityCheckCallUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// Posizione nella catena al momento della chiamata.
+  /// Giro del controllo a cui si riferisce la chiamata.
+  round            Int                @default(1)
+  step             Int
+  calledAt         DateTime           @default(now()) @db.Timestamptz(6)
+  answer           QualityCallAnswer?
+  answeredAt       DateTime?          @db.Timestamptz(6)
+  /// Chi ha risposto, se diverso dal chiamato.
+  answeredByUserId Int?
+  answeredBy       User?              @relation("QualityCheckCallAnsweredBy", fields: [answeredByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([checkId, round, step])
+  @@index([checkId])
+  @@index([userId])
+  @@index([answeredByUserId])
+  @@schema("inventory")
+}
+
+/// Un campione controllato in un giro.
+model QualityCheckSample {
+  id          String            @id @default(uuid()) @db.Uuid
+  checkId     String            @db.Uuid
+  check       QualityCheck      @relation(fields: [checkId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  round       Int               @default(1)
+  /// Posizione del campione nel piano (da 1).
+  index       Int
+  ok          Boolean
+  issueTypeId String?           @db.Uuid
+  issueType   QualityIssueType? @relation(fields: [issueTypeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Operatore che ha assemblato il pezzo.
+  operatorId  Int?
+  operator    User?             @relation("QualitySampleOperator", fields: [operatorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  note        String?
+  photoUrl    String?
+  createdAt   DateTime          @default(now()) @db.Timestamptz(6)
+
+  issue QualityIssue?
+
+  @@index([checkId, round])
+  @@index([issueTypeId])
+  @@index([operatorId])
+  @@schema("inventory")
+}
+
+/// Lotti coperti da un controllo.
+model QualityCheckLot {
+  checkId String       @db.Uuid
+  check   QualityCheck @relation(fields: [checkId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  lotId   String       @db.Uuid
+  lot     InventoryLot @relation(fields: [lotId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([checkId, lotId])
+  @@index([lotId])
+  @@schema("inventory")
+}
+
+/// Voce rapida del registro delle non conformità, con tre etichette; modificabile in Impostazioni.
+model QualityIssueType {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  labelIt   String
+  labelEn   String
+  labelBn   String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  samples QualityCheckSample[]
+  issues  QualityIssue[]
+
+  @@index([sortOrder])
+  @@schema("inventory")
+}
+
+/// Registro delle non conformità: una riga per fatto. Nasce dai difetti dei controlli
+/// (`sampleId`) o da una segnalazione a mano. Le righe sopravvivono alla cancellazione di
+/// controllo, ordine, lotto e prodotto.
+model QualityIssue {
+  id               String              @id @default(uuid()) @db.Uuid
+  issueTypeId      String?             @db.Uuid
+  issueType        QualityIssueType?   @relation(fields: [issueTypeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  checkId          String?             @db.Uuid
+  check            QualityCheck?       @relation(fields: [checkId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sampleId         String?             @unique @db.Uuid
+  sample           QualityCheckSample? @relation(fields: [sampleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assemblyOrderId  String?             @db.Uuid
+  assemblyOrder    AssemblyOrder?      @relation(fields: [assemblyOrderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  stageType        AssemblyStageType?
+  lotId            String?             @db.Uuid
+  lot              InventoryLot?       @relation(fields: [lotId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  productId        String?             @db.Uuid
+  product          Product?            @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Operatore a cui si riferisce la segnalazione.
+  operatorId       Int?
+  operator         User?               @relation("QualityIssueOperator", fields: [operatorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  quantity         Int                 @default(1)
+  note             String?
+  photos           String[]
+  status           QualityIssueStatus  @default(OPEN)
+  /// Cosa si è fatto per risolverla.
+  resolution       String?
+  createdByUserId  Int?
+  createdBy        User?               @relation("QualityIssueCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  resolvedByUserId Int?
+  resolvedBy       User?               @relation("QualityIssueResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  resolvedAt       DateTime?           @db.Timestamptz(6)
+  createdAt        DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([issueTypeId])
+  @@index([checkId])
+  @@index([assemblyOrderId])
+  @@index([lotId])
+  @@index([productId])
+  @@index([operatorId])
+  @@index([status, createdAt])
+  @@index([createdByUserId])
+  @@index([resolvedByUserId])
+  @@schema("inventory")
+}
+
+/// Contatore dei pezzi dell'operatore: da `since` ha assemblato pezzi fino al bersaglio
+/// (`target`, scelto a caso attorno a `smallOrderPieces`), poi scatta un controllo.
+model QualityOperatorCounter {
+  userId    Int      @id
+  user      User     @relation("QualityOperatorCounterUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  since     DateTime @default(now()) @db.Timestamptz(6)
+  target    Int
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@schema("inventory")
+}
+
+/// PIN sbagliati di una persona al controllo qualità (tablet dell'operatore). 5 di fila
+/// bloccano 15 minuti; al terzo blocco il PIN non vale più per il controllo finché la persona
+/// non apre un controllo dalla propria sessione. Nel DB: vale anche dopo un deploy.
+model QualityPinLock {
+  userId      Int       @id
+  user        User      @relation("QualityPinLockUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// PIN sbagliati di fila (si azzera col PIN giusto e a ogni blocco).
+  failures    Int       @default(0)
+  lockedUntil DateTime? @db.Timestamptz(6)
+  /// Blocchi da 15 minuti dall'ultimo azzeramento.
+  lockouts    Int       @default(0)
+  /// PIN disattivato per il controllo qualità.
+  disabledAt  DateTime? @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@schema("inventory")
+}
+
+/// Odetta parcheggiata in attesa del controllo. Una sola riga attiva per odetta
+/// (indice parziale in DB, `releasedAt` nullo).
+model QualityParkedOdette {
+  id              String        @id @default(uuid()) @db.Uuid
+  odetteId        String        @db.Uuid
+  odette          Odette        @relation(fields: [odetteId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  assemblyOrderId String        @db.Uuid
+  assemblyOrder   AssemblyOrder @relation(fields: [assemblyOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  checkId         String        @db.Uuid
+  check           QualityCheck  @relation(fields: [checkId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  quantity        Int
+  parkedByUserId  Int?
+  parkedBy        User?         @relation("QualityParkedOdetteBy", fields: [parkedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  parkedAt        DateTime      @default(now()) @db.Timestamptz(6)
+  releasedAt      DateTime?     @db.Timestamptz(6)
+
+  @@index([odetteId])
+  @@index([assemblyOrderId])
+  @@index([checkId])
+  @@index([parkedByUserId])
+  @@schema("inventory")
+}
+
+/// Traduzioni delle note libere (dall'italiano), per hash del testo originale e lingua.
+model QualityTextTranslation {
+  id         String   @id @default(uuid()) @db.Uuid
+  sourceHash String
+  language   String
+  text       String
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([sourceHash, language])
+  @@schema("inventory")
+}

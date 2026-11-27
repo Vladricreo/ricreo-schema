@@ -325,6 +325,8 @@ model Shipment {
   notes              String?
 
   customerReturns  CustomerReturn[]
+  /// Etichette di reso generate per questa spedizione.
+  returnLabels     CustomerReturnLabel[]
   sendcloudParcels SendcloudParcel[]
   /// Movimenti di rimborso/storno packaging secondario generati da questa spedizione.
   packagingRefundMovements Movement[]                 @relation("PackagingRefundMovement")
@@ -612,12 +614,59 @@ model CustomerReturn {
   /// Chiave idempotente sync ShippyPro `GetReturns` (se disponibile).
   shippyProReturnId      String?              @unique
   lines                  CustomerReturnLine[]
+  /// Etichette di reso create per questo reso (una sola attiva alla volta).
+  returnLabels           CustomerReturnLabel[]
   createdAt              DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt              DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([shipmentId])
   @@index([status])
   @@index([createdAt(sort: Desc)])
+  @@schema("inventory")
+}
+
+/// Etichetta di reso prepaid creata dal corriere (Sendcloud o ShippyPro) per un `CustomerReturn`.
+/// Il PDF sta nello Storage (`labelObjectPath`); indirizzo, email e telefono del cliente non si salvano.
+/// In DB, oltre ai CHECK su `provider` e `status`, ci sono due indici univoci parziali:
+/// `customerReturnId` dove `status` non è ERROR né CANCELLED (una sola etichetta attiva per reso) e
+/// `shipmentId` dove `status` è CREATING o TO_VERIFY (una sola creazione in corso per spedizione).
+model CustomerReturnLabel {
+  id               String         @id @default(uuid()) @db.Uuid
+  customerReturnId String         @db.Uuid
+  customerReturn   CustomerReturn @relation(fields: [customerReturnId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  shipmentId       String?        @db.Uuid
+  shipment         Shipment?      @relation(fields: [shipmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Numero del tentativo per questo reso (1, 2, ...).
+  attempt          Int
+  /// `RESO-<numero reso>-<tentativo>`, inviato al corriere come riferimento.
+  reference        String         @unique
+  /// SENDCLOUD o SHIPPYPRO.
+  provider         String
+  /// CREATING, READY, ERROR, TO_VERIFY, CANCEL_REQUESTED o CANCELLED.
+  status           String
+  errorMessage     String?
+  serviceKey       String
+  serviceCode      String
+  serviceName      String
+  carrier          String
+  providerReturnId String?
+  providerParcelId String?
+  trackingNumber   String?
+  trackingUrl      String?
+  priceAmount      Decimal?       @db.Decimal(12, 2)
+  priceCurrency    String?        @db.VarChar(3)
+  /// Percorso del PDF nello Storage.
+  labelObjectPath  String?
+  /// Id di `User`, senza vincolo: l'etichetta resta se l'utente viene tolto.
+  createdByUserId  Int?           @db.Integer
+  readyAt          DateTime?      @db.Timestamptz(6)
+  cancelledAt      DateTime?      @db.Timestamptz(6)
+  createdAt        DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([customerReturnId])
+  @@index([trackingNumber])
+  @@index([providerReturnId])
   @@schema("inventory")
 }
 
