@@ -2626,6 +2626,10 @@ model HarvestDraft {
 
   targetLocationId String?            @db.Uuid
   targetLocation   WarehouseLocation? @relation("HarvestDraftTargetLocation", fields: [targetLocationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Quando tablet o voce hanno cambiato la destinazione (28/11): un'odette arrivata
+  /// prima l'operatore l'ha vista, quindi la scelta resta (anche impilata o «Altra cat.»).
+  /// Null = destinazione calcolata dall'app: vale il confronto con la creazione della bozza.
+  targetLocationSetAt DateTime? @db.Timestamptz(6)
 
   markOdetteFull Boolean @default(false)
   rejectReason   String?
